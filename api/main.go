@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/config"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/lifecycle"
@@ -13,7 +16,9 @@ import (
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
+	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/health"
+	"github.com/stanza-go/standalone/seed"
 )
 
 func main() {
@@ -22,6 +27,7 @@ func main() {
 		lifecycle.Provide(provideConfig),
 		lifecycle.Provide(provideLogger),
 		lifecycle.Provide(provideDB),
+		lifecycle.Provide(provideAuth),
 		lifecycle.Provide(provideRouter),
 		lifecycle.Provide(provideServer),
 		lifecycle.Invoke(registerModules),
@@ -96,6 +102,10 @@ func provideDB(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) (*
 				)
 			}
 
+			if err := seed.Run(db, logger); err != nil {
+				return fmt.Errorf("seed: %w", err)
+			}
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -104,6 +114,38 @@ func provideDB(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) (*
 	})
 
 	return db, nil
+}
+
+func provideAuth(cfg *config.Config, logger *log.Logger) (*auth.Auth, error) {
+	// Signing key from config or env (STANZA_AUTH_SIGNING_KEY).
+	// If not set, generate a random key for development.
+	keyHex := cfg.GetString("auth.signing_key")
+	var signingKey []byte
+
+	if keyHex != "" {
+		var err error
+		signingKey, err = hex.DecodeString(keyHex)
+		if err != nil {
+			return nil, fmt.Errorf("auth.signing_key: invalid hex: %w", err)
+		}
+		if len(signingKey) < 32 {
+			return nil, fmt.Errorf("auth.signing_key: must be at least 32 bytes (64 hex chars)")
+		}
+	} else {
+		signingKey = make([]byte, 32)
+		if _, err := rand.Read(signingKey); err != nil {
+			return nil, fmt.Errorf("generate signing key: %w", err)
+		}
+		logger.Warn("auth.signing_key not set — using random key (sessions won't survive restart)")
+	}
+
+	secureCookies := cfg.GetString("auth.secure_cookies") != "false"
+
+	a := auth.New(signingKey,
+		auth.WithSecureCookies(secureCookies),
+	)
+
+	return a, nil
 }
 
 func provideRouter(logger *log.Logger) *http.Router {
@@ -140,10 +182,11 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, logger *log.Logger) {
 	api := router.Group("/api")
 
 	health.Register(api, db)
+	adminauth.Register(api, a, db, logger)
 
 	logger.Info("modules registered")
 }
