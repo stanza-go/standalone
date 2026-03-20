@@ -1,0 +1,34 @@
+.PHONY: dev dev-api dev-ui dev-admin build clean
+
+# Development — run all three services with hot reload
+dev:
+	@echo "Starting Stanza development servers..."
+	@$(MAKE) -j3 dev-api dev-ui dev-admin
+
+dev-api:
+	@echo "API server on :23710"
+	cd api && go run .
+
+dev-ui:
+	@echo "UI on :23700"
+	cd ui && bun run dev
+
+dev-admin:
+	@echo "Admin on :23705"
+	cd admin && bun run dev
+
+# Build — produce a single binary with embedded frontends
+build: build-ui build-admin build-api
+	@echo "Build complete: api/bin/standalone"
+
+build-ui:
+	cd ui && bun run build
+
+build-admin:
+	cd admin && bun run build
+
+build-api:
+	cd api && CGO_ENABLED=1 go build -o bin/standalone .
+
+clean:
+	rm -rf api/bin ui/dist admin/dist
