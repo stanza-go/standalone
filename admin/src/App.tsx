@@ -11,6 +11,7 @@ import SessionsPage from "@/pages/sessions";
 import LogsPage from "@/pages/logs";
 import DatabasePage from "@/pages/database";
 import SettingsPage from "@/pages/settings";
+import UsersPage from "@/pages/users";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
             }
           >
             <Route index element={<DashboardPage />} />
+            <Route path="users" element={<UsersPage />} />
             <Route path="admins" element={<AdminsPage />} />
             <Route path="sessions" element={<SessionsPage />} />
             <Route path="cron" element={<CronPage />} />

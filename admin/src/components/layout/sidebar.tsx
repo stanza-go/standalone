@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  UsersRound,
   KeyRound,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -25,6 +26,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", to: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { label: "Users", to: "/users", icon: <UsersRound className="h-4 w-4" /> },
   { label: "Admin Users", to: "/admins", icon: <Users className="h-4 w-4" /> },
   { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
   { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
