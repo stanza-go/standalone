@@ -10,6 +10,8 @@ import {
   Inbox,
   ChevronLeft,
   ChevronRight,
+  Users,
+  KeyRound,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", to: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { label: "Admin Users", to: "/admins", icon: <Users className="h-4 w-4" /> },
+  { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
   { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
   { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
   { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },

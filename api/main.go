@@ -23,6 +23,8 @@ import (
 	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/admincron"
 	"github.com/stanza-go/standalone/module/adminqueue"
+	"github.com/stanza-go/standalone/module/adminsessions"
+	"github.com/stanza-go/standalone/module/adminusers"
 	"github.com/stanza-go/standalone/module/dashboard"
 	"github.com/stanza-go/standalone/module/health"
 	"github.com/stanza-go/standalone/seed"
@@ -266,6 +268,8 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.
 	admin.Use(auth.RequireScope("admin"))
 
 	dashboard.Register(admin, db)
+	adminusers.Register(admin, db)
+	adminsessions.Register(admin, db)
 	admincron.Register(admin, s)
 	adminqueue.Register(admin, q)
 
