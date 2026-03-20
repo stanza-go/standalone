@@ -197,7 +197,7 @@ func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *q
 	return q
 }
 
-func provideCron(lc *lifecycle.Lifecycle, q *queue.Queue, logger *log.Logger) (*cron.Scheduler, error) {
+func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger *log.Logger) (*cron.Scheduler, error) {
 	s := cron.NewScheduler(
 		cron.WithLogger(logger),
 	)
@@ -214,6 +214,39 @@ func provideCron(lc *lifecycle.Lifecycle, q *queue.Queue, logger *log.Logger) (*
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("cron add purge-completed-jobs: %w", err)
+	}
+
+	// Purge expired refresh tokens every hour at :30.
+	if err := s.Add("purge-expired-tokens", "30 * * * *", func(ctx context.Context) error {
+		now := time.Now().UTC().Format(time.RFC3339)
+		res, err := db.Exec("DELETE FROM refresh_tokens WHERE expires_at < ?", now)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged expired refresh tokens", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-expired-tokens: %w", err)
+	}
+
+	// Purge revoked/expired API keys older than 30 days, daily at 3:00 AM.
+	if err := s.Add("purge-stale-api-keys", "0 3 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
+		res, err := db.Exec(
+			"DELETE FROM api_keys WHERE (revoked_at IS NOT NULL AND revoked_at < ?) OR (expires_at IS NOT NULL AND expires_at < ?)",
+			cutoff, cutoff,
+		)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged stale API keys", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-stale-api-keys: %w", err)
 	}
 
 	lc.Append(lifecycle.Hook{
