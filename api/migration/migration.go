@@ -13,6 +13,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428801, "create_admins", createAdminsUp, createAdminsDown)
 	db.AddMigration(1742428802, "create_refresh_tokens", createRefreshTokensUp, createRefreshTokensDown)
 	db.AddMigration(1742428803, "create_users", createUsersUp, createUsersDown)
+	db.AddMigration(1742428804, "create_api_keys", createAPIKeysUp, createAPIKeysDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -109,5 +110,36 @@ func createUsersUp(tx *sqlite.Tx) error {
 
 func createUsersDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS users`)
+	return err
+}
+
+func createAPIKeysUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE api_keys (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		name         TEXT    NOT NULL,
+		key_prefix   TEXT    NOT NULL,
+		key_hash     TEXT    NOT NULL,
+		scopes       TEXT    NOT NULL DEFAULT '',
+		created_by   INTEGER NOT NULL,
+		last_used_at TEXT,
+		expires_at   TEXT,
+		created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		revoked_at   TEXT
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_api_keys_created_by ON api_keys(created_by)`)
+	return err
+}
+
+func createAPIKeysDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS api_keys`)
 	return err
 }

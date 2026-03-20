@@ -52,10 +52,20 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 		sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
 		db.QueryRow(sql, args...).Scan(&totalAdmins)
 
+		// User count.
+		var totalUsers int
+		sql, args = sqlite.Count("users").Where("deleted_at IS NULL").Build()
+		db.QueryRow(sql, args...).Scan(&totalUsers)
+
 		// Active session count (non-expired refresh tokens).
 		var activeSessions int
 		sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).Build()
 		db.QueryRow(sql, args...).Scan(&activeSessions)
+
+		// Active API keys count.
+		var activeAPIKeys int
+		sql, args = sqlite.Count("api_keys").Where("revoked_at IS NULL").Build()
+		db.QueryRow(sql, args...).Scan(&activeAPIKeys)
 
 		// Migration count.
 		var appliedMigrations int
@@ -124,7 +134,9 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 			},
 			"stats": map[string]any{
 				"total_admins":    totalAdmins,
+				"total_users":     totalUsers,
 				"active_sessions": activeSessions,
+				"active_api_keys": activeAPIKeys,
 			},
 		})
 	}

@@ -14,6 +14,7 @@ import {
   Users,
   UsersRound,
   KeyRound,
+  KeySquare,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { label: "Users", to: "/users", icon: <UsersRound className="h-4 w-4" /> },
   { label: "Admin Users", to: "/admins", icon: <Users className="h-4 w-4" /> },
   { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
+  { label: "API Keys", to: "/api-keys", icon: <KeySquare className="h-4 w-4" /> },
   { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
   { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
   { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },

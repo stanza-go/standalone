@@ -14,6 +14,8 @@ import {
   Shield,
   Timer,
   Users,
+  UsersRound,
+  KeySquare,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -47,7 +49,9 @@ interface DashboardStats {
   };
   stats: {
     total_admins: number;
+    total_users: number;
     active_sessions: number;
+    active_api_keys: number;
   };
 }
 
@@ -244,9 +248,19 @@ export default function DashboardPage() {
                 icon={<Shield className="h-4 w-4" />}
               />
               <StatCard
+                title="Users"
+                value={String(stats.stats.total_users)}
+                icon={<UsersRound className="h-4 w-4" />}
+              />
+              <StatCard
                 title="Active Sessions"
                 value={String(stats.stats.active_sessions)}
                 icon={<Users className="h-4 w-4" />}
+              />
+              <StatCard
+                title="API Keys"
+                value={String(stats.stats.active_api_keys)}
+                icon={<KeySquare className="h-4 w-4" />}
               />
             </div>
           </section>
