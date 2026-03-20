@@ -31,9 +31,19 @@ import (
 	"github.com/stanza-go/standalone/module/dashboard"
 	"github.com/stanza-go/standalone/module/health"
 	"github.com/stanza-go/standalone/module/apikeys"
+	"github.com/stanza-go/standalone/module/userauth"
 	"github.com/stanza-go/standalone/module/usermgmt"
 	"github.com/stanza-go/standalone/seed"
 )
+
+// signingKey holds the shared JWT signing key used by both admin and
+// user auth instances.
+type signingKey struct{ key []byte }
+
+// userAuth wraps auth.Auth with user-specific cookie paths (/api
+// instead of /api/admin). A distinct type so the DI container can
+// provide both admin and user auth instances.
+type userAuth struct{ *auth.Auth }
 
 func main() {
 	app := lifecycle.New(
@@ -41,7 +51,9 @@ func main() {
 		lifecycle.Provide(provideConfig),
 		lifecycle.Provide(provideLogger),
 		lifecycle.Provide(provideDB),
+		lifecycle.Provide(provideSigningKey),
 		lifecycle.Provide(provideAuth),
+		lifecycle.Provide(provideUserAuth),
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideCron),
 		lifecycle.Provide(provideRouter),
@@ -132,36 +144,43 @@ func provideDB(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) (*
 	return db, nil
 }
 
-func provideAuth(cfg *config.Config, logger *log.Logger) (*auth.Auth, error) {
+func provideSigningKey(cfg *config.Config, logger *log.Logger) (*signingKey, error) {
 	// Signing key from config or env (STANZA_AUTH_SIGNING_KEY).
 	// If not set, generate a random key for development.
 	keyHex := cfg.GetString("auth.signing_key")
-	var signingKey []byte
+	var key []byte
 
 	if keyHex != "" {
 		var err error
-		signingKey, err = hex.DecodeString(keyHex)
+		key, err = hex.DecodeString(keyHex)
 		if err != nil {
 			return nil, fmt.Errorf("auth.signing_key: invalid hex: %w", err)
 		}
-		if len(signingKey) < 32 {
+		if len(key) < 32 {
 			return nil, fmt.Errorf("auth.signing_key: must be at least 32 bytes (64 hex chars)")
 		}
 	} else {
-		signingKey = make([]byte, 32)
-		if _, err := rand.Read(signingKey); err != nil {
+		key = make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
 			return nil, fmt.Errorf("generate signing key: %w", err)
 		}
 		logger.Warn("auth.signing_key not set — using random key (sessions won't survive restart)")
 	}
 
+	return &signingKey{key: key}, nil
+}
+
+func provideAuth(sk *signingKey, cfg *config.Config) *auth.Auth {
 	secureCookies := cfg.GetString("auth.secure_cookies") != "false"
+	return auth.New(sk.key, auth.WithSecureCookies(secureCookies))
+}
 
-	a := auth.New(signingKey,
+func provideUserAuth(sk *signingKey, cfg *config.Config) *userAuth {
+	secureCookies := cfg.GetString("auth.secure_cookies") != "false"
+	return &userAuth{auth.New(sk.key,
+		auth.WithCookiePath("/api"),
 		auth.WithSecureCookies(secureCookies),
-	)
-
-	return a, nil
+	)}
 }
 
 func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
@@ -260,12 +279,13 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
 	health.Register(api, db)
 	adminauth.Register(api, a, db, logger)
+	userauth.Register(api, ua.Auth, db, logger)
 
 	// Protected admin routes — require valid JWT + admin scope.
 	admin := api.Group("/admin")
