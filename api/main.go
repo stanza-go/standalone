@@ -151,6 +151,7 @@ func provideAuth(cfg *config.Config, logger *log.Logger) (*auth.Auth, error) {
 func provideRouter(logger *log.Logger) *http.Router {
 	router := http.NewRouter()
 
+	router.Use(http.RequestLogger(logger))
 	router.Use(http.Recovery(func(v any, stack []byte) {
 		logger.Error("panic recovered",
 			log.Any("error", v),
