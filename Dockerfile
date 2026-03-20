@@ -1,41 +1,77 @@
+# Multi-stage Dockerfile for Stanza standalone application.
+#
+# Build context must be the workspace root (parent of standalone/ and framework/)
+# because go.mod uses a replace directive pointing to ../../framework.
+#
+# Build:
+#   docker build -t stanza -f standalone/Dockerfile .
+#
+# Run:
+#   docker run -p 23710:23710 -v stanza-data:/data stanza
+
+# ---------------------------------------------------------------------------
 # Stage 1: Build frontend assets
-FROM oven/bun:1.3.8 AS frontend
+# ---------------------------------------------------------------------------
+FROM oven/bun:1 AS frontend
 
 WORKDIR /build
 
-COPY ui/package.json ui/bun.lock ui/
-RUN cd ui && bun install --frozen-lockfile
+# Install UI dependencies
+COPY standalone/ui/package.json standalone/ui/bun.lock standalone/ui/
+RUN cd standalone/ui && bun install --frozen-lockfile
 
-COPY admin/package.json admin/bun.lock admin/
-RUN cd admin && bun install --frozen-lockfile
+# Install admin dependencies
+COPY standalone/admin/package.json standalone/admin/bun.lock standalone/admin/
+RUN cd standalone/admin && bun install --frozen-lockfile
 
-COPY ui/ ui/
-RUN cd ui && bun run build
+# Build UI
+COPY standalone/ui/ standalone/ui/
+RUN cd standalone/ui && bun run build
 
-COPY admin/ admin/
-RUN cd admin && bun run build
+# Build admin
+COPY standalone/admin/ standalone/admin/
+RUN cd standalone/admin && bun run build
 
-# Stage 2: Build Go binary with embedded assets
+# ---------------------------------------------------------------------------
+# Stage 2: Build Go binary with embedded frontend assets
+# ---------------------------------------------------------------------------
 FROM golang:1.26.1 AS backend
 
 WORKDIR /build
 
-COPY api/go.mod api/go.sum* api/
-RUN cd api && go mod download
+# Copy framework source (required by replace directive in go.mod)
+COPY framework/ framework/
 
-COPY api/ api/
-COPY --from=frontend /build/ui/dist api/ui/dist
-COPY --from=frontend /build/admin/dist api/admin/dist
+# Download Go dependencies
+COPY standalone/api/go.mod standalone/api/go.sum* standalone/api/
+RUN cd standalone/api && go mod download
 
-RUN cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /standalone .
+# Copy application source
+COPY standalone/api/ standalone/api/
 
+# Copy built frontend assets into embed directories
+COPY --from=frontend /build/standalone/ui/dist standalone/api/ui/dist
+COPY --from=frontend /build/standalone/admin/dist standalone/api/admin/dist
+
+# Build binary with CGO for SQLite
+RUN cd standalone/api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /standalone .
+
+# ---------------------------------------------------------------------------
 # Stage 3: Minimal runtime
+# ---------------------------------------------------------------------------
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -s /usr/sbin/nologin stanza
 
 COPY --from=backend /standalone /usr/local/bin/standalone
+
+RUN mkdir -p /data && chown stanza:stanza /data
+
+USER stanza
+
+ENV DATA_DIR=/data
 
 EXPOSE 23710
 

@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui dev-admin build build-ui build-admin build-api clean
+.PHONY: dev dev-api dev-ui dev-admin build build-ui build-admin build-api docker clean
 
 # Development — run all three services with hot reload
 dev:
@@ -32,6 +32,10 @@ build-api:
 	cp -r ui/dist api/ui/dist
 	cp -r admin/dist api/admin/dist
 	cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o bin/standalone .
+
+# Docker — build production image from workspace root
+docker:
+	docker build -t stanza -f Dockerfile ../..
 
 clean:
 	rm -rf api/bin api/ui api/admin ui/dist admin/dist

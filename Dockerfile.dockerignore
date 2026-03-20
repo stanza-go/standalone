@@ -1,0 +1,34 @@
+# Git
+**/.git
+
+# Dependencies (installed in Docker)
+**/node_modules
+
+# Build artifacts
+standalone/api/bin
+standalone/api/ui
+standalone/api/admin
+standalone/ui/dist
+standalone/admin/dist
+
+# Data and state
+**/.stanza
+**/.env
+**/.env.*
+
+# IDE and OS
+**/.idea
+**/.vscode
+**/.DS_Store
+**/*.swp
+
+# Playwright
+**/.playwright-cli
+
+# Docs and CLI (not needed for standalone build)
+docs/
+cli/
+
+# Images
+**/*.png
+**/*.jpg
