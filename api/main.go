@@ -8,12 +8,15 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/config"
+	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/lifecycle"
 	"github.com/stanza-go/framework/pkg/log"
+	"github.com/stanza-go/framework/pkg/queue"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
@@ -30,6 +33,8 @@ func main() {
 		lifecycle.Provide(provideLogger),
 		lifecycle.Provide(provideDB),
 		lifecycle.Provide(provideAuth),
+		lifecycle.Provide(provideQueue),
+		lifecycle.Provide(provideCron),
 		lifecycle.Provide(provideRouter),
 		lifecycle.Provide(provideServer),
 		lifecycle.Invoke(registerModules),
@@ -150,6 +155,46 @@ func provideAuth(cfg *config.Config, logger *log.Logger) (*auth.Auth, error) {
 	return a, nil
 }
 
+func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
+	q := queue.New(db,
+		queue.WithLogger(logger),
+	)
+
+	lc.Append(lifecycle.Hook{
+		OnStart: q.Start,
+		OnStop:  q.Stop,
+	})
+
+	return q
+}
+
+func provideCron(lc *lifecycle.Lifecycle, q *queue.Queue, logger *log.Logger) (*cron.Scheduler, error) {
+	s := cron.NewScheduler(
+		cron.WithLogger(logger),
+	)
+
+	// Purge completed/cancelled queue jobs older than 24h, every hour.
+	if err := s.Add("purge-completed-jobs", "0 * * * *", func(ctx context.Context) error {
+		n, err := q.Purge(24 * time.Hour)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			logger.Info("purged old queue jobs", log.Int64("count", n))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-completed-jobs: %w", err)
+	}
+
+	lc.Append(lifecycle.Hook{
+		OnStart: s.Start,
+		OnStop:  s.Stop,
+	})
+
+	return s, nil
+}
+
 func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router := http.NewRouter()
 
@@ -206,7 +251,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, _ *queue.Queue, _ *cron.Scheduler, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
