@@ -9,6 +9,7 @@ import QueuePage from "@/pages/queue";
 import AdminsPage from "@/pages/admins";
 import SessionsPage from "@/pages/sessions";
 import LogsPage from "@/pages/logs";
+import DatabasePage from "@/pages/database";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="cron" element={<CronPage />} />
             <Route path="queue" element={<QueuePage />} />
             <Route path="logs" element={<LogsPage />} />
+            <Route path="database" element={<DatabasePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
