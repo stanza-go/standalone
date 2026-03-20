@@ -6,6 +6,8 @@ import {
   LogOut,
   Settings,
   Database,
+  Clock,
+  Inbox,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -20,6 +22,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", to: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
+  { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
   { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
   { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
 ];
