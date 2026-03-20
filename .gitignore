@@ -16,6 +16,8 @@ node_modules/
 
 # Build output
 api/bin/
+api/ui/
+api/admin/
 ui/dist/
 admin/dist/
 

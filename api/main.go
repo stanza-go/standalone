@@ -281,5 +281,23 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.
 	adminsettings.Register(admin, db)
 	usermgmt.Register(admin, a, db)
 
+	// Serve embedded frontend assets in production builds.
+	adminFS := embeddedAdmin()
+	uiFS := embeddedUI()
+
+	if adminFS != nil {
+		router.Handle("GET /admin/{path...}", http.Static(adminFS))
+		logger.Info("serving embedded admin panel at /admin/")
+	}
+	if uiFS != nil {
+		// Catch-all for unknown API GET routes — prevents the UI static
+		// handler from serving index.html for /api/* requests.
+		api.HandleFunc("GET /{path...}", func(w http.ResponseWriter, r *http.Request) {
+			http.WriteError(w, http.StatusNotFound, "not found")
+		})
+		router.Handle("GET /{path...}", http.Static(uiFS))
+		logger.Info("serving embedded UI at /")
+	}
+
 	logger.Info("modules registered")
 }

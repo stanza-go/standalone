@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui dev-admin build clean
+.PHONY: dev dev-api dev-ui dev-admin build build-ui build-admin build-api clean
 
 # Development — run all three services with hot reload
 dev:
@@ -28,7 +28,10 @@ build-admin:
 	cd admin && bun run build
 
 build-api:
-	cd api && CGO_ENABLED=1 go build -o bin/standalone .
+	mkdir -p api/ui api/admin
+	cp -r ui/dist api/ui/dist
+	cp -r admin/dist api/admin/dist
+	cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o bin/standalone .
 
 clean:
-	rm -rf api/bin ui/dist admin/dist
+	rm -rf api/bin api/ui api/admin ui/dist admin/dist

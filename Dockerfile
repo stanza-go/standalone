@@ -15,7 +15,7 @@ RUN cd ui && bun run build
 COPY admin/ admin/
 RUN cd admin && bun run build
 
-# Stage 2: Build Go binary
+# Stage 2: Build Go binary with embedded assets
 FROM golang:1.26.1 AS backend
 
 WORKDIR /build
@@ -27,7 +27,7 @@ COPY api/ api/
 COPY --from=frontend /build/ui/dist api/ui/dist
 COPY --from=frontend /build/admin/dist api/admin/dist
 
-RUN cd api && CGO_ENABLED=1 go build -ldflags="-s -w" -o /standalone .
+RUN cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /standalone .
 
 # Stage 3: Minimal runtime
 FROM debian:bookworm-slim
