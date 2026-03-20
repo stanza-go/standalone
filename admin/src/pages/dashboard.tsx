@@ -3,13 +3,17 @@ import { get } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Activity,
+  AlertTriangle,
   Clock,
   Database,
   HardDrive,
-  MemoryStick,
-  Users,
-  Shield,
   Layers,
+  ListTodo,
+  MemoryStick,
+  Play,
+  Shield,
+  Timer,
+  Users,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -27,6 +31,20 @@ interface DashboardStats {
     tables: number;
     migrations: number;
   };
+  queue: {
+    pending: number;
+    running: number;
+    completed: number;
+    failed: number;
+    dead: number;
+    cancelled: number;
+  };
+  cron: {
+    total: number;
+    enabled: number;
+    running: number;
+    next_run: string;
+  };
   stats: {
     total_admins: number;
     active_sessions: number;
@@ -38,6 +56,14 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = (new Date(iso).getTime() - Date.now()) / 1000;
+  if (diff < 0) return "now";
+  if (diff < 60) return `${Math.round(diff)}s`;
+  if (diff < 3600) return `in ${Math.round(diff / 60)}m`;
+  return `in ${Math.round(diff / 3600)}h`;
 }
 
 function formatUptime(seconds: number): string {
@@ -150,6 +176,59 @@ export default function DashboardPage() {
                 title="Migrations"
                 value={String(stats.database.migrations)}
                 icon={<Database className="h-4 w-4" />}
+              />
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Job Queue
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                title="Pending"
+                value={String(stats.queue.pending)}
+                icon={<ListTodo className="h-4 w-4" />}
+              />
+              <StatCard
+                title="Running"
+                value={String(stats.queue.running)}
+                icon={<Play className="h-4 w-4" />}
+              />
+              <StatCard
+                title="Failed"
+                value={String(stats.queue.failed)}
+                description={stats.queue.dead > 0 ? `${stats.queue.dead} dead` : undefined}
+                icon={<AlertTriangle className="h-4 w-4" />}
+              />
+              <StatCard
+                title="Completed"
+                value={String(stats.queue.completed)}
+                icon={<Activity className="h-4 w-4" />}
+              />
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Cron Scheduler
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                title="Registered Jobs"
+                value={String(stats.cron.total)}
+                description={`${stats.cron.enabled} enabled`}
+                icon={<Timer className="h-4 w-4" />}
+              />
+              <StatCard
+                title="Running Now"
+                value={String(stats.cron.running)}
+                icon={<Play className="h-4 w-4" />}
+              />
+              <StatCard
+                title="Next Run"
+                value={stats.cron.next_run ? formatRelativeTime(stats.cron.next_run) : "—"}
+                icon={<Clock className="h-4 w-4" />}
               />
             </div>
           </section>

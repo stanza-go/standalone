@@ -8,7 +8,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
+	"github.com/stanza-go/framework/pkg/queue"
 	"github.com/stanza-go/framework/pkg/sqlite"
 )
 
@@ -18,12 +20,12 @@ var startTime = time.Now()
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET /api/admin/dashboard — system stats
-func Register(admin *http.Group, db *sqlite.DB) {
-	admin.HandleFunc("GET /dashboard", statsHandler(db))
+//	GET /api/admin/dashboard — system, database, queue, cron, and app stats
+func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) {
+	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s))
 }
 
-func statsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
@@ -60,6 +62,44 @@ func statsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		row = db.QueryRow(`SELECT count(*) FROM _migrations`)
 		row.Scan(&appliedMigrations)
 
+		// Queue stats.
+		queueStats := map[string]any{
+			"pending":   0,
+			"running":   0,
+			"completed": 0,
+			"failed":    0,
+			"dead":      0,
+			"cancelled": 0,
+		}
+		if qs, err := q.Stats(); err == nil {
+			queueStats["pending"] = qs.Pending
+			queueStats["running"] = qs.Running
+			queueStats["completed"] = qs.Completed
+			queueStats["failed"] = qs.Failed
+			queueStats["dead"] = qs.Dead
+			queueStats["cancelled"] = qs.Cancelled
+		}
+
+		// Cron stats.
+		entries := s.Entries()
+		var cronEnabled, cronRunning int
+		var cronNextRun string
+		var earliest time.Time
+		for _, e := range entries {
+			if e.Enabled {
+				cronEnabled++
+			}
+			if e.Running {
+				cronRunning++
+			}
+			if e.Enabled && !e.NextRun.IsZero() && (earliest.IsZero() || e.NextRun.Before(earliest)) {
+				earliest = e.NextRun
+			}
+		}
+		if !earliest.IsZero() {
+			cronNextRun = earliest.UTC().Format(time.RFC3339)
+		}
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"system": map[string]any{
 				"uptime_seconds":  int(time.Since(startTime).Seconds()),
@@ -74,6 +114,13 @@ func statsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				"wal_size_bytes": walSizeBytes,
 				"tables":         tableCount,
 				"migrations":     appliedMigrations,
+			},
+			"queue": queueStats,
+			"cron": map[string]any{
+				"total":    len(entries),
+				"enabled":  cronEnabled,
+				"running":  cronRunning,
+				"next_run": cronNextRun,
 			},
 			"stats": map[string]any{
 				"total_admins":    totalAdmins,

@@ -267,7 +267,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
 
-	dashboard.Register(admin, db)
+	dashboard.Register(admin, db, q, s)
 	adminusers.Register(admin, db)
 	adminsessions.Register(admin, db)
 	admincron.Register(admin, s)
