@@ -32,6 +32,7 @@ import (
 	"github.com/stanza-go/standalone/module/health"
 	"github.com/stanza-go/standalone/module/apikeys"
 	"github.com/stanza-go/standalone/module/userauth"
+	"github.com/stanza-go/standalone/module/userprofile"
 	"github.com/stanza-go/standalone/module/usermgmt"
 	"github.com/stanza-go/standalone/seed"
 )
@@ -302,6 +303,13 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	adminsettings.Register(admin, db)
 	usermgmt.Register(admin, a, db)
 	apikeys.Register(admin, db)
+
+	// Protected user routes — require valid JWT + user scope.
+	user := api.Group("/user")
+	user.Use(ua.RequireAuth())
+	user.Use(auth.RequireScope("user"))
+
+	userprofile.Register(user, db, logger)
 
 	// Serve embedded frontend assets in production builds.
 	adminFS := embeddedAdmin()
