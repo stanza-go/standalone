@@ -22,6 +22,7 @@ import (
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/admincron"
+	"github.com/stanza-go/standalone/module/adminlogs"
 	"github.com/stanza-go/standalone/module/adminqueue"
 	"github.com/stanza-go/standalone/module/adminsessions"
 	"github.com/stanza-go/standalone/module/adminusers"
@@ -255,7 +256,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.Queue, s *cron.Scheduler, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -272,6 +273,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.
 	adminsessions.Register(admin, db)
 	admincron.Register(admin, s)
 	adminqueue.Register(admin, q)
+	adminlogs.Register(admin, dir.Logs)
 
 	logger.Info("modules registered")
 }

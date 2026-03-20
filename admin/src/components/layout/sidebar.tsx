@@ -6,6 +6,7 @@ import {
   LogOut,
   Settings,
   Database,
+  FileText,
   Clock,
   Inbox,
   ChevronLeft,
@@ -28,6 +29,7 @@ const navItems: NavItem[] = [
   { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
   { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
   { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
+  { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
   { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
   { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
 ];
