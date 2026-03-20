@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { get, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface Session {
   id: string;
@@ -17,6 +25,9 @@ export default function SessionsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+
+  // Revoke confirmation.
+  const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -36,10 +47,13 @@ export default function SessionsPage() {
     return () => clearInterval(interval);
   }, [load]);
 
-  async function handleRevoke(id: string) {
+  async function handleRevoke() {
+    if (!revokeTarget) return;
+    const id = revokeTarget.id;
     setActing(id);
     try {
       await del(`/admin/sessions/${id}`);
+      setRevokeTarget(null);
       await load();
     } catch (e: any) {
       setError(e.message || "Failed to revoke session");
@@ -149,10 +163,9 @@ export default function SessionsPage() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      disabled={acting === session.id}
-                      onClick={() => handleRevoke(session.id)}
+                      onClick={() => setRevokeTarget(session)}
                     >
-                      {acting === session.id ? "Revoking..." : "Revoke"}
+                      Revoke
                     </Button>
                   </td>
                 </tr>
@@ -161,6 +174,43 @@ export default function SessionsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Revoke Confirmation Dialog */}
+      <Dialog
+        open={!!revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+      >
+        <DialogHeader>
+          <DialogTitle>Revoke Session</DialogTitle>
+          <DialogCloseButton onClick={() => setRevokeTarget(null)} />
+        </DialogHeader>
+
+        <DialogBody>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to revoke this session? The user will be logged out immediately.
+          </p>
+          {revokeTarget && (
+            <div className="mt-3 p-3 bg-muted rounded-md text-sm space-y-1">
+              <div><span className="font-medium">User:</span> {revokeTarget.name || revokeTarget.email}</div>
+              <div><span className="font-medium">Type:</span> {revokeTarget.entity_type}</div>
+              <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
+            </div>
+          )}
+        </DialogBody>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setRevokeTarget(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={acting === revokeTarget?.id}
+            onClick={handleRevoke}
+          >
+            {acting === revokeTarget?.id ? "Revoking..." : "Revoke Session"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }

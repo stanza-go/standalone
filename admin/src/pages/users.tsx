@@ -4,10 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Plus,
   Pencil,
   Trash2,
-  X,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -182,7 +189,7 @@ export default function UsersPage() {
   }
 
   function formatTime(iso: string): string {
-    if (!iso) return "—";
+    if (!iso) return "\u2014";
     const d = new Date(iso);
     return d.toLocaleDateString() + " " + d.toLocaleTimeString();
   }
@@ -278,7 +285,7 @@ export default function UsersPage() {
                 >
                   <td className="p-3 font-mono text-xs">{user.id}</td>
                   <td className="p-3">{user.email}</td>
-                  <td className="p-3">{user.name || "—"}</td>
+                  <td className="p-3">{user.name || "\u2014"}</td>
                   <td className="p-3">
                     <button
                       onClick={() => handleToggleActive(user)}
@@ -352,7 +359,7 @@ export default function UsersPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-muted-foreground">
-            Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
+            Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, total)} of {total}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -379,142 +386,116 @@ export default function UsersPage() {
       )}
 
       {/* Create / Edit Dialog */}
-      {dialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={closeDialog}
-        >
-          <div
-            className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">
-                {editing ? "Edit User" : "Create User"}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={closeDialog}>
-                <X className="h-4 w-4" />
-              </Button>
+      <Dialog open={dialogOpen} onClose={closeDialog}>
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit User" : "Create User"}</DialogTitle>
+          <DialogCloseButton onClick={closeDialog} />
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit}>
+          <DialogBody className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+                {formError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={!!editing}
+                placeholder="user@example.com"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              {formError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-                  {formError}
-                </div>
-              )}
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name"
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={!!editing}
-                  placeholder="user@example.com"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">
+                {editing
+                  ? "New Password (leave empty to keep current)"
+                  : "Password"}
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={
+                  editing ? "Leave empty to keep current" : "Enter password"
+                }
+              />
+            </div>
+          </DialogBody>
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Full name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">
-                  {editing
-                    ? "New Password (leave empty to keep current)"
-                    : "Password"}
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={
-                    editing ? "Leave empty to keep current" : "Enter password"
-                  }
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={closeDialog}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting
-                    ? "Saving..."
-                    : editing
-                      ? "Save Changes"
-                      : "Create User"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting
+                ? "Saving..."
+                : editing
+                  ? "Save Changes"
+                  : "Create User"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
 
       {/* Impersonate Token Dialog */}
-      {impersonateToken && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setImpersonateToken(null)}
-        >
-          <div
-            className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Impersonation Token</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setImpersonateToken(null)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      <Dialog
+        open={!!impersonateToken}
+        onClose={() => setImpersonateToken(null)}
+        className="[&>div]:max-w-lg"
+      >
+        <DialogHeader>
+          <DialogTitle>Impersonation Token</DialogTitle>
+          <DialogCloseButton onClick={() => setImpersonateToken(null)} />
+        </DialogHeader>
 
-            <div className="p-4 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                This is a short-lived access token for the selected user. Use it
-                as a Bearer token or in an Authorization header for debugging.
-              </p>
-              <div className="relative">
-                <pre className="p-3 bg-muted rounded-md text-xs break-all whitespace-pre-wrap font-mono">
-                  {impersonateToken}
-                </pre>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="absolute top-2 right-2"
-                  onClick={copyToken}
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-green-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setImpersonateToken(null)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
+        <DialogBody className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            This is a short-lived access token for the selected user. Use it
+            as a Bearer token or in an Authorization header for debugging.
+          </p>
+          <div className="relative">
+            <pre className="p-3 bg-muted rounded-md text-xs break-all whitespace-pre-wrap font-mono">
+              {impersonateToken}
+            </pre>
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-2"
+              onClick={copyToken}
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-green-600" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogBody>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setImpersonateToken(null)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }

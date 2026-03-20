@@ -3,7 +3,15 @@ import { get, post, put, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 
 interface Admin {
   id: number;
@@ -247,100 +255,88 @@ export default function AdminsPage() {
       </div>
 
       {/* Create / Edit Dialog */}
-      {dialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={closeDialog}
-        >
-          <div
-            className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">
-                {editing ? "Edit Admin" : "Create Admin"}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={closeDialog}>
-                <X className="h-4 w-4" />
-              </Button>
+      <Dialog open={dialogOpen} onClose={closeDialog}>
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit Admin" : "Create Admin"}</DialogTitle>
+          <DialogCloseButton onClick={closeDialog} />
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit}>
+          <DialogBody className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+                {formError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={!!editing}
+                placeholder="admin@example.com"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              {formError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-                  {formError}
-                </div>
-              )}
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name"
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={!!editing}
-                  placeholder="admin@example.com"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <select
+                id="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="viewer">Viewer</option>
+                <option value="admin">Admin</option>
+                <option value="superadmin">Super Admin</option>
+              </select>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Full name"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">
+                {editing
+                  ? "New Password (leave empty to keep current)"
+                  : "Password"}
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={
+                  editing ? "Leave empty to keep current" : "Enter password"
+                }
+              />
+            </div>
+          </DialogBody>
 
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <select
-                  id="role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="admin">Admin</option>
-                  <option value="superadmin">Super Admin</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">
-                  {editing
-                    ? "New Password (leave empty to keep current)"
-                    : "Password"}
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={
-                    editing ? "Leave empty to keep current" : "Enter password"
-                  }
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={closeDialog}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting
-                    ? "Saving..."
-                    : editing
-                      ? "Save Changes"
-                      : "Create Admin"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting
+                ? "Saving..."
+                : editing
+                  ? "Save Changes"
+                  : "Create Admin"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
     </div>
   );
 }
