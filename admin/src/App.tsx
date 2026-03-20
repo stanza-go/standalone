@@ -10,6 +10,7 @@ import AdminsPage from "@/pages/admins";
 import SessionsPage from "@/pages/sessions";
 import LogsPage from "@/pages/logs";
 import DatabasePage from "@/pages/database";
+import SettingsPage from "@/pages/settings";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="queue" element={<QueuePage />} />
             <Route path="logs" element={<LogsPage />} />
             <Route path="database" element={<DatabasePage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

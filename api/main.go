@@ -25,6 +25,7 @@ import (
 	"github.com/stanza-go/standalone/module/admindb"
 	"github.com/stanza-go/standalone/module/adminlogs"
 	"github.com/stanza-go/standalone/module/adminqueue"
+	"github.com/stanza-go/standalone/module/adminsettings"
 	"github.com/stanza-go/standalone/module/adminsessions"
 	"github.com/stanza-go/standalone/module/adminusers"
 	"github.com/stanza-go/standalone/module/dashboard"
@@ -276,6 +277,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, q *queue.
 	adminqueue.Register(admin, q)
 	adminlogs.Register(admin, dir.Logs)
 	admindb.Register(admin, db, dir.Backups)
+	adminsettings.Register(admin, db)
 
 	logger.Info("modules registered")
 }
