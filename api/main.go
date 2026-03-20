@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/config"
@@ -148,10 +149,31 @@ func provideAuth(cfg *config.Config, logger *log.Logger) (*auth.Auth, error) {
 	return a, nil
 }
 
-func provideRouter(logger *log.Logger) *http.Router {
+func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router := http.NewRouter()
 
 	router.Use(http.RequestLogger(logger))
+
+	// CORS: allow cross-origin requests from admin and UI dev servers.
+	// Configure via STANZA_CORS_ORIGINS (comma-separated) or cors.origins
+	// in config.yaml. Defaults to the admin and UI Vite dev servers.
+	originsStr := cfg.GetStringOr("cors.origins", "http://localhost:23705,http://localhost:23700")
+	if originsStr != "" {
+		var origins []string
+		for _, o := range strings.Split(originsStr, ",") {
+			o = strings.TrimSpace(o)
+			if o != "" {
+				origins = append(origins, o)
+			}
+		}
+		if len(origins) > 0 {
+			router.Use(http.CORS(http.CORSConfig{
+				AllowOrigins:     origins,
+				AllowCredentials: true,
+			}))
+		}
+	}
+
 	router.Use(http.Recovery(func(v any, stack []byte) {
 		logger.Error("panic recovered",
 			log.Any("error", v),
