@@ -311,6 +311,19 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 
 	userprofile.Register(user, db, logger)
 
+	// API key authenticated routes — for programmatic access.
+	kv := apikeys.NewValidator(db)
+	v1 := api.Group("/v1")
+	v1.Use(auth.RequireAPIKey(kv))
+
+	v1.HandleFunc("GET /me", func(w http.ResponseWriter, r *http.Request) {
+		claims, _ := auth.ClaimsFromContext(r.Context())
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"uid":    claims.UID,
+			"scopes": claims.Scopes,
+		})
+	})
+
 	// Serve embedded frontend assets in production builds.
 	adminFS := embeddedAdmin()
 	uiFS := embeddedUI()
