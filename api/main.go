@@ -18,6 +18,7 @@ import (
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminauth"
+	"github.com/stanza-go/standalone/module/dashboard"
 	"github.com/stanza-go/standalone/module/health"
 	"github.com/stanza-go/standalone/seed"
 )
@@ -208,8 +209,16 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, logger *log.Logger) {
 	api := router.Group("/api")
 
+	// Public routes.
 	health.Register(api, db)
 	adminauth.Register(api, a, db, logger)
+
+	// Protected admin routes — require valid JWT + admin scope.
+	admin := api.Group("/admin")
+	admin.Use(a.RequireAuth())
+	admin.Use(auth.RequireScope("admin"))
+
+	dashboard.Register(admin, db)
 
 	logger.Info("modules registered")
 }
