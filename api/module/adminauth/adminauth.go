@@ -53,11 +53,13 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		// Look up admin by email (not soft-deleted, active).
 		var id int64
 		var passwordHash, name, role string
-		row := db.QueryRow(
-			`SELECT id, password, name, role FROM admins
-			 WHERE email = ? AND deleted_at IS NULL AND is_active = 1`,
-			req.Email,
-		)
+		sql, args := sqlite.Select("id", "password", "name", "role").
+			From("admins").
+			Where("email = ?", req.Email).
+			Where("deleted_at IS NULL").
+			Where("is_active = 1").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&id, &passwordHash, &name, &role); err != nil {
 			// Don't reveal whether the email exists.
 			http.WriteError(w, http.StatusUnauthorized, "invalid credentials")
@@ -96,11 +98,14 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		}
 
 		expiresAt := time.Now().Add(a.RefreshTokenTTL()).UTC().Format(time.RFC3339)
-		_, err = db.Exec(
-			`INSERT INTO refresh_tokens (id, entity_type, entity_id, token_hash, expires_at)
-			 VALUES (?, ?, ?, ?, ?)`,
-			tokenID, "admin", uid, auth.HashToken(refreshToken), expiresAt,
-		)
+		sql, args = sqlite.Insert("refresh_tokens").
+			Set("id", tokenID).
+			Set("entity_type", "admin").
+			Set("entity_id", uid).
+			Set("token_hash", auth.HashToken(refreshToken)).
+			Set("expires_at", expiresAt).
+			Build()
+		_, err = db.Exec(sql, args...)
 		if err != nil {
 			logger.Error("store refresh token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
@@ -139,11 +144,12 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 
 		// Validate refresh token against DB.
 		var entityID, expiresAtStr string
-		row := db.QueryRow(
-			`SELECT entity_id, expires_at FROM refresh_tokens
-			 WHERE token_hash = ? AND entity_type = 'admin'`,
-			tokenHash,
-		)
+		sql, args := sqlite.Select("entity_id", "expires_at").
+			From("refresh_tokens").
+			Where("token_hash = ?", tokenHash).
+			Where("entity_type = 'admin'").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&entityID, &expiresAtStr); err != nil {
 			http.WriteError(w, http.StatusUnauthorized, "invalid session")
 			return
@@ -152,7 +158,8 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 		if err != nil || time.Now().After(expiresAt) {
 			// Expired — clean up.
-			db.Exec(`DELETE FROM refresh_tokens WHERE token_hash = ?`, tokenHash)
+			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
+			db.Exec(sql, args...)
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "session expired")
 			return
@@ -161,14 +168,17 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		// Check admin is still active and not deleted.
 		var id int64
 		var email, name, role string
-		row = db.QueryRow(
-			`SELECT id, email, name, role FROM admins
-			 WHERE id = ? AND deleted_at IS NULL AND is_active = 1`,
-			entityID,
-		)
+		sql, args = sqlite.Select("id", "email", "name", "role").
+			From("admins").
+			Where("id = ?", entityID).
+			Where("deleted_at IS NULL").
+			Where("is_active = 1").
+			Build()
+		row = db.QueryRow(sql, args...)
 		if err := row.Scan(&id, &email, &name, &role); err != nil {
 			// Admin deactivated or deleted — revoke session.
-			db.Exec(`DELETE FROM refresh_tokens WHERE token_hash = ?`, tokenHash)
+			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
+			db.Exec(sql, args...)
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "account deactivated")
 			return
@@ -204,7 +214,8 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err == nil {
 			tokenHash := auth.HashToken(refreshToken)
-			db.Exec(`DELETE FROM refresh_tokens WHERE token_hash = ?`, tokenHash)
+			sql, args := sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
+			db.Exec(sql, args...)
 		}
 
 		a.ClearAllCookies(w)

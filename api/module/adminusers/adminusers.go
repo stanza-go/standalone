@@ -44,15 +44,17 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		offset := http.QueryParamInt(r, "offset", 0)
 
 		var total int
-		row := db.QueryRow(`SELECT COUNT(*) FROM admins WHERE deleted_at IS NULL`)
-		row.Scan(&total)
+		sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
+		db.QueryRow(sql, args...).Scan(&total)
 
-		rows, err := db.Query(
-			`SELECT id, email, name, role, is_active, created_at, updated_at
-			 FROM admins WHERE deleted_at IS NULL
-			 ORDER BY id ASC LIMIT ? OFFSET ?`,
-			limit, offset,
-		)
+		sql, args = sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
+			From("admins").
+			Where("deleted_at IS NULL").
+			OrderBy("id", "ASC").
+			Limit(limit).
+			Offset(offset).
+			Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list admins")
 			return
@@ -113,10 +115,15 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		result, err := db.Exec(
-			`INSERT INTO admins (email, password, name, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			req.Email, hash, req.Name, req.Role, now, now,
-		)
+		sql, args := sqlite.Insert("admins").
+			Set("email", req.Email).
+			Set("password", hash).
+			Set("name", req.Name).
+			Set("role", req.Role).
+			Set("created_at", now).
+			Set("updated_at", now).
+			Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				http.WriteError(w, http.StatusConflict, "email already exists")
@@ -178,10 +185,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Load current admin.
 		var currentEmail, currentName, currentRole, createdAt string
 		var currentActive int
-		row := db.QueryRow(
-			`SELECT email, name, role, is_active, created_at FROM admins WHERE id = ? AND deleted_at IS NULL`,
-			id,
-		)
+		sql, args := sqlite.Select("email", "name", "role", "is_active", "created_at").
+			From("admins").
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&currentEmail, &currentName, &currentRole, &currentActive, &createdAt); err != nil {
 			http.WriteError(w, http.StatusNotFound, "admin not found")
 			return
@@ -207,31 +216,25 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 
+		q := sqlite.Update("admins").
+			Set("name", name).
+			Set("role", role).
+			Set("is_active", isActive)
 		if req.Password != "" {
 			hash, err := auth.HashPassword(req.Password)
 			if err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "failed to hash password")
 				return
 			}
-			_, err = db.Exec(
-				`UPDATE admins SET name = ?, role = ?, is_active = ?, password = ?, updated_at = ?
-				 WHERE id = ? AND deleted_at IS NULL`,
-				name, role, isActive, hash, now, id,
-			)
-			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to update admin")
-				return
-			}
-		} else {
-			_, err = db.Exec(
-				`UPDATE admins SET name = ?, role = ?, is_active = ?, updated_at = ?
-				 WHERE id = ? AND deleted_at IS NULL`,
-				name, role, isActive, now, id,
-			)
-			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to update admin")
-				return
-			}
+			q.Set("password", hash)
+		}
+		sql, args = q.Set("updated_at", now).
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		if _, err := db.Exec(sql, args...); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to update admin")
+			return
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -264,11 +267,14 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		result, err := db.Exec(
-			`UPDATE admins SET deleted_at = ?, is_active = 0, updated_at = ?
-			 WHERE id = ? AND deleted_at IS NULL`,
-			now, now, id,
-		)
+		sql, args := sqlite.Update("admins").
+			Set("deleted_at", now).
+			Set("is_active", 0).
+			Set("updated_at", now).
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to delete admin")
 			return
@@ -279,10 +285,11 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		// Revoke all sessions for this admin.
-		_, _ = db.Exec(
-			`DELETE FROM refresh_tokens WHERE entity_type = 'admin' AND entity_id = ?`,
-			strconv.FormatInt(id, 10),
-		)
+		sql, args = sqlite.Delete("refresh_tokens").
+			Where("entity_type = 'admin'").
+			Where("entity_id = ?", strconv.FormatInt(id, 10)).
+			Build()
+		_, _ = db.Exec(sql, args...)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

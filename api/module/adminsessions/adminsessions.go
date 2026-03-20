@@ -25,15 +25,15 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Format(time.RFC3339)
 
-		rows, err := db.Query(
-			`SELECT rt.id, rt.entity_type, rt.entity_id, rt.created_at, rt.expires_at,
-			        COALESCE(a.email, ''), COALESCE(a.name, '')
-			 FROM refresh_tokens rt
-			 LEFT JOIN admins a ON rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)
-			 WHERE rt.expires_at > ?
-			 ORDER BY rt.created_at DESC`,
-			now,
-		)
+		sql, args := sqlite.Select(
+			"rt.id", "rt.entity_type", "rt.entity_id", "rt.created_at", "rt.expires_at",
+			"COALESCE(a.email, '')", "COALESCE(a.name, '')").
+			From("refresh_tokens rt").
+			LeftJoin("admins a", "rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)").
+			Where("rt.expires_at > ?", now).
+			OrderBy("rt.created_at", "DESC").
+			Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
 			return
@@ -74,7 +74,8 @@ func revokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		result, err := db.Exec(`DELETE FROM refresh_tokens WHERE id = ?`, id)
+		sql, args := sqlite.Delete("refresh_tokens").Where("id = ?", id).Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to revoke session")
 			return

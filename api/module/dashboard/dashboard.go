@@ -49,13 +49,13 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 
 		// Admin count.
 		var totalAdmins int
-		row = db.QueryRow(`SELECT count(*) FROM admins WHERE deleted_at IS NULL`)
-		row.Scan(&totalAdmins)
+		sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
+		db.QueryRow(sql, args...).Scan(&totalAdmins)
 
 		// Active session count (non-expired refresh tokens).
 		var activeSessions int
-		row = db.QueryRow(`SELECT count(*) FROM refresh_tokens WHERE expires_at > ?`, time.Now().UTC().Format(time.RFC3339))
-		row.Scan(&activeSessions)
+		sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).Build()
+		db.QueryRow(sql, args...).Scan(&activeSessions)
 
 		// Migration count.
 		var appliedMigrations int

@@ -30,7 +30,12 @@ type setting struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query(`SELECT key, value, group_name, updated_at FROM settings ORDER BY group_name, key`)
+		sql, args := sqlite.Select("key", "value", "group_name", "updated_at").
+			From("settings").
+			OrderBy("group_name", "ASC").
+			OrderBy("key", "ASC").
+			Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
 			return
@@ -75,10 +80,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 
-		result, err := db.Exec(
-			`UPDATE settings SET value = ?, updated_at = ? WHERE key = ?`,
-			req.Value, now, key,
-		)
+		sql, args := sqlite.Update("settings").
+			Set("value", req.Value).
+			Set("updated_at", now).
+			Where("key = ?", key).
+			Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to update setting")
 			return
@@ -90,7 +97,11 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		var s setting
-		row := db.QueryRow(`SELECT key, value, group_name, updated_at FROM settings WHERE key = ?`, key)
+		sql, args = sqlite.Select("key", "value", "group_name", "updated_at").
+			From("settings").
+			Where("key = ?", key).
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&s.Key, &s.Value, &s.GroupName, &s.UpdatedAt); err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to read updated setting")
 			return

@@ -48,35 +48,22 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		offset := http.QueryParamInt(r, "offset", 0)
 		search := r.URL.Query().Get("search")
 
-		var total int
-		var rows *sqlite.Rows
-		var err error
-
+		countQ := sqlite.Count("users").Where("deleted_at IS NULL")
+		selectQ := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
+			From("users").
+			Where("deleted_at IS NULL")
 		if search != "" {
 			like := "%" + search + "%"
-			row := db.QueryRow(
-				`SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND (email LIKE ? OR name LIKE ?)`,
-				like, like,
-			)
-			row.Scan(&total)
-
-			rows, err = db.Query(
-				`SELECT id, email, name, is_active, created_at, updated_at
-				 FROM users WHERE deleted_at IS NULL AND (email LIKE ? OR name LIKE ?)
-				 ORDER BY id DESC LIMIT ? OFFSET ?`,
-				like, like, limit, offset,
-			)
-		} else {
-			row := db.QueryRow(`SELECT COUNT(*) FROM users WHERE deleted_at IS NULL`)
-			row.Scan(&total)
-
-			rows, err = db.Query(
-				`SELECT id, email, name, is_active, created_at, updated_at
-				 FROM users WHERE deleted_at IS NULL
-				 ORDER BY id DESC LIMIT ? OFFSET ?`,
-				limit, offset,
-			)
+			countQ.Where("(email LIKE ? OR name LIKE ?)", like, like)
+			selectQ.Where("(email LIKE ? OR name LIKE ?)", like, like)
 		}
+
+		var total int
+		sql, args := countQ.Build()
+		db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = selectQ.OrderBy("id", "DESC").Limit(limit).Offset(offset).Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list users")
 			return
@@ -128,10 +115,14 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		result, err := db.Exec(
-			`INSERT INTO users (email, password, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-			req.Email, hash, req.Name, now, now,
-		)
+		sql, args := sqlite.Insert("users").
+			Set("email", req.Email).
+			Set("password", hash).
+			Set("name", req.Name).
+			Set("created_at", now).
+			Set("updated_at", now).
+			Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				http.WriteError(w, http.StatusConflict, "email already exists")
@@ -164,11 +155,12 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		var u userJSON
 		var isActive int
-		row := db.QueryRow(
-			`SELECT id, email, name, is_active, created_at, updated_at
-			 FROM users WHERE id = ? AND deleted_at IS NULL`,
-			id,
-		)
+		sql, args := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
+			From("users").
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&u.ID, &u.Email, &u.Name, &isActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
@@ -177,13 +169,12 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		// Count active sessions for this user.
 		var sessionCount int
-		row = db.QueryRow(
-			`SELECT COUNT(*) FROM refresh_tokens
-			 WHERE entity_type = 'user' AND entity_id = ? AND expires_at > ?`,
-			strconv.FormatInt(id, 10),
-			time.Now().UTC().Format(time.RFC3339),
-		)
-		row.Scan(&sessionCount)
+		sql, args = sqlite.Count("refresh_tokens").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", strconv.FormatInt(id, 10)).
+			Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).
+			Build()
+		db.QueryRow(sql, args...).Scan(&sessionCount)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user":           u,
@@ -215,10 +206,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Load current user.
 		var currentEmail, currentName, createdAt string
 		var currentActive int
-		row := db.QueryRow(
-			`SELECT email, name, is_active, created_at FROM users WHERE id = ? AND deleted_at IS NULL`,
-			id,
-		)
+		sql, args := sqlite.Select("email", "name", "is_active", "created_at").
+			From("users").
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&currentEmail, &currentName, &currentActive, &createdAt); err != nil {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
@@ -240,39 +233,33 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 
+		q := sqlite.Update("users").
+			Set("name", name).
+			Set("is_active", isActive)
 		if req.Password != "" {
 			hash, err := auth.HashPassword(req.Password)
 			if err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "failed to hash password")
 				return
 			}
-			_, err = db.Exec(
-				`UPDATE users SET name = ?, is_active = ?, password = ?, updated_at = ?
-				 WHERE id = ? AND deleted_at IS NULL`,
-				name, isActive, hash, now, id,
-			)
-			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to update user")
-				return
-			}
-		} else {
-			_, err = db.Exec(
-				`UPDATE users SET name = ?, is_active = ?, updated_at = ?
-				 WHERE id = ? AND deleted_at IS NULL`,
-				name, isActive, now, id,
-			)
-			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to update user")
-				return
-			}
+			q.Set("password", hash)
+		}
+		sql, args = q.Set("updated_at", now).
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		if _, err := db.Exec(sql, args...); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to update user")
+			return
 		}
 
 		// If deactivated, revoke all sessions.
 		if req.IsActive != nil && !*req.IsActive {
-			_, _ = db.Exec(
-				`DELETE FROM refresh_tokens WHERE entity_type = 'user' AND entity_id = ?`,
-				strconv.FormatInt(id, 10),
-			)
+			sql, args = sqlite.Delete("refresh_tokens").
+				Where("entity_type = 'user'").
+				Where("entity_id = ?", strconv.FormatInt(id, 10)).
+				Build()
+			_, _ = db.Exec(sql, args...)
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -297,11 +284,14 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		result, err := db.Exec(
-			`UPDATE users SET deleted_at = ?, is_active = 0, updated_at = ?
-			 WHERE id = ? AND deleted_at IS NULL`,
-			now, now, id,
-		)
+		sql, args := sqlite.Update("users").
+			Set("deleted_at", now).
+			Set("is_active", 0).
+			Set("updated_at", now).
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to delete user")
 			return
@@ -312,10 +302,11 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		// Revoke all sessions for this user.
-		_, _ = db.Exec(
-			`DELETE FROM refresh_tokens WHERE entity_type = 'user' AND entity_id = ?`,
-			strconv.FormatInt(id, 10),
-		)
+		sql, args = sqlite.Delete("refresh_tokens").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", strconv.FormatInt(id, 10)).
+			Build()
+		_, _ = db.Exec(sql, args...)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
@@ -338,10 +329,12 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 		// Verify user exists and is active.
 		var email, name string
 		var isActive int
-		row := db.QueryRow(
-			`SELECT email, name, is_active FROM users WHERE id = ? AND deleted_at IS NULL`,
-			id,
-		)
+		sql, args := sqlite.Select("email", "name", "is_active").
+			From("users").
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&email, &name, &isActive); err != nil {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
