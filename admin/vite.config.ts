@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => ({
       "/api": {
         target: "http://localhost:23710",
         changeOrigin: true,
+        ws: true,
       },
     },
   },

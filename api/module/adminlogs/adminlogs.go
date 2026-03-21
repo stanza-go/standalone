@@ -1,16 +1,19 @@
 // Package adminlogs provides admin endpoints for viewing structured log files.
 // It reads JSON-line log files from the data directory and supports filtering
-// by level, keyword search, and file selection.
+// by level, keyword search, and file selection. Includes a WebSocket endpoint
+// for real-time log streaming.
 package adminlogs
 
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
 )
@@ -19,11 +22,13 @@ import (
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET /api/admin/logs       — list log entries with filtering
-//	GET /api/admin/logs/files — list available log files
+//	GET /api/admin/logs        — list log entries with filtering
+//	GET /api/admin/logs/files  — list available log files
+//	GET /api/admin/logs/stream — WebSocket: stream new log entries in real-time
 func Register(admin *http.Group, logsDir string) {
 	admin.HandleFunc("GET /logs", entriesHandler(logsDir))
 	admin.HandleFunc("GET /logs/files", filesHandler(logsDir))
+	admin.HandleFunc("GET /logs/stream", streamHandler(logsDir))
 }
 
 func entriesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
@@ -106,6 +111,143 @@ func entriesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 			"file":    file,
 			"total":   len(lines),
 		})
+	}
+}
+
+// streamHandler upgrades to WebSocket and tails stanza.log in real-time.
+// Query params: ?level=info&search=keyword (optional server-side filters).
+// The server sends each new JSON log line as a WebSocket text message.
+// The client can send a JSON message to update filters mid-stream:
+//
+//	{"level":"error","search":"timeout"}
+func streamHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
+	upgrader := http.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		level := strings.ToLower(r.URL.Query().Get("level"))
+		search := strings.ToLower(r.URL.Query().Get("search"))
+
+		// Read client messages in a separate goroutine for filter updates
+		// and to detect disconnection.
+		done := make(chan struct{})
+		filterCh := make(chan streamFilter, 1)
+		go func() {
+			defer close(done)
+			for {
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+				var f streamFilter
+				if json.Unmarshal(msg, &f) == nil {
+					select {
+					case filterCh <- f:
+					default:
+					}
+				}
+			}
+		}()
+
+		path := filepath.Join(logsDir, "stanza.log")
+
+		// Open the file and seek to the end.
+		f, err := os.Open(path)
+		if err != nil {
+			_ = conn.CloseWithMessage(http.CloseGoingAway, "log file not available")
+			return
+		}
+		defer f.Close()
+
+		_, _ = f.Seek(0, io.SeekEnd)
+		reader := bufio.NewReader(f)
+
+		ticker := time.NewTicker(300 * time.Millisecond)
+		defer ticker.Stop()
+
+		pingTicker := time.NewTicker(30 * time.Second)
+		defer pingTicker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case f, ok := <-filterCh:
+				if !ok {
+					return
+				}
+				level = strings.ToLower(f.Level)
+				search = strings.ToLower(f.Search)
+			case <-pingTicker.C:
+				if err := conn.WritePing(nil); err != nil {
+					return
+				}
+			case <-ticker.C:
+				if err := sendNewLines(conn, reader, level, search); err != nil {
+					return
+				}
+			}
+		}
+	}
+}
+
+type streamFilter struct {
+	Level  string `json:"level"`
+	Search string `json:"search"`
+}
+
+// sendNewLines reads any new lines from the reader and sends matching
+// entries to the WebSocket connection.
+func sendNewLines(conn *http.Conn, reader *bufio.Reader, level, search string) error {
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		// Validate JSON and apply filters.
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		if level != "" {
+			if entryLevel, ok := entry["level"].(string); !ok || entryLevel != level {
+				if err != nil {
+					return nil
+				}
+				continue
+			}
+		}
+
+		if search != "" && !matchesSearch(entry, search) {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		if writeErr := conn.WriteMessage(http.TextMessage, []byte(line)); writeErr != nil {
+			return writeErr
+		}
+
+		if err != nil {
+			return nil
+		}
 	}
 }
 

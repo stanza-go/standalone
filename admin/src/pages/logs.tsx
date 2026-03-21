@@ -9,6 +9,8 @@ import {
   ChevronRight,
   Pause,
   Play,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -37,6 +39,7 @@ interface FilesResponse {
 }
 
 const LEVELS = ["", "debug", "info", "warn", "error"] as const;
+const MAX_ENTRIES = 500;
 
 function formatTime(iso: string): string {
   if (!iso) return "—";
@@ -53,6 +56,14 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function wsUrl(path: string): string {
+  const loc = window.location;
+  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+  // In dev mode, Vite proxies /api/* to the Go server.
+  // The WebSocket connection also needs to go through the proxy.
+  return `${proto}//${loc.host}/api${path}`;
 }
 
 function LevelBadge({ level }: { level: string }) {
@@ -89,6 +100,8 @@ function ExtraFields({ entry }: { entry: LogEntry }) {
   );
 }
 
+type WsState = "disconnected" | "connecting" | "connected";
+
 export default function LogsPage() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [files, setFiles] = useState<LogFile[]>([]);
@@ -101,7 +114,11 @@ export default function LogsPage() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [total, setTotal] = useState(0);
+  const [wsState, setWsState] = useState<WsState>("disconnected");
+  const [streamCount, setStreamCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -132,22 +149,112 @@ export default function LogsPage() {
     setLoading(false);
   }, [loadEntries, loadFiles]);
 
+  // Close WebSocket connection.
+  const closeWs = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setWsState("disconnected");
+  }, []);
+
+  // Open WebSocket connection for real-time streaming.
+  const connectWs = useCallback(() => {
+    closeWs();
+    setWsState("connecting");
+    setStreamCount(0);
+
+    const params = new URLSearchParams();
+    if (level) params.set("level", level);
+    if (search) params.set("search", search);
+    const qs = params.toString();
+    const url = wsUrl(`/admin/logs/stream${qs ? "?" + qs : ""}`);
+
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsState("connected");
+      setError(null);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const entry = JSON.parse(event.data) as LogEntry;
+        setEntries((prev) => {
+          const next = [entry, ...prev];
+          return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
+        });
+        setTotal((prev) => prev + 1);
+        setStreamCount((prev) => prev + 1);
+      } catch {
+        // Ignore non-JSON messages.
+      }
+    };
+
+    ws.onclose = () => {
+      setWsState("disconnected");
+      wsRef.current = null;
+      // Auto-reconnect after 3 seconds if still in live mode.
+      reconnectRef.current = setTimeout(() => {
+        reconnectRef.current = null;
+      }, 3000);
+    };
+
+    ws.onerror = () => {
+      // onclose will fire after this — reconnect happens there.
+    };
+  }, [level, search, closeWs]);
+
+  // Send updated filters to an active WebSocket connection.
+  const sendFilters = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ level, search }));
+    }
+  }, [level, search]);
+
+  // Initial load.
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
+  // Manage live mode: use WebSocket for stanza.log, fall back to polling for rotated files.
   useEffect(() => {
+    // Clear any existing polling interval.
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (autoRefresh) {
+
+    if (!autoRefresh) {
+      closeWs();
+      return;
+    }
+
+    // WebSocket streaming only works on the current log file.
+    if (selectedFile === "stanza.log") {
+      connectWs();
+    } else {
+      closeWs();
       intervalRef.current = setInterval(loadEntries, 5_000);
     }
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      closeWs();
     };
-  }, [autoRefresh, loadEntries]);
+  }, [autoRefresh, selectedFile, connectWs, closeWs, loadEntries]);
+
+  // When filters change while WebSocket is connected, send new filters.
+  useEffect(() => {
+    if (wsState === "connected") {
+      sendFilters();
+    }
+  }, [level, search, wsState, sendFilters]);
 
   function toggleExpanded(idx: number) {
     setExpanded((prev) => {
@@ -173,14 +280,35 @@ export default function LogsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Logs</h1>
           <p className="text-sm text-muted-foreground">
             {total} entries in {selectedFile}
+            {wsState === "connected" && streamCount > 0 && (
+              <span className="ml-2 text-green-600">+{streamCount} streamed</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {wsState === "connected" && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <Wifi className="h-3.5 w-3.5" />
+              Streaming
+            </span>
+          )}
+          {wsState === "connecting" && (
+            <span className="flex items-center gap-1 text-xs text-yellow-600">
+              <Wifi className="h-3.5 w-3.5 animate-pulse" />
+              Connecting
+            </span>
+          )}
+          {autoRefresh && selectedFile === "stanza.log" && wsState === "disconnected" && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <WifiOff className="h-3.5 w-3.5" />
+              Disconnected
+            </span>
+          )}
           <Button
             variant={autoRefresh ? "default" : "outline"}
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
-            title={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}
+            title={autoRefresh ? "Pause live streaming" : "Resume live streaming"}
           >
             {autoRefresh ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {autoRefresh ? "Live" : "Paused"}
