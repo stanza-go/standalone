@@ -364,10 +364,10 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = sqlite.Select(
-			"al.id", "al.admin_id", "a.email", "a.name",
+			"al.id", "al.admin_id", "COALESCE(a.email, '')", "COALESCE(a.name, '')",
 			"al.action", "al.details", "al.ip_address", "al.created_at",
 		).From("audit_log al").
-			LeftJoin("admins a", "a.id = al.admin_id").
+			LeftJoin("admins a", "a.id = CAST(al.admin_id AS INTEGER)").
 			Where("al.entity_type = 'user'").
 			Where("al.entity_id = ?", idStr).
 			OrderBy("al.created_at", "DESC").
@@ -393,17 +393,10 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		entries := make([]entry, 0)
 		for rows.Next() {
 			var e entry
-			var adminEmail, adminName *string
-			if err := rows.Scan(&e.ID, &e.AdminID, &adminEmail, &adminName,
+			if err := rows.Scan(&e.ID, &e.AdminID, &e.AdminEmail, &e.AdminName,
 				&e.Action, &e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "failed to scan activity")
 				return
-			}
-			if adminEmail != nil {
-				e.AdminEmail = *adminEmail
-			}
-			if adminName != nil {
-				e.AdminName = *adminName
 			}
 			entries = append(entries, e)
 		}
