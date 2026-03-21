@@ -62,21 +62,26 @@ type Service struct {
 	db     *sqlite.DB
 	email  *email.Client
 	logger *log.Logger
+	hub    *Hub
 }
 
 // NewService creates a notification Service. The email client and logger may
 // be nil — email delivery is silently skipped when the client is nil or not
 // configured.
 func NewService(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) *Service {
-	return &Service{db: db, email: emailClient, logger: logger}
+	return &Service{db: db, email: emailClient, logger: logger, hub: NewHub()}
 }
+
+// Hub returns the notification broadcast hub for WebSocket subscriptions.
+func (s *Service) Hub() *Hub { return s.hub }
 
 // DB returns the underlying database handle so endpoint modules can query
 // notifications without needing a separate db dependency.
 func (s *Service) DB() *sqlite.DB { return s.db }
 
 // NotifyAdmin creates a notification for an admin and optionally sends an
-// email.
+// email. Connected WebSocket clients for this admin receive the notification
+// in real-time.
 func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, options ...Option) (int64, error) {
 	id, err := NotifyAdmin(s.db, adminID, notifType, title, message)
 	if err != nil {
@@ -86,11 +91,12 @@ func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, o
 	if o.sendEmail {
 		s.sendEmail(o.ctx, EntityAdmin, adminID, notifType, title, message)
 	}
+	s.publishToAdmin(adminID, id, notifType, title, message)
 	return id, nil
 }
 
 // NotifyUser creates a notification for an end user and optionally sends an
-// email.
+// email. (User-side WebSocket is not implemented — only admin hub is used.)
 func (s *Service) NotifyUser(userID int64, notifType, title, message string, options ...Option) (int64, error) {
 	id, err := NotifyUser(s.db, userID, notifType, title, message)
 	if err != nil {
@@ -104,7 +110,8 @@ func (s *Service) NotifyUser(userID int64, notifType, title, message string, opt
 }
 
 // NotifyAllAdmins creates a notification for every active admin and
-// optionally sends emails to each.
+// optionally sends emails to each. Connected WebSocket clients for each
+// admin receive the notification in real-time.
 func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...Option) error {
 	o := applyOpts(options)
 
@@ -125,12 +132,14 @@ func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...O
 	rows.Close()
 
 	for _, id := range ids {
-		if _, err := NotifyAdmin(s.db, id, notifType, title, message); err != nil {
+		nID, err := NotifyAdmin(s.db, id, notifType, title, message)
+		if err != nil {
 			return err
 		}
 		if o.sendEmail {
 			s.sendEmail(o.ctx, EntityAdmin, id, notifType, title, message)
 		}
+		s.publishToAdmin(id, nID, notifType, title, message)
 	}
 	return nil
 }
@@ -309,6 +318,25 @@ func NotifyAllAdmins(db *sqlite.DB, notifType, title, message string) error {
 		}
 	}
 	return nil
+}
+
+// publishToAdmin broadcasts a notification event to connected WebSocket
+// subscribers for the given admin. It also includes the updated unread count.
+func (s *Service) publishToAdmin(adminID, notifID int64, notifType, title, message string) {
+	unread := UnreadCount(s.db, EntityAdmin, adminID)
+	s.hub.Publish(adminID, Event{
+		Type: "notification",
+		Notification: &Notification{
+			ID:         notifID,
+			EntityType: EntityAdmin,
+			EntityID:   adminID,
+			Type:       notifType,
+			Title:      title,
+			Message:    message,
+			CreatedAt:  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		},
+		UnreadCount: unread,
+	})
 }
 
 // UnreadCount returns the number of unread notifications for an entity.

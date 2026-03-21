@@ -5,6 +5,7 @@
 package adminnotifications
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 //
 //	GET    /api/admin/notifications              — list notifications (paginated)
 //	GET    /api/admin/notifications/unread-count  — count of unread notifications
+//	GET    /api/admin/notifications/stream        — WebSocket stream for real-time notifications
 //	POST   /api/admin/notifications/send          — send a notification (with optional email)
 //	POST   /api/admin/notifications/{id}/read     — mark one notification as read
 //	POST   /api/admin/notifications/read-all      — mark all notifications as read
@@ -26,6 +28,7 @@ import (
 func Register(admin *http.Group, db *sqlite.DB, svc *notifications.Service) {
 	admin.HandleFunc("GET /notifications", listHandler(db))
 	admin.HandleFunc("GET /notifications/unread-count", unreadCountHandler(db))
+	admin.HandleFunc("GET /notifications/stream", streamHandler(svc))
 	admin.HandleFunc("POST /notifications/send", sendHandler(svc))
 	admin.HandleFunc("POST /notifications/{id}/read", markReadHandler(db))
 	admin.HandleFunc("POST /notifications/read-all", markAllReadHandler(db))
@@ -228,6 +231,77 @@ func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Req
 			"id":         id,
 			"email_sent": req.SendEmail,
 		})
+	}
+}
+
+// streamHandler upgrades to a WebSocket connection and streams real-time
+// notification events to the connected admin. Events include new notifications
+// and updated unread counts. The connection stays open until the client
+// disconnects or the server shuts down.
+//
+// Ping frames are sent every 30s to detect dead connections. The client can
+// close the connection at any time.
+func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Request) {
+	upgrader := http.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, _ := auth.ClaimsFromContext(r.Context())
+		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+
+		conn, err := upgrader.Upgrade(w, r)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		eventCh, unsub := svc.Hub().Subscribe(adminID)
+		defer unsub()
+
+		// Read goroutine — detects client disconnection.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				_, _, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+			}
+		}()
+
+		// Send initial unread count so the client syncs immediately.
+		initialCount := notifications.UnreadCount(svc.DB(), notifications.EntityAdmin, adminID)
+		initMsg, _ := json.Marshal(notifications.Event{
+			Type:        "unread_count",
+			UnreadCount: initialCount,
+		})
+		if err := conn.WriteMessage(http.TextMessage, initMsg); err != nil {
+			return
+		}
+
+		pingTicker := time.NewTicker(30 * time.Second)
+		defer pingTicker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case evt, ok := <-eventCh:
+				if !ok {
+					return
+				}
+				msg, _ := json.Marshal(evt)
+				if err := conn.WriteMessage(http.TextMessage, msg); err != nil {
+					return
+				}
+			case <-pingTicker.C:
+				if err := conn.WritePing(nil); err != nil {
+					return
+				}
+			}
+		}
 	}
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import { get, post, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, CheckCheck, Trash2, ExternalLink } from "lucide-react";
+import { Bell, Check, CheckCheck, Trash2, ExternalLink, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -20,6 +20,12 @@ interface ListResponse {
   unread: number;
 }
 
+interface WsEvent {
+  type: "notification" | "unread_count";
+  notification?: Notification;
+  unread_count: number;
+}
+
 function formatRelativeTime(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return "just now";
@@ -35,15 +41,25 @@ const TYPE_COLORS: Record<string, string> = {
   error: "bg-red-500",
 };
 
+function wsUrl(path: string): string {
+  const loc = window.location;
+  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${loc.host}/api${path}`;
+}
+
 export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch unread count.
+  // Fetch unread count via HTTP (fallback when WebSocket is not available).
   const fetchCount = useCallback(async () => {
     try {
       const data = await get<{ unread: number }>("/admin/notifications/unread-count");
@@ -67,16 +83,106 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
     }
   }, []);
 
-  // Poll unread count every 30s.
-  useEffect(() => {
-    fetchCount();
-    const interval = setInterval(() => {
+  // Stop HTTP polling.
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  // Start HTTP polling as fallback.
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(() => {
       if (document.visibilityState === "visible") {
         fetchCount();
       }
     }, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchCount]);
+  }, [fetchCount, stopPolling]);
+
+  // Close WebSocket connection.
+  const closeWs = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setWsConnected(false);
+  }, []);
+
+  // Open WebSocket connection for real-time notifications.
+  const connectWs = useCallback(() => {
+    closeWs();
+
+    const url = wsUrl("/admin/notifications/stream");
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsConnected(true);
+      stopPolling();
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const evt: WsEvent = JSON.parse(e.data);
+        setUnreadCount(evt.unread_count);
+
+        if (evt.type === "notification" && evt.notification) {
+          // Prepend the new notification to the cached list.
+          setNotifications((prev) => {
+            const updated = [evt.notification!, ...prev];
+            // Keep at most 10 in the dropdown cache.
+            return updated.slice(0, 10);
+          });
+        }
+      } catch {
+        // Ignore malformed messages.
+      }
+    };
+
+    ws.onclose = () => {
+      setWsConnected(false);
+      wsRef.current = null;
+      // Reconnect after 5s, fall back to polling in the meantime.
+      startPolling();
+      reconnectRef.current = setTimeout(() => {
+        if (document.visibilityState === "visible") {
+          connectWs();
+        }
+      }, 5_000);
+    };
+
+    ws.onerror = () => {
+      // onclose will fire after this — reconnect happens there.
+    };
+  }, [closeWs, stopPolling, startPolling]);
+
+  // Connect WebSocket on mount, clean up on unmount.
+  useEffect(() => {
+    fetchCount();
+    connectWs();
+
+    // Reconnect when tab becomes visible again.
+    function onVisibility() {
+      if (document.visibilityState === "visible") {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          connectWs();
+        }
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      closeWs();
+      stopPolling();
+    };
+  }, [fetchCount, connectWs, closeWs, stopPolling]);
 
   // Fetch notifications when dropdown opens.
   useEffect(() => {
@@ -137,7 +243,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
         size="icon"
         className="relative h-8 w-8"
         onClick={() => setOpen(!open)}
-        title="Notifications"
+        title={wsConnected ? "Notifications (live)" : "Notifications"}
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
@@ -156,7 +262,14 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h3 className="text-sm font-semibold">Notifications</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold">Notifications</h3>
+              {wsConnected ? (
+                <span title="Live updates active"><Wifi className="h-3 w-3 text-green-500" /></span>
+              ) : (
+                <span title="Polling mode"><WifiOff className="h-3 w-3 text-muted-foreground/50" /></span>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
                 <Button
