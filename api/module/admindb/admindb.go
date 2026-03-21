@@ -49,16 +49,16 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 
 		// PRAGMA stats.
 		var pageCount int
-		db.QueryRow("PRAGMA page_count").Scan(&pageCount)
+		_ = db.QueryRow("PRAGMA page_count").Scan(&pageCount)
 
 		var pageSize int
-		db.QueryRow("PRAGMA page_size").Scan(&pageSize)
+		_ = db.QueryRow("PRAGMA page_size").Scan(&pageSize)
 
 		var freelistCount int
-		db.QueryRow("PRAGMA freelist_count").Scan(&freelistCount)
+		_ = db.QueryRow("PRAGMA freelist_count").Scan(&freelistCount)
 
 		var journalMode string
-		db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
+		_ = db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
 
 		// Collect table names first, then close rows before querying counts.
 		var tableNames []string
@@ -80,7 +80,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 		tables := make([]tableInfo, 0, len(tableNames))
 		for _, name := range tableNames {
 			var count int
-			db.QueryRow(fmt.Sprintf("SELECT count(*) FROM [%s]", name)).Scan(&count)
+			_ = db.QueryRow(fmt.Sprintf("SELECT count(*) FROM [%s]", name)).Scan(&count)
 			tables = append(tables, tableInfo{Name: name, RowCount: count})
 		}
 
@@ -174,7 +174,7 @@ func backupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *
 
 		written, err := io.Copy(dst, src)
 		if err != nil {
-			os.Remove(backupPath)
+			_ = os.Remove(backupPath)
 			http.WriteError(w, http.StatusInternalServerError, "failed to write backup")
 			return
 		}
@@ -218,6 +218,6 @@ func downloadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
 		w.WriteHeader(200)
 
-		io.Copy(w, f)
+		_, _ = io.Copy(w, f)
 	}
 }

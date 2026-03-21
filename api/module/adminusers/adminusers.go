@@ -47,7 +47,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		var total int
 		sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
-		db.QueryRow(sql, args...).Scan(&total)
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
 			From("admins").

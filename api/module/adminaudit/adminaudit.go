@@ -85,8 +85,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			countArgs = append(countArgs, adminID)
 		}
 		if search != "" {
-			conditions = append(conditions, "(audit_log.details LIKE ? OR audit_log.action LIKE ?)")
-			like := "%" + search + "%"
+			conditions = append(conditions, "(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')")
+			like := "%" + escapeLike(search) + "%"
 			countArgs = append(countArgs, like, like)
 		}
 
@@ -95,7 +95,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		var total int
-		db.QueryRow(countSQL, countArgs...).Scan(&total)
+		_ = db.QueryRow(countSQL, countArgs...).Scan(&total)
 
 		// Select query with LEFT JOIN for admin info.
 		selectSQL := `SELECT audit_log.id, audit_log.admin_id, COALESCE(admins.email, ''), COALESCE(admins.name, ''),
@@ -137,6 +137,15 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"total":   total,
 		})
 	}
+}
+
+// escapeLike escapes LIKE wildcards (% and _) in a search term so they
+// are matched literally when used with ESCAPE '\'.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
 
 // recentHandler returns the last 10 audit entries for the dashboard

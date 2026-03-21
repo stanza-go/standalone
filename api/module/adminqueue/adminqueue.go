@@ -31,9 +31,7 @@ func statsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stats, err := q.Stats()
 		if err != nil {
-			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "failed to get queue stats",
-			})
+			http.WriteError(w, http.StatusInternalServerError, "failed to get queue stats")
 			return
 		}
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -78,17 +76,13 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			jobs, jobsErr = q.Jobs(f)
 		}()
 		if jobsErr != nil {
-			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "failed to list jobs",
-			})
+			http.WriteError(w, http.StatusInternalServerError, "failed to list jobs")
 			return
 		}
 
 		total, err := q.JobCount(f)
 		if err != nil {
-			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "failed to count jobs",
-			})
+			http.WriteError(w, http.StatusInternalServerError, "failed to count jobs")
 			return
 		}
 
@@ -148,15 +142,11 @@ func retryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": "invalid job id",
-			})
+			http.WriteError(w, http.StatusBadRequest, "invalid job id")
 			return
 		}
 		if err := q.Retry(id); err != nil {
-			http.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": err.Error(),
-			})
+			http.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		adminaudit.Log(db, r, "job.retry", "job", strconv.FormatInt(id, 10), "")
@@ -170,15 +160,11 @@ func cancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": "invalid job id",
-			})
+			http.WriteError(w, http.StatusBadRequest, "invalid job id")
 			return
 		}
 		if err := q.Cancel(id); err != nil {
-			http.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": err.Error(),
-			})
+			http.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		adminaudit.Log(db, r, "job.cancel", "job", strconv.FormatInt(id, 10), "")

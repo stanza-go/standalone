@@ -159,7 +159,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		if err != nil || time.Now().After(expiresAt) {
 			// Expired — clean up.
 			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			db.Exec(sql, args...)
+			_, _ = db.Exec(sql, args...)
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "session expired")
 			return
@@ -178,7 +178,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		if err := row.Scan(&id, &email, &name, &role); err != nil {
 			// Admin deactivated or deleted — revoke session.
 			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			db.Exec(sql, args...)
+			_, _ = db.Exec(sql, args...)
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "account deactivated")
 			return
@@ -215,7 +215,7 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		if err == nil {
 			tokenHash := auth.HashToken(refreshToken)
 			sql, args := sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			db.Exec(sql, args...)
+			_, _ = db.Exec(sql, args...)
 		}
 
 		a.ClearAllCookies(w)

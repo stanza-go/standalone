@@ -55,14 +55,14 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("users").
 			Where("deleted_at IS NULL")
 		if search != "" {
-			like := "%" + search + "%"
-			countQ.Where("(email LIKE ? OR name LIKE ?)", like, like)
-			selectQ.Where("(email LIKE ? OR name LIKE ?)", like, like)
+			like := "%" + escapeLike(search) + "%"
+			countQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
+			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
 
 		var total int
 		sql, args := countQ.Build()
-		db.QueryRow(sql, args...).Scan(&total)
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = selectQ.OrderBy("id", "DESC").Limit(limit).Offset(offset).Build()
 		rows, err := db.Query(sql, args...)
@@ -184,7 +184,7 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", strconv.FormatInt(id, 10)).
 			Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).
 			Build()
-		db.QueryRow(sql, args...).Scan(&sessionCount)
+		_ = db.QueryRow(sql, args...).Scan(&sessionCount)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user":           u,
@@ -326,6 +326,15 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"ok": true,
 		})
 	}
+}
+
+// escapeLike escapes LIKE wildcards (% and _) in a search term so they
+// are matched literally when used with ESCAPE '\'.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
 
 // impersonateHandler generates a short-lived access token as if the

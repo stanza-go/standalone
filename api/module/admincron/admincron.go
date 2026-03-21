@@ -99,7 +99,7 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Error      string `json:"error"`
 		}
 
-		var runs []runJSON
+		runs := make([]runJSON, 0)
 		func() {
 			rows, err := db.Query(
 				"SELECT id, name, started_at, duration_ms, status, error FROM cron_runs WHERE name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
@@ -120,9 +120,6 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				runs = append(runs, run)
 			}
 		}()
-		if runs == nil {
-			runs = []runJSON{}
-		}
 
 		// Get total count for pagination (rows must be closed first — single mutex).
 		var total int64
@@ -139,9 +136,7 @@ func triggerHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Trigger(name); err != nil {
-			http.WriteJSON(w, http.StatusNotFound, map[string]any{
-				"error": err.Error(),
-			})
+			http.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		adminaudit.Log(db, r, "cron.trigger", "cron", name, "")
@@ -155,9 +150,7 @@ func enableHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, *
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Enable(name); err != nil {
-			http.WriteJSON(w, http.StatusNotFound, map[string]any{
-				"error": err.Error(),
-			})
+			http.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		adminaudit.Log(db, r, "cron.enable", "cron", name, "")
@@ -171,9 +164,7 @@ func disableHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, 
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Disable(name); err != nil {
-			http.WriteJSON(w, http.StatusNotFound, map[string]any{
-				"error": err.Error(),
-			})
+			http.WriteError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		adminaudit.Log(db, r, "cron.disable", "cron", name, "")

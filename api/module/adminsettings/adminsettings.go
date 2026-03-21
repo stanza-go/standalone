@@ -43,7 +43,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		var settings []setting
+		settings := make([]setting, 0)
 		for rows.Next() {
 			var s setting
 			if err := rows.Scan(&s.Key, &s.Value, &s.GroupName, &s.UpdatedAt); err != nil {
@@ -51,10 +51,6 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				return
 			}
 			settings = append(settings, s)
-		}
-
-		if settings == nil {
-			settings = []setting{}
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -65,7 +61,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := http.PathParam(r, "key")
+		key := r.PathValue("key")
 		if key == "" {
 			http.WriteError(w, http.StatusBadRequest, "key is required")
 			return

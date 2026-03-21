@@ -53,7 +53,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		var total int
 		sql, args := sqlite.Count("api_keys").Build()
-		db.QueryRow(sql, args...).Scan(&total)
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = sqlite.Select("id", "name", "key_prefix", "scopes", "created_by",
 			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
