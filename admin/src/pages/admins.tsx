@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
@@ -29,6 +30,7 @@ interface Admin {
 }
 
 export default function AdminsPage() {
+  const navigate = useNavigate();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [total, setTotal] = useState(0);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
@@ -250,7 +252,14 @@ export default function AdminsPage() {
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
                   <td className="p-3 font-mono text-xs hidden md:table-cell">{admin.id}</td>
-                  <td className="p-3">{admin.email}</td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => navigate(`/admins/${admin.id}`)}
+                      className="hover:underline text-left"
+                    >
+                      {admin.email}
+                    </button>
+                  </td>
                   <td className="p-3 hidden md:table-cell">{admin.name || "\u2014"}</td>
                   <td className="p-3">
                     <RoleBadge role={admin.role} />

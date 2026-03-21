@@ -20,6 +20,7 @@ import RolesPage from "@/pages/roles";
 import UploadsPage from "@/pages/uploads";
 import ProfilePage from "@/pages/profile";
 import UserDetailPage from "@/pages/user-detail";
+import AdminDetailPage from "@/pages/admin-detail";
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="users" element={<UsersPage />} />
             <Route path="users/:id" element={<UserDetailPage />} />
             <Route path="admins" element={<AdminsPage />} />
+            <Route path="admins/:id" element={<AdminDetailPage />} />
             <Route path="sessions" element={<SessionsPage />} />
             <Route path="cron" element={<CronPage />} />
             <Route path="queue" element={<QueuePage />} />

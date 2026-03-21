@@ -20,15 +20,21 @@ import (
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET    /api/admin/admins      - list admins with pagination
-//	POST   /api/admin/admins      - create a new admin
-//	PUT    /api/admin/admins/{id} - update an admin
-//	DELETE /api/admin/admins/{id} - soft-delete an admin
+//	GET    /api/admin/admins               - list admins with pagination
+//	POST   /api/admin/admins               - create a new admin
+//	GET    /api/admin/admins/{id}          - get a single admin
+//	PUT    /api/admin/admins/{id}          - update an admin
+//	DELETE /api/admin/admins/{id}          - soft-delete an admin
+//	GET    /api/admin/admins/{id}/activity - audit log entries by this admin
+//	GET    /api/admin/admins/{id}/sessions - active sessions for this admin
 func Register(admin *http.Group, db *sqlite.DB) {
 	admin.HandleFunc("GET /admins", listHandler(db))
 	admin.HandleFunc("POST /admins", createHandler(db))
+	admin.HandleFunc("GET /admins/{id}", getHandler(db))
 	admin.HandleFunc("PUT /admins/{id}", updateHandler(db))
 	admin.HandleFunc("DELETE /admins/{id}", deleteHandler(db))
+	admin.HandleFunc("GET /admins/{id}/activity", activityHandler(db))
+	admin.HandleFunc("GET /admins/{id}/sessions", sessionsHandler(db))
 }
 
 type adminJSON struct {
@@ -317,6 +323,152 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
+		})
+	}
+}
+
+// getHandler returns a single admin by ID with active session count.
+func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+			return
+		}
+
+		var a adminJSON
+		var isActive int
+		sql, args := sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
+			From("admins").
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Build()
+		row := db.QueryRow(sql, args...)
+		if err := row.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			http.WriteError(w, http.StatusNotFound, "admin not found")
+			return
+		}
+		a.IsActive = isActive == 1
+
+		var sessionCount int
+		sql, args = sqlite.Count("refresh_tokens").
+			Where("entity_type = 'admin'").
+			Where("entity_id = ?", strconv.FormatInt(id, 10)).
+			Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).
+			Build()
+		_ = db.QueryRow(sql, args...).Scan(&sessionCount)
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"admin":           a,
+			"active_sessions": sessionCount,
+		})
+	}
+}
+
+// activityHandler returns audit log entries performed by this admin.
+func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+			return
+		}
+
+		limit := http.QueryParamInt(r, "limit", 20)
+		offset := http.QueryParamInt(r, "offset", 0)
+		idStr := strconv.FormatInt(id, 10)
+
+		var total int
+		sql, args := sqlite.Count("audit_log").
+			Where("admin_id = ?", idStr).
+			Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = sqlite.Select(
+			"id", "action", "entity_type", "entity_id", "details", "ip_address", "created_at",
+		).From("audit_log").
+			Where("admin_id = ?", idStr).
+			OrderBy("created_at", "DESC").
+			Limit(limit).Offset(offset).
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
+			return
+		}
+		defer rows.Close()
+
+		type entry struct {
+			ID         int64  `json:"id"`
+			Action     string `json:"action"`
+			EntityType string `json:"entity_type"`
+			EntityID   string `json:"entity_id"`
+			Details    string `json:"details"`
+			IPAddress  string `json:"ip_address"`
+			CreatedAt  string `json:"created_at"`
+		}
+		entries := make([]entry, 0)
+		for rows.Next() {
+			var e entry
+			if err := rows.Scan(&e.ID, &e.Action, &e.EntityType, &e.EntityID,
+				&e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "failed to scan activity")
+				return
+			}
+			entries = append(entries, e)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"entries": entries,
+			"total":   total,
+		})
+	}
+}
+
+// sessionsHandler returns active refresh tokens for this admin.
+func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+			return
+		}
+
+		idStr := strconv.FormatInt(id, 10)
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		sql, args := sqlite.Select("id", "created_at", "expires_at").
+			From("refresh_tokens").
+			Where("entity_type = 'admin'").
+			Where("entity_id = ?", idStr).
+			Where("expires_at > ?", now).
+			OrderBy("created_at", "DESC").
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query sessions")
+			return
+		}
+		defer rows.Close()
+
+		type session struct {
+			ID        string `json:"id"`
+			CreatedAt string `json:"created_at"`
+			ExpiresAt string `json:"expires_at"`
+		}
+		sessions := make([]session, 0)
+		for rows.Next() {
+			var s session
+			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "failed to scan session")
+				return
+			}
+			sessions = append(sessions, s)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"sessions": sessions,
+			"total":    len(sessions),
 		})
 	}
 }
