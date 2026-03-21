@@ -19,6 +19,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface Webhook {
   id: number;
@@ -47,6 +48,9 @@ export default function WebhooksPage() {
   // Search.
   const [searchInput, setSearchInput] = useState("");
 
+  // Sort.
+  const [sort, toggleSort] = useSort("created_at", "desc");
+
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Webhook | null>(null);
@@ -70,6 +74,8 @@ export default function WebhooksPage() {
       params.set("limit", String(pageSize));
       params.set("offset", String(page * pageSize));
       if (searchInput) params.set("search", searchInput);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<{ webhooks: Webhook[]; total: number }>(
         `/admin/webhooks?${params}`
@@ -82,7 +88,7 @@ export default function WebhooksPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchInput]);
+  }, [page, searchInput, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -289,11 +295,11 @@ export default function WebhooksPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">URL</th>
+              <SortableHeader label="URL" column="url" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium hidden md:table-cell">Description</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Events</th>
-              <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
+              <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>

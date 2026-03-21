@@ -91,7 +91,11 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		sql, args = qb.OrderBy("created_at", "DESC").Limit(limit).Offset(offset).Build()
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "url", "is_active", "created_at", "updated_at"},
+			"created_at", "DESC")
+
+		sql, args = qb.OrderBy(sortCol, sortDir).Limit(limit).Offset(offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")

@@ -15,6 +15,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -79,12 +80,17 @@ export default function NotificationsPage() {
   // Filter.
   const [unreadOnly, setUnreadOnly] = useState(false);
 
+  // Sort.
+  const [sort, toggleSort] = useSort("id", "desc");
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       params.set("limit", String(pageSize));
       params.set("offset", String(page * pageSize));
       if (unreadOnly) params.set("unread", "true");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<ListResponse>(`/admin/notifications?${params}`);
       setNotifications(data.notifications);
@@ -96,7 +102,7 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, unreadOnly]);
+  }, [page, unreadOnly, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -239,8 +245,8 @@ export default function NotificationsPage() {
             <tr className="bg-muted/50 border-b">
               <th className="text-left p-3 font-medium w-8"></th>
               <th className="text-left p-3 font-medium">Notification</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Type</th>
-              <th className="text-left p-3 font-medium hidden sm:table-cell">Time</th>
+              <SortableHeader label="Type" column="type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} className="hidden sm:table-cell" />
               <th className="text-right p-3 font-medium w-24">Actions</th>
             </tr>
           </thead>

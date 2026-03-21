@@ -29,6 +29,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface User {
   id: number;
@@ -55,6 +56,9 @@ export default function UsersPage() {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounce(searchInput, 300);
 
+  // Sort.
+  const [sort, toggleSort] = useSort("id", "desc");
+
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -78,6 +82,8 @@ export default function UsersPage() {
       params.set("limit", String(pageSize));
       params.set("offset", String(page * pageSize));
       if (search) params.set("search", search);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<{ users: User[]; total: number }>(
         `/admin/users?${params}`
@@ -90,7 +96,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -273,11 +279,11 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium hidden md:table-cell">ID</th>
-              <th className="text-left p-3 font-medium">Email</th>
-              <th className="text-left p-3 font-medium">Name</th>
-              <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
+              <SortableHeader label="ID" column="id" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              <SortableHeader label="Email" column="email" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>

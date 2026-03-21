@@ -25,6 +25,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/ui/pagination";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface UploadItem {
   id: number;
@@ -91,6 +92,9 @@ export default function UploadsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
+  // Sort.
+  const [sort, toggleSort] = useSort("id", "desc");
+
   // Preview dialog.
   const [preview, setPreview] = useState<UploadItem | null>(null);
 
@@ -111,6 +115,8 @@ export default function UploadsPage() {
       params.set("offset", String(page * pageSize));
       if (typeFilter) params.set("content_type", typeFilter);
       if (includeDeleted) params.set("include_deleted", "true");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<{ uploads: UploadItem[]; total: number }>(
         `/admin/uploads?${params}`
@@ -124,7 +130,7 @@ export default function UploadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, typeFilter, includeDeleted]);
+  }, [page, typeFilter, includeDeleted, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -262,11 +268,11 @@ export default function UploadsPage() {
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="text-left p-3 font-medium w-12"></th>
-              <th className="text-left p-3 font-medium">Name</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Type</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Size</th>
+              <SortableHeader label="Name" column="original_name" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Type" column="content_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              <SortableHeader label="Size" column="size_bytes" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <th className="text-left p-3 font-medium hidden lg:table-cell">Owner</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Uploaded</th>
+              <SortableHeader label="Uploaded" column="created_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>

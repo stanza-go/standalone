@@ -19,6 +19,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface APIKey {
   id: number;
@@ -59,6 +60,9 @@ export default function APIKeysPage() {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounce(searchInput, 300);
 
+  // Sort.
+  const [sort, toggleSort] = useSort("id", "desc");
+
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<APIKey | null>(null);
@@ -82,6 +86,8 @@ export default function APIKeysPage() {
       params.set("limit", String(pageSize));
       params.set("offset", String(page * pageSize));
       if (search) params.set("search", search);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<{ api_keys: APIKey[]; total: number }>(
         `/admin/api-keys?${params}`
@@ -94,7 +100,7 @@ export default function APIKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -302,14 +308,14 @@ export default function APIKeysPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">Name</th>
+              <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Last Used</th>
-              <th className="text-right p-3 font-medium hidden lg:table-cell">Requests</th>
+              <SortableHeader label="Last Used" column="last_used_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />
+              <SortableHeader label="Requests" column="request_count" sort={sort} onSort={toggleSort} className="hidden lg:table-cell text-right" />
               <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>
               <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
+              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>

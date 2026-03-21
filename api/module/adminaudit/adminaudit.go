@@ -120,7 +120,11 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			selectArgs = append(selectArgs, countArgs...)
 		}
 
-		selectSQL += " ORDER BY audit_log.id DESC LIMIT ? OFFSET ?"
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
+			"id", "DESC")
+
+		selectSQL += " ORDER BY audit_log." + sortCol + " " + sortDir + " LIMIT ? OFFSET ?"
 		selectArgs = append(selectArgs, limit, offset)
 
 		rows, err := db.Query(selectSQL, selectArgs...)

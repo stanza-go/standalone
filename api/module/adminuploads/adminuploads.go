@@ -87,12 +87,16 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := countQ.Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
+			"id", "DESC")
+
 		// List.
 		q := sqlite.Select("id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "uploaded_by",
 			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
 			From("uploads").
-			OrderBy("id", "DESC").
+			OrderBy(sortCol, sortDir).
 			Limit(limit).
 			Offset(offset)
 		if !includeDeleted {

@@ -27,13 +27,17 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Format(time.RFC3339)
 
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"created_at", "expires_at", "entity_type"},
+			"created_at", "DESC")
+
 		sql, args := sqlite.Select(
 			"rt.id", "rt.entity_type", "rt.entity_id", "rt.created_at", "rt.expires_at",
 			"COALESCE(a.email, '')", "COALESCE(a.name, '')").
 			From("refresh_tokens rt").
 			LeftJoin("admins a", "rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)").
 			Where("rt.expires_at > ?", now).
-			OrderBy("rt.created_at", "DESC").
+			OrderBy("rt."+sortCol, sortDir).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {

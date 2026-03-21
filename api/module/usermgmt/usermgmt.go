@@ -67,11 +67,15 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
 
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "email", "name", "is_active", "created_at", "updated_at"},
+			"id", "DESC")
+
 		var total int
 		sql, args := countQ.Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
-		sql, args = selectQ.OrderBy("id", "DESC").Limit(limit).Offset(offset).Build()
+		sql, args = selectQ.OrderBy(sortCol, sortDir).Limit(limit).Offset(offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list users")

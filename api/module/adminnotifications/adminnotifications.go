@@ -55,12 +55,16 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		var total int
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "type", "created_at"},
+			"id", "DESC")
+
 		// Fetch page.
 		q := sqlite.Select("id", "type", "title", "message", "data", "COALESCE(read_at, '')", "created_at").
 			From("notifications").
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID).
-			OrderBy("id", "DESC").
+			OrderBy(sortCol, sortDir).
 			Limit(limit).
 			Offset(offset)
 		if unreadOnly {

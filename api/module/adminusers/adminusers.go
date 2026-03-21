@@ -64,12 +64,16 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
 
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "email", "name", "role", "is_active", "created_at", "updated_at"},
+			"id", "ASC")
+
 		var total int
 		sql, args := countQ.Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = selectQ.
-			OrderBy("id", "ASC").
+			OrderBy(sortCol, sortDir).
 			Limit(limit).
 			Offset(offset).
 			Build()

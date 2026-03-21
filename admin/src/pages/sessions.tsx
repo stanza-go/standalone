@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface Session {
   id: string;
@@ -23,12 +24,15 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
 
+  // Sort.
+  const [sort, toggleSort] = useSort("created_at", "desc");
+
   // Revoke confirmation.
   const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const data = await get<{ sessions: Session[] }>("/admin/sessions");
+      const data = await get<{ sessions: Session[] }>(`/admin/sessions?sort=${sort.column}&order=${sort.direction}`);
       setSessions(data.sessions);
       setError("");
     } catch (e: any) {
@@ -36,7 +40,7 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -117,10 +121,10 @@ export default function SessionsPage() {
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>
-              <th className="text-left p-3 font-medium">Type</th>
+              <SortableHeader label="Type" column="entity_type" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium">Admin</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
-              <th className="text-left p-3 font-medium">Expires</th>
+              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              <SortableHeader label="Expires" column="expires_at" sort={sort} onSort={toggleSort} />
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>

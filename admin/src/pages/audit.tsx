@@ -15,6 +15,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 
 interface AuditEntry {
   id: number;
@@ -98,6 +99,9 @@ export default function AuditPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // Sort.
+  const [sort, toggleSort] = useSort("id", "desc");
+
   // Expanded rows.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -110,6 +114,8 @@ export default function AuditPage() {
       if (actionFilter) params.set("action", actionFilter);
       if (dateFrom) params.set("from", dateFrom + "T00:00:00Z");
       if (dateTo) params.set("to", dateTo + "T23:59:59Z");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
 
       const data = await get<{ entries: AuditEntry[]; total: number }>(
         `/admin/audit?${params}`
@@ -122,7 +128,7 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, actionFilter, dateFrom, dateTo]);
+  }, [page, search, actionFilter, dateFrom, dateTo, sort.column, sort.direction]);
 
   useEffect(() => {
     load();
@@ -268,11 +274,11 @@ export default function AuditPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium w-8"></th>
-              <th className="text-left p-3 font-medium">Time</th>
+              <SortableHeader label="#" column="id" sort={sort} onSort={toggleSort} className="w-8" />
+              <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium">Admin</th>
-              <th className="text-left p-3 font-medium">Action</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Target</th>
+              <SortableHeader label="Action" column="action" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Target" column="entity_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <th className="text-left p-3 font-medium hidden lg:table-cell">Details</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">IP</th>
             </tr>
