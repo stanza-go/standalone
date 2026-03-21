@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/stanza-go/framework/pkg/cache"
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/queue"
@@ -16,63 +17,76 @@ import (
 
 var startTime = time.Now()
 
+// dbStats holds cached database and application counters.
+type dbStats struct {
+	DBSizeBytes       int64 `json:"db_size_bytes"`
+	WALSizeBytes      int64 `json:"wal_size_bytes"`
+	Tables            int   `json:"tables"`
+	Migrations        int   `json:"migrations"`
+	TotalAdmins       int   `json:"total_admins"`
+	TotalUsers        int   `json:"total_users"`
+	ActiveSessions    int   `json:"active_sessions"`
+	ActiveAPIKeys     int   `json:"active_api_keys"`
+}
+
 // Register mounts the dashboard routes on the given admin group.
 // The group should already have auth middleware applied.
 // Routes:
 //
 //	GET /api/admin/dashboard — system, database, queue, cron, and app stats
 func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) {
-	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s))
+	statsCache := cache.New[*dbStats](
+		cache.WithTTL[*dbStats](30 * time.Second),
+		cache.WithMaxSize[*dbStats](1),
+	)
+	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, statsCache))
 }
 
-func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
+func queryDBStats(db *sqlite.DB) (*dbStats, error) {
+	st := &dbStats{}
+
+	if info, err := os.Stat(db.Path()); err == nil {
+		st.DBSizeBytes = info.Size()
+	}
+	if info, err := os.Stat(db.Path() + "-wal"); err == nil {
+		st.WALSizeBytes = info.Size()
+	}
+
+	row := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	_ = row.Scan(&st.Tables)
+
+	sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
+	_ = db.QueryRow(sql, args...).Scan(&st.TotalAdmins)
+
+	sql, args = sqlite.Count("users").Where("deleted_at IS NULL").Build()
+	_ = db.QueryRow(sql, args...).Scan(&st.TotalUsers)
+
+	sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).Build()
+	_ = db.QueryRow(sql, args...).Scan(&st.ActiveSessions)
+
+	sql, args = sqlite.Count("api_keys").Where("revoked_at IS NULL").Build()
+	_ = db.QueryRow(sql, args...).Scan(&st.ActiveAPIKeys)
+
+	row = db.QueryRow(`SELECT count(*) FROM _migrations`)
+	_ = row.Scan(&st.Migrations)
+
+	return st, nil
+}
+
+func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *cache.Cache[*dbStats]) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
 
-		// Database file size.
-		var dbSizeBytes int64
-		if info, err := os.Stat(db.Path()); err == nil {
-			dbSizeBytes = info.Size()
+		// Database and app counters — cached for 30s to reduce DB queries.
+		st, _ := statsCache.GetOrSet("stats", func() (*dbStats, error) {
+			return queryDBStats(db)
+		})
+		if st == nil {
+			st = &dbStats{}
 		}
 
-		// WAL file size.
-		var walSizeBytes int64
-		if info, err := os.Stat(db.Path() + "-wal"); err == nil {
-			walSizeBytes = info.Size()
-		}
-
-		// Table count.
-		var tableCount int
-		row := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
-		_ = row.Scan(&tableCount)
-
-		// Admin count.
-		var totalAdmins int
-		sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
-		_ = db.QueryRow(sql, args...).Scan(&totalAdmins)
-
-		// User count.
-		var totalUsers int
-		sql, args = sqlite.Count("users").Where("deleted_at IS NULL").Build()
-		_ = db.QueryRow(sql, args...).Scan(&totalUsers)
-
-		// Active session count (non-expired refresh tokens).
-		var activeSessions int
-		sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).Build()
-		_ = db.QueryRow(sql, args...).Scan(&activeSessions)
-
-		// Active API keys count.
-		var activeAPIKeys int
-		sql, args = sqlite.Count("api_keys").Where("revoked_at IS NULL").Build()
-		_ = db.QueryRow(sql, args...).Scan(&activeAPIKeys)
-
-		// Migration count.
-		var appliedMigrations int
-		row = db.QueryRow(`SELECT count(*) FROM _migrations`)
-		_ = row.Scan(&appliedMigrations)
-
-		// Queue stats.
+		// Queue stats — live (in-memory, cheap).
 		queueStats := map[string]any{
 			"pending":   0,
 			"running":   0,
@@ -90,7 +104,7 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 			queueStats["cancelled"] = qs.Cancelled
 		}
 
-		// Cron stats.
+		// Cron stats — live (in-memory, cheap).
 		entries := s.Entries()
 		var cronEnabled, cronRunning int
 		var cronNextRun string
@@ -120,10 +134,10 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 				"memory_sys_mb":   float64(mem.Sys) / 1024 / 1024,
 			},
 			"database": map[string]any{
-				"size_bytes":     dbSizeBytes,
-				"wal_size_bytes": walSizeBytes,
-				"tables":         tableCount,
-				"migrations":     appliedMigrations,
+				"size_bytes":     st.DBSizeBytes,
+				"wal_size_bytes": st.WALSizeBytes,
+				"tables":         st.Tables,
+				"migrations":     st.Migrations,
 			},
 			"queue": queueStats,
 			"cron": map[string]any{
@@ -133,10 +147,10 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) func(http.Re
 				"next_run": cronNextRun,
 			},
 			"stats": map[string]any{
-				"total_admins":    totalAdmins,
-				"total_users":     totalUsers,
-				"active_sessions": activeSessions,
-				"active_api_keys": activeAPIKeys,
+				"total_admins":    st.TotalAdmins,
+				"total_users":     st.TotalUsers,
+				"active_sessions": st.ActiveSessions,
+				"active_api_keys": st.ActiveAPIKeys,
 			},
 		})
 	}
