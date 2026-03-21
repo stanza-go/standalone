@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams } from "react-router";
 import { toast } from "sonner";
 import { get, del } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,20 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import {
-  ArrowLeft,
   User,
   Activity,
   Monitor,
   Upload,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
   Image,
   FileText,
   Film,
   File,
 } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 interface UserDetail {
   id: number;
@@ -62,8 +61,6 @@ type Tab = "activity" | "sessions" | "uploads";
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-
   const [user, setUser] = useState<UserDetail | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -240,10 +237,7 @@ export default function UserDetailPage() {
   if (error || !user) {
     return (
       <div className="p-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/users")} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Users
-        </Button>
+        <Breadcrumb items={[{ label: "Users", to: "/users" }, { label: "Not Found" }]} className="mb-4" />
         <ErrorAlert message={error || "User not found"} onRetry={loadUser} />
       </div>
     );
@@ -260,16 +254,9 @@ export default function UserDetailPage() {
 
   return (
     <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/users")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">User Detail</h1>
-          <p className="text-sm text-muted-foreground">#{user.id}</p>
-        </div>
-      </div>
+      {/* Breadcrumb + Header */}
+      <Breadcrumb items={[{ label: "Users", to: "/users" }, { label: user.email }]} className="mb-2" />
+      <h1 className="text-2xl font-bold mb-6">User Detail</h1>
 
       {/* Profile card */}
       <Card className="mb-6">
@@ -385,16 +372,14 @@ export default function UserDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {activityPages > 1 && (
-                <Pagination
-                  page={activityPage}
-                  totalPages={activityPages}
-                  total={activityTotal}
-                  pageSize={pageSize}
-                  onPrev={() => setActivityPage(activityPage - 1)}
-                  onNext={() => setActivityPage(activityPage + 1)}
-                />
-              )}
+              <Pagination
+                page={activityPage}
+                totalPages={activityPages}
+                total={activityTotal}
+                pageSize={pageSize}
+                onPrev={() => setActivityPage(activityPage - 1)}
+                onNext={() => setActivityPage(activityPage + 1)}
+              />
             </>
           )}
         </div>
@@ -507,16 +492,14 @@ export default function UserDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {uploadsPages > 1 && (
-                <Pagination
-                  page={uploadsPage}
-                  totalPages={uploadsPages}
-                  total={uploadsTotal}
-                  pageSize={pageSize}
-                  onPrev={() => setUploadsPage(uploadsPage - 1)}
-                  onNext={() => setUploadsPage(uploadsPage + 1)}
-                />
-              )}
+              <Pagination
+                page={uploadsPage}
+                totalPages={uploadsPages}
+                total={uploadsTotal}
+                pageSize={pageSize}
+                onPrev={() => setUploadsPage(uploadsPage - 1)}
+                onNext={() => setUploadsPage(uploadsPage + 1)}
+              />
             </>
           )}
         </div>
@@ -525,37 +508,3 @@ export default function UserDetailPage() {
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  total,
-  pageSize,
-  onPrev,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  pageSize: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between mt-4">
-      <p className="text-sm text-muted-foreground">
-        Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, total)} of {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page === 0} onClick={onPrev}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm text-muted-foreground">
-          {page + 1} / {totalPages}
-        </span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={onNext}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}

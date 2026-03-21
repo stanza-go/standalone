@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams } from "react-router";
 import { toast } from "sonner";
 import { get, del } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,15 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import {
-  ArrowLeft,
   Shield,
   Activity,
   Monitor,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
 } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 interface AdminDetail {
   id: number;
@@ -47,8 +46,6 @@ type Tab = "activity" | "sessions";
 
 export default function AdminDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-
   const [admin, setAdmin] = useState<AdminDetail | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -183,10 +180,7 @@ export default function AdminDetailPage() {
   if (error || !admin) {
     return (
       <div className="p-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/admins")} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Admins
-        </Button>
+        <Breadcrumb items={[{ label: "Admin Users", to: "/admins" }, { label: "Not Found" }]} className="mb-4" />
         <ErrorAlert message={error || "Admin not found"} onRetry={loadAdmin} />
       </div>
     );
@@ -201,16 +195,9 @@ export default function AdminDetailPage() {
 
   return (
     <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/admins")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Admin Detail</h1>
-          <p className="text-sm text-muted-foreground">#{admin.id}</p>
-        </div>
-      </div>
+      {/* Breadcrumb + Header */}
+      <Breadcrumb items={[{ label: "Admin Users", to: "/admins" }, { label: admin.email }]} className="mb-2" />
+      <h1 className="text-2xl font-bold mb-6">Admin Detail</h1>
 
       {/* Profile card */}
       <Card className="mb-6">
@@ -338,16 +325,14 @@ export default function AdminDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {activityPages > 1 && (
-                <Pagination
-                  page={activityPage}
-                  totalPages={activityPages}
-                  total={activityTotal}
-                  pageSize={pageSize}
-                  onPrev={() => setActivityPage(activityPage - 1)}
-                  onNext={() => setActivityPage(activityPage + 1)}
-                />
-              )}
+              <Pagination
+                page={activityPage}
+                totalPages={activityPages}
+                total={activityTotal}
+                pageSize={pageSize}
+                onPrev={() => setActivityPage(activityPage - 1)}
+                onNext={() => setActivityPage(activityPage + 1)}
+              />
             </>
           )}
         </div>
@@ -405,37 +390,3 @@ export default function AdminDetailPage() {
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  total,
-  pageSize,
-  onPrev,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  pageSize: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between mt-4">
-      <p className="text-sm text-muted-foreground">
-        Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, total)} of {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page === 0} onClick={onPrev}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm text-muted-foreground">
-          {page + 1} / {totalPages}
-        </span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={onNext}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
