@@ -20,12 +20,15 @@ import (
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET    /api/admin/users                - list users with search and pagination
-//	POST   /api/admin/users                - create a new user
-//	GET    /api/admin/users/{id}           - get a single user
-//	PUT    /api/admin/users/{id}           - update a user
-//	DELETE /api/admin/users/{id}           - soft-delete a user
-//	POST   /api/admin/users/{id}/impersonate - generate access token as this user
+//	GET    /api/admin/users                     - list users with search and pagination
+//	POST   /api/admin/users                     - create a new user
+//	GET    /api/admin/users/{id}                - get a single user
+//	PUT    /api/admin/users/{id}                - update a user
+//	DELETE /api/admin/users/{id}                - soft-delete a user
+//	POST   /api/admin/users/{id}/impersonate    - generate access token as this user
+//	GET    /api/admin/users/{id}/activity       - audit log entries for this user
+//	GET    /api/admin/users/{id}/sessions       - active sessions for this user
+//	GET    /api/admin/users/{id}/uploads        - uploads belonging to this user
 func Register(admin *http.Group, a *auth.Auth, db *sqlite.DB) {
 	admin.HandleFunc("GET /users", listHandler(db))
 	admin.HandleFunc("POST /users", createHandler(db))
@@ -33,6 +36,9 @@ func Register(admin *http.Group, a *auth.Auth, db *sqlite.DB) {
 	admin.HandleFunc("PUT /users/{id}", updateHandler(db))
 	admin.HandleFunc("DELETE /users/{id}", deleteHandler(db))
 	admin.HandleFunc("POST /users/{id}/impersonate", impersonateHandler(a, db))
+	admin.HandleFunc("GET /users/{id}/activity", activityHandler(db))
+	admin.HandleFunc("GET /users/{id}/sessions", sessionsHandler(db))
+	admin.HandleFunc("GET /users/{id}/uploads", uploadsHandler(db))
 }
 
 type userJSON struct {
@@ -335,6 +341,193 @@ func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, `%`, `\%`)
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
+}
+
+// activityHandler returns audit log entries where this user is the target entity.
+func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+			return
+		}
+
+		limit := http.QueryParamInt(r, "limit", 20)
+		offset := http.QueryParamInt(r, "offset", 0)
+		idStr := strconv.FormatInt(id, 10)
+
+		countQ := sqlite.Count("audit_log").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", idStr)
+		var total int
+		sql, args := countQ.Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = sqlite.Select(
+			"al.id", "al.admin_id", "a.email", "a.name",
+			"al.action", "al.details", "al.ip_address", "al.created_at",
+		).From("audit_log al").
+			LeftJoin("admins a", "a.id = al.admin_id").
+			Where("al.entity_type = 'user'").
+			Where("al.entity_id = ?", idStr).
+			OrderBy("al.created_at", "DESC").
+			Limit(limit).Offset(offset).
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
+			return
+		}
+		defer rows.Close()
+
+		type entry struct {
+			ID         int64  `json:"id"`
+			AdminID    string `json:"admin_id"`
+			AdminEmail string `json:"admin_email"`
+			AdminName  string `json:"admin_name"`
+			Action     string `json:"action"`
+			Details    string `json:"details"`
+			IPAddress  string `json:"ip_address"`
+			CreatedAt  string `json:"created_at"`
+		}
+		entries := make([]entry, 0)
+		for rows.Next() {
+			var e entry
+			var adminEmail, adminName *string
+			if err := rows.Scan(&e.ID, &e.AdminID, &adminEmail, &adminName,
+				&e.Action, &e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "failed to scan activity")
+				return
+			}
+			if adminEmail != nil {
+				e.AdminEmail = *adminEmail
+			}
+			if adminName != nil {
+				e.AdminName = *adminName
+			}
+			entries = append(entries, e)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"entries": entries,
+			"total":   total,
+		})
+	}
+}
+
+// sessionsHandler returns active refresh tokens for this user.
+func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+			return
+		}
+
+		idStr := strconv.FormatInt(id, 10)
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		sql, args := sqlite.Select("id", "created_at", "expires_at").
+			From("refresh_tokens").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", idStr).
+			Where("expires_at > ?", now).
+			OrderBy("created_at", "DESC").
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query sessions")
+			return
+		}
+		defer rows.Close()
+
+		type session struct {
+			ID        string `json:"id"`
+			CreatedAt string `json:"created_at"`
+			ExpiresAt string `json:"expires_at"`
+		}
+		sessions := make([]session, 0)
+		for rows.Next() {
+			var s session
+			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "failed to scan session")
+				return
+			}
+			sessions = append(sessions, s)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"sessions": sessions,
+			"total":    len(sessions),
+		})
+	}
+}
+
+// uploadsHandler returns uploads belonging to this user.
+func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+			return
+		}
+
+		limit := http.QueryParamInt(r, "limit", 20)
+		offset := http.QueryParamInt(r, "offset", 0)
+		idStr := strconv.FormatInt(id, 10)
+
+		countQ := sqlite.Count("uploads").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", idStr).
+			Where("deleted_at IS NULL")
+		var total int
+		sql, args := countQ.Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = sqlite.Select(
+			"id", "uuid", "original_name", "content_type",
+			"size_bytes", "has_thumbnail", "created_at",
+		).From("uploads").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", idStr).
+			Where("deleted_at IS NULL").
+			OrderBy("created_at", "DESC").
+			Limit(limit).Offset(offset).
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query uploads")
+			return
+		}
+		defer rows.Close()
+
+		type uploadEntry struct {
+			ID           int64  `json:"id"`
+			UUID         string `json:"uuid"`
+			OriginalName string `json:"original_name"`
+			ContentType  string `json:"content_type"`
+			SizeBytes    int64  `json:"size_bytes"`
+			HasThumbnail bool   `json:"has_thumbnail"`
+			CreatedAt    string `json:"created_at"`
+		}
+		uploads := make([]uploadEntry, 0)
+		for rows.Next() {
+			var u uploadEntry
+			var hasThumbnail int
+			if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
+				&u.SizeBytes, &hasThumbnail, &u.CreatedAt); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "failed to scan upload")
+				return
+			}
+			u.HasThumbnail = hasThumbnail == 1
+			uploads = append(uploads, u)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"uploads": uploads,
+			"total":   total,
+		})
+	}
 }
 
 // impersonateHandler generates a short-lived access token as if the
