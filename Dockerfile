@@ -61,7 +61,7 @@ RUN cd standalone/api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -s /usr/sbin/nologin stanza
 
@@ -69,10 +69,8 @@ COPY --from=backend /standalone /usr/local/bin/standalone
 
 RUN mkdir -p /data && chown stanza:stanza /data
 
-USER stanza
-
 ENV DATA_DIR=/data
 
 EXPOSE 23710
 
-ENTRYPOINT ["standalone"]
+ENTRYPOINT ["sh", "-c", "chown -R stanza:stanza /data && exec gosu stanza standalone"]
