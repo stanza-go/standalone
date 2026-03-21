@@ -256,6 +256,166 @@ func TestDisable_AuditLog(t *testing.T) {
 	}
 }
 
+func TestRuns_Empty(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/cron/test-job/runs", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	runs, ok := resp["runs"].([]any)
+	if !ok {
+		t.Fatal("missing runs in response")
+	}
+	if len(runs) != 0 {
+		t.Errorf("expected 0 runs, got %d", len(runs))
+	}
+	if resp["total"] != float64(0) {
+		t.Errorf("total = %v, want 0", resp["total"])
+	}
+}
+
+func TestRuns_WithData(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	// Insert test run records.
+	for i := 0; i < 3; i++ {
+		_, err := db.Exec(
+			"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+			"test-job", "2026-03-21T10:00:00Z", 150+i, "success", "",
+		)
+		if err != nil {
+			t.Fatalf("insert cron_run: %v", err)
+		}
+	}
+	// Insert a failed run.
+	_, err := db.Exec(
+		"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+		"test-job", "2026-03-21T09:00:00Z", 5000, "error", "something broke",
+	)
+	if err != nil {
+		t.Fatalf("insert cron_run: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/admin/cron/test-job/runs", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	runs := resp["runs"].([]any)
+	if len(runs) != 4 {
+		t.Fatalf("expected 4 runs, got %d", len(runs))
+	}
+	if resp["total"] != float64(4) {
+		t.Errorf("total = %v, want 4", resp["total"])
+	}
+
+	// First run should be most recent (ordered by started_at DESC).
+	first := runs[0].(map[string]any)
+	if first["status"] != "success" {
+		t.Errorf("first run status = %v, want success", first["status"])
+	}
+
+	// Last run should be the failed one (oldest).
+	last := runs[3].(map[string]any)
+	if last["status"] != "error" {
+		t.Errorf("last run status = %v, want error", last["status"])
+	}
+	if last["error"] != "something broke" {
+		t.Errorf("last run error = %v, want 'something broke'", last["error"])
+	}
+}
+
+func TestRuns_Pagination(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	// Insert 5 runs.
+	for i := 0; i < 5; i++ {
+		_, err := db.Exec(
+			"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+			"test-job", "2026-03-21T10:00:00Z", 100, "success", "",
+		)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/admin/cron/test-job/runs?limit=2&offset=0", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	runs := resp["runs"].([]any)
+	if len(runs) != 2 {
+		t.Errorf("expected 2 runs with limit=2, got %d", len(runs))
+	}
+	if resp["total"] != float64(5) {
+		t.Errorf("total = %v, want 5", resp["total"])
+	}
+}
+
+func TestRuns_FiltersByName(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	// Insert runs for different jobs.
+	_, _ = db.Exec(
+		"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+		"test-job", "2026-03-21T10:00:00Z", 100, "success", "",
+	)
+	_, _ = db.Exec(
+		"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+		"other-job", "2026-03-21T10:00:00Z", 200, "success", "",
+	)
+
+	req := httptest.NewRequest("GET", "/api/admin/cron/test-job/runs", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	runs := resp["runs"].([]any)
+	if len(runs) != 1 {
+		t.Errorf("expected 1 run for test-job, got %d", len(runs))
+	}
+	if resp["total"] != float64(1) {
+		t.Errorf("total = %v, want 1", resp["total"])
+	}
+}
+
+func TestRuns_Unauthorized(t *testing.T) {
+	t.Parallel()
+	router, _, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/cron/test-job/runs", nil)
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
 func TestEnable_AuditLog(t *testing.T) {
 	t.Parallel()
 	router, a, _, db := setup(t)

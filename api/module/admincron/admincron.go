@@ -4,6 +4,8 @@
 package admincron
 
 import (
+	"strconv"
+
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -14,12 +16,14 @@ import (
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET  /api/admin/cron                — list all cron entries
-//	POST /api/admin/cron/{name}/trigger — trigger a job immediately
-//	POST /api/admin/cron/{name}/enable  — enable a job
-//	POST /api/admin/cron/{name}/disable — disable a job
+//	GET  /api/admin/cron                    — list all cron entries
+//	GET  /api/admin/cron/{name}/runs        — get run history for a job
+//	POST /api/admin/cron/{name}/trigger     — trigger a job immediately
+//	POST /api/admin/cron/{name}/enable      — enable a job
+//	POST /api/admin/cron/{name}/disable     — disable a job
 func Register(admin *http.Group, s *cron.Scheduler, db *sqlite.DB) {
 	admin.HandleFunc("GET /cron", listHandler(s))
+	admin.HandleFunc("GET /cron/{name}/runs", runsHandler(db))
 	admin.HandleFunc("POST /cron/{name}/trigger", triggerHandler(s, db))
 	admin.HandleFunc("POST /cron/{name}/enable", enableHandler(s, db))
 	admin.HandleFunc("POST /cron/{name}/disable", disableHandler(s, db))
@@ -65,6 +69,68 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"entries": result,
+		})
+	}
+}
+
+func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+
+		limit := 50
+		if v := r.URL.Query().Get("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+		offset := 0
+		if v := r.URL.Query().Get("offset"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				offset = n
+			}
+		}
+
+		type runJSON struct {
+			ID         int64  `json:"id"`
+			Name       string `json:"name"`
+			StartedAt  string `json:"started_at"`
+			DurationMs int64  `json:"duration_ms"`
+			Status     string `json:"status"`
+			Error      string `json:"error"`
+		}
+
+		var runs []runJSON
+		func() {
+			rows, err := db.Query(
+				"SELECT id, name, started_at, duration_ms, status, error FROM cron_runs WHERE name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
+				name, limit, offset,
+			)
+			if err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "database error")
+				return
+			}
+			defer rows.Close()
+
+			for rows.Next() {
+				var run runJSON
+				if err := rows.Scan(&run.ID, &run.Name, &run.StartedAt, &run.DurationMs, &run.Status, &run.Error); err != nil {
+					http.WriteError(w, http.StatusInternalServerError, "scan error")
+					return
+				}
+				runs = append(runs, run)
+			}
+		}()
+		if runs == nil {
+			runs = []runJSON{}
+		}
+
+		// Get total count for pagination (rows must be closed first — single mutex).
+		var total int64
+		_ = db.QueryRow("SELECT COUNT(*) FROM cron_runs WHERE name = ?", name).Scan(&total)
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"runs":  runs,
+			"total": total,
 		})
 	}
 }

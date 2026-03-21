@@ -201,6 +201,28 @@ func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *q
 func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger *log.Logger) (*cron.Scheduler, error) {
 	s := cron.NewScheduler(
 		cron.WithLogger(logger),
+		cron.WithOnComplete(func(r cron.CompletedRun) {
+			errMsg := ""
+			status := "success"
+			if r.Err != nil {
+				errMsg = r.Err.Error()
+				status = "error"
+			}
+			_, err := db.Exec(
+				"INSERT INTO cron_runs (name, started_at, duration_ms, status, error) VALUES (?, ?, ?, ?, ?)",
+				r.Name,
+				r.Started.UTC().Format(time.RFC3339),
+				r.Duration.Milliseconds(),
+				status,
+				errMsg,
+			)
+			if err != nil {
+				logger.Error("failed to persist cron run",
+					log.String("job", r.Name),
+					log.String("error", err.Error()),
+				)
+			}
+		}),
 	)
 
 	// Purge completed/cancelled queue jobs older than 24h, every hour.
@@ -248,6 +270,21 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("cron add purge-stale-api-keys: %w", err)
+	}
+
+	// Purge cron run history older than 7 days, daily at 3:30 AM.
+	if err := s.Add("purge-old-cron-runs", "30 3 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour).Format(time.RFC3339)
+		res, err := db.Exec("DELETE FROM cron_runs WHERE started_at < ?", cutoff)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged old cron runs", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-cron-runs: %w", err)
 	}
 
 	// Purge audit log entries older than 90 days, daily at 4:00 AM.

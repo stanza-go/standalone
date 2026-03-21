@@ -15,6 +15,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428803, "create_users", createUsersUp, createUsersDown)
 	db.AddMigration(1742428804, "create_api_keys", createAPIKeysUp, createAPIKeysDown)
 	db.AddMigration(1742428805, "create_audit_log", createAuditLogUp, createAuditLogDown)
+	db.AddMigration(1742428806, "create_cron_runs", createCronRunsUp, createCronRunsDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -176,5 +177,33 @@ func createAuditLogUp(tx *sqlite.Tx) error {
 
 func createAuditLogDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS audit_log`)
+	return err
+}
+
+func createCronRunsUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE cron_runs (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		name        TEXT    NOT NULL,
+		started_at  TEXT    NOT NULL,
+		duration_ms INTEGER NOT NULL,
+		status      TEXT    NOT NULL DEFAULT 'success',
+		error       TEXT    NOT NULL DEFAULT '',
+		created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_cron_runs_name ON cron_runs(name)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_cron_runs_started_at ON cron_runs(started_at)`)
+	return err
+}
+
+func createCronRunsDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS cron_runs`)
 	return err
 }
