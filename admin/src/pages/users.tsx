@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
@@ -39,6 +40,7 @@ interface User {
 }
 
 export default function UsersPage() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
@@ -287,7 +289,14 @@ export default function UsersPage() {
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
                   <td className="p-3 font-mono text-xs hidden md:table-cell">{user.id}</td>
-                  <td className="p-3">{user.email}</td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => navigate(`/users/${user.id}`)}
+                      className="hover:underline text-left"
+                    >
+                      {user.email}
+                    </button>
+                  </td>
                   <td className="p-3">{user.name || "\u2014"}</td>
                   <td className="p-3">
                     <button

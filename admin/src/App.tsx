@@ -19,6 +19,7 @@ import NotificationsPage from "@/pages/notifications";
 import RolesPage from "@/pages/roles";
 import UploadsPage from "@/pages/uploads";
 import ProfilePage from "@/pages/profile";
+import UserDetailPage from "@/pages/user-detail";
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
@@ -38,6 +39,7 @@ export default function App() {
           >
             <Route index element={<DashboardPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="users/:id" element={<UserDetailPage />} />
             <Route path="admins" element={<AdminsPage />} />
             <Route path="sessions" element={<SessionsPage />} />
             <Route path="cron" element={<CronPage />} />
