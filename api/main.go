@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/stanza-go/standalone/module/userprofile"
 	"github.com/stanza-go/standalone/module/useruploads"
 	"github.com/stanza-go/standalone/module/usermgmt"
+	"github.com/stanza-go/standalone/module/useractivity"
 	"github.com/stanza-go/standalone/module/userapikeys"
 	"github.com/stanza-go/standalone/module/userreset"
 	"github.com/stanza-go/standalone/module/usersettings"
@@ -226,7 +228,7 @@ func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *q
 	return q
 }
 
-func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger *log.Logger) (*cron.Scheduler, error) {
+func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *datadir.Dir, logger *log.Logger) (*cron.Scheduler, error) {
 	s := cron.NewScheduler(
 		cron.WithLogger(logger),
 		cron.WithOnComplete(func(r cron.CompletedRun) {
@@ -361,6 +363,70 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("cron add purge-old-notifications: %w", err)
+	}
+
+	// Automated daily backup at 2:00 AM — copies the SQLite file to the backups directory.
+	if err := s.Add("daily-backup", "0 2 * * *", func(ctx context.Context) error {
+		ts := time.Now().UTC().Format("20060102T150405Z")
+		backupName := fmt.Sprintf("database.sqlite.%s.bak", ts)
+		backupPath := filepath.Join(dir.Backups, backupName)
+
+		src, err := os.Open(db.Path())
+		if err != nil {
+			return fmt.Errorf("open database: %w", err)
+		}
+		defer src.Close()
+
+		dst, err := os.Create(backupPath)
+		if err != nil {
+			return fmt.Errorf("create backup file: %w", err)
+		}
+		defer dst.Close()
+
+		written, err := io.Copy(dst, src)
+		if err != nil {
+			_ = os.Remove(backupPath)
+			return fmt.Errorf("copy database: %w", err)
+		}
+
+		logger.Info("daily backup completed",
+			log.String("file", backupName),
+			log.Int64("size_bytes", written),
+		)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add daily-backup: %w", err)
+	}
+
+	// Purge backups older than 7 days, daily at 2:30 AM.
+	if err := s.Add("purge-old-backups", "30 2 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().Add(-7 * 24 * time.Hour)
+		entries, err := os.ReadDir(dir.Backups)
+		if err != nil {
+			return fmt.Errorf("read backups dir: %w", err)
+		}
+
+		var removed int
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
+				if err := os.Remove(filepath.Join(dir.Backups, e.Name())); err == nil {
+					removed++
+				}
+			}
+		}
+		if removed > 0 {
+			logger.Info("purged old backups", log.Int("count", removed))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-backups: %w", err)
 	}
 
 	lc.Append(lifecycle.Hook{
@@ -518,6 +584,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	useruploads.Register(user, db, dir.Uploads)
 	userapikeys.Register(user, db)
 	usersettings.Register(user, db)
+	useractivity.Register(user, db)
 
 	// API key authenticated routes — for programmatic access.
 	v1 := api.Group("/v1")
