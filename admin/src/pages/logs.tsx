@@ -68,14 +68,14 @@ function wsUrl(path: string): string {
 
 function LevelBadge({ level }: { level: string }) {
   const styles: Record<string, string> = {
-    debug: "bg-gray-100 text-gray-600",
-    info: "bg-blue-100 text-blue-700",
-    warn: "bg-yellow-100 text-yellow-700",
-    error: "bg-red-100 text-red-700",
+    debug: "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400",
+    info: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    warn: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
+    error: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
   };
   return (
     <span
-      className={`inline-block w-14 rounded-full px-2 py-0.5 text-center text-xs font-medium ${styles[level] || "bg-gray-100 text-gray-600"}`}
+      className={`inline-block w-14 rounded-full px-2 py-0.5 text-center text-xs font-medium ${styles[level] || "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400"}`}
     >
       {level}
     </span>

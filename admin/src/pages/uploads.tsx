@@ -300,7 +300,7 @@ export default function UploadsPage() {
                       {upload.original_name}
                     </button>
                     {upload.deleted_at && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 mt-0.5">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 mt-0.5">
                         Deleted
                       </span>
                     )}
@@ -393,7 +393,7 @@ export default function UploadsPage() {
           </DialogHeader>
           <DialogBody className="space-y-4">
             {uploadError && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
                 {uploadError}
               </div>
             )}

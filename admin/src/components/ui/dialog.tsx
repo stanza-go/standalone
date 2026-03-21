@@ -47,7 +47,7 @@ function Dialog({ open, onClose, children, className }: DialogProps) {
         className
       )}
     >
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-md">
+      <div className="bg-card text-card-foreground rounded-lg shadow-lg w-full max-w-md">
         {children}
       </div>
     </dialog>

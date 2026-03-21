@@ -221,7 +221,7 @@ export default function RolesPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{role.name}</span>
                       {role.is_system && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
                           system
                         </span>
                       )}
@@ -304,7 +304,7 @@ export default function RolesPage() {
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
             {formError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
                 {formError}
               </div>
             )}
@@ -384,19 +384,19 @@ export default function RolesPage() {
 
 function ScopeBadge({ scope }: { scope: string }) {
   const colors: Record<string, string> = {
-    admin: "bg-gray-100 text-gray-700",
-    "admin:users": "bg-blue-100 text-blue-700",
-    "admin:settings": "bg-green-100 text-green-700",
-    "admin:jobs": "bg-orange-100 text-orange-700",
-    "admin:logs": "bg-purple-100 text-purple-700",
-    "admin:audit": "bg-pink-100 text-pink-700",
-    "admin:uploads": "bg-cyan-100 text-cyan-700",
-    "admin:database": "bg-red-100 text-red-700",
-    "admin:roles": "bg-amber-100 text-amber-700",
+    admin: "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400",
+    "admin:users": "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    "admin:settings": "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+    "admin:jobs": "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+    "admin:logs": "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+    "admin:audit": "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
+    "admin:uploads": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
+    "admin:database": "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+    "admin:roles": "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
   };
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${colors[scope] || "bg-gray-100 text-gray-700"}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${colors[scope] || "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"}`}
     >
       {SCOPE_LABELS[scope] || scope}
     </span>

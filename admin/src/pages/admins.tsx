@@ -339,7 +339,7 @@ export default function AdminsPage() {
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
             {formError && !Object.keys(fieldErrors).length && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
                 {formError}
               </div>
             )}
@@ -432,13 +432,13 @@ export default function AdminsPage() {
 
 function RoleBadge({ role }: { role: string }) {
   const colors: Record<string, string> = {
-    superadmin: "bg-purple-100 text-purple-700",
-    admin: "bg-blue-100 text-blue-700",
-    viewer: "bg-gray-100 text-gray-700",
+    superadmin: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+    admin: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    viewer: "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400",
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[role] || "bg-indigo-100 text-indigo-700"}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[role] || "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400"}`}
     >
       {role}
     </span>
@@ -449,7 +449,7 @@ function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+        active ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
       }`}
     >
       {active ? "Active" : "Inactive"}

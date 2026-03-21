@@ -280,7 +280,7 @@ export default function UserDetailPage() {
               <p className="text-xs text-muted-foreground mb-1">Status</p>
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  user.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  user.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
                 }`}
               >
                 {user.is_active ? "Active" : "Inactive"}

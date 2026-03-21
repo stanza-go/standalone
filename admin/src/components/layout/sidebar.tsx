@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   LayoutDashboard,
   LogOut,
@@ -77,6 +78,7 @@ export default function SidebarLayout() {
           <span className="text-sm font-semibold tracking-tight">Stanza</span>
         </div>
         <div className="flex items-center gap-1">
+          <ThemeToggle collapsed />
           <NotificationBell />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout}>
             <LogOut className="h-4 w-4" />
@@ -161,31 +163,37 @@ export default function SidebarLayout() {
 
         <div className="border-t border-border p-3">
           {(mobileOpen || !collapsed) ? (
-            <div className="flex items-center justify-between">
-              <button
-                className="min-w-0 text-left hover:opacity-80 transition-opacity"
-                onClick={() => navigate("/profile")}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <button
+                  className="min-w-0 text-left hover:opacity-80 transition-opacity"
+                  onClick={() => navigate("/profile")}
+                >
+                  <p className="truncate text-sm font-medium">
+                    {admin?.name || admin?.email}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {admin?.role}
+                  </p>
+                </button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={logout}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+              <ThemeToggle />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <ThemeToggle collapsed />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={logout}
               >
-                <p className="truncate text-sm font-medium">
-                  {admin?.name || admin?.email}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {admin?.role}
-                </p>
-              </button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="mx-auto block h-7 w-7"
-              onClick={logout}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
           )}
         </div>
       </aside>

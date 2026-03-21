@@ -222,10 +222,10 @@ export default function AdminDetailPage() {
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   admin.role === "superadmin"
-                    ? "bg-purple-100 text-purple-700"
+                    ? "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400"
                     : admin.role === "admin"
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-gray-100 text-gray-700"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
+                      : "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"
                 }`}
               >
                 {admin.role}
@@ -235,7 +235,7 @@ export default function AdminDetailPage() {
               <p className="text-xs text-muted-foreground mb-1">Status</p>
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  admin.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  admin.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
                 }`}
               >
                 {admin.is_active ? "Active" : "Inactive"}

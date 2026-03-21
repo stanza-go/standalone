@@ -80,16 +80,16 @@ function formatPayload(raw: string): string {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-700",
-    running: "bg-blue-100 text-blue-700",
-    completed: "bg-green-100 text-green-700",
-    failed: "bg-red-100 text-red-700",
-    dead: "bg-gray-100 text-gray-700",
-    cancelled: "bg-gray-100 text-gray-500",
+    pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
+    running: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    completed: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+    failed: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+    dead: "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400",
+    cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-500/10 dark:text-gray-400",
   };
   return (
     <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-600"}`}
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400"}`}
     >
       {status}
     </span>

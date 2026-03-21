@@ -50,21 +50,21 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ACTION_COLORS: Record<string, string> = {
-  create: "bg-green-100 text-green-700",
-  update: "bg-blue-100 text-blue-700",
-  delete: "bg-red-100 text-red-700",
-  revoke: "bg-orange-100 text-orange-700",
-  impersonate: "bg-amber-100 text-amber-700",
-  trigger: "bg-purple-100 text-purple-700",
-  enable: "bg-green-100 text-green-700",
-  disable: "bg-red-100 text-red-700",
-  retry: "bg-blue-100 text-blue-700",
-  cancel: "bg-orange-100 text-orange-700",
+  create: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+  update: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  delete: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  revoke: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+  impersonate: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+  trigger: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+  enable: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+  disable: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  retry: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  cancel: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
 };
 
 function actionColor(action: string): string {
   const verb = action.split(".")[1] ?? "";
-  return ACTION_COLORS[verb] ?? "bg-gray-100 text-gray-700";
+  return ACTION_COLORS[verb] ?? "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400";
 }
 
 function formatTime(iso: string): string {

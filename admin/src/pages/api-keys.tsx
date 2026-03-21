@@ -259,9 +259,9 @@ export default function APIKeysPage() {
 
       {/* Key reveal after creation */}
       {createdKey && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 rounded-md">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-green-800">
+            <p className="text-sm font-medium text-green-800 dark:text-green-400">
               API key created: {createdKey.name}
             </p>
             <Button
@@ -277,7 +277,7 @@ export default function APIKeysPage() {
             Copy this key now. It will not be shown again.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-white border rounded px-3 py-2 text-sm font-mono break-all">
+            <code className="flex-1 bg-background border rounded px-3 py-2 text-sm font-mono break-all">
               {createdKey.key}
             </code>
             <Button
@@ -436,7 +436,7 @@ export default function APIKeysPage() {
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
             {formError && !Object.keys(fieldErrors).length && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
                 {formError}
               </div>
             )}
@@ -508,7 +508,7 @@ export default function APIKeysPage() {
 
 function ScopeBadge({ scope }: { scope: string }) {
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
       {scope}
     </span>
   );
@@ -523,20 +523,20 @@ function KeyStatusBadge({
 }) {
   if (revoked) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400">
         Revoked
       </span>
     );
   }
   if (expired) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400">
         Expired
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400">
       Active
     </span>
   );
