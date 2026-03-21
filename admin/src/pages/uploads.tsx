@@ -515,7 +515,7 @@ export default function UploadsPage() {
               {preview.deleted_at && (
                 <div>
                   <span className="text-muted-foreground">Deleted</span>
-                  <p className="font-medium text-red-600">{formatTime(preview.deleted_at)}</p>
+                  <p className="font-medium text-red-600 dark:text-red-400">{formatTime(preview.deleted_at)}</p>
                 </div>
               )}
             </div>

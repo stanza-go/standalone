@@ -340,7 +340,7 @@ export default function UsersPage() {
                           disabled={!user.is_active}
                           onClick={() => handleImpersonate(user.id)}
                         >
-                          <UserCheck className="h-3.5 w-3.5 text-amber-600" />
+                          <UserCheck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -485,7 +485,7 @@ export default function UsersPage() {
               onClick={copyToken}
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-600" />
+                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-500" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}

@@ -154,7 +154,7 @@ function RunHistory({ name }: { name: string }) {
               </td>
               <td className="px-4 py-2">
                 {run.status === "success" ? (
-                  <span className="inline-flex items-center gap-1 text-green-600">
+                  <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-500">
                     <CheckCircle className="h-3 w-3" />
                     Success
                   </span>
@@ -331,7 +331,7 @@ export default function CronPage() {
                               Running
                             </span>
                           ) : entry.enabled ? (
-                            <span className="inline-flex items-center gap-1 text-green-600">
+                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-500">
                               <CheckCircle className="h-3 w-3" />
                               Enabled
                             </span>

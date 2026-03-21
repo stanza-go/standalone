@@ -281,19 +281,19 @@ export default function LogsPage() {
           <p className="text-sm text-muted-foreground">
             {total} entries in {selectedFile}
             {wsState === "connected" && streamCount > 0 && (
-              <span className="ml-2 text-green-600">+{streamCount} streamed</span>
+              <span className="ml-2 text-green-600 dark:text-green-500">+{streamCount} streamed</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {wsState === "connected" && (
-            <span className="flex items-center gap-1 text-xs text-green-600">
+            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-500">
               <Wifi className="h-3.5 w-3.5" />
               Streaming
             </span>
           )}
           {wsState === "connecting" && (
-            <span className="flex items-center gap-1 text-xs text-yellow-600">
+            <span className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-500">
               <Wifi className="h-3.5 w-3.5 animate-pulse" />
               Connecting
             </span>

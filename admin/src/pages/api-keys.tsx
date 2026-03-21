@@ -273,7 +273,7 @@ export default function APIKeysPage() {
               &times;
             </Button>
           </div>
-          <p className="text-xs text-green-700 mb-2">
+          <p className="text-xs text-green-700 dark:text-green-400 mb-2">
             Copy this key now. It will not be shown again.
           </p>
           <div className="flex items-center gap-2">
@@ -286,7 +286,7 @@ export default function APIKeysPage() {
               onClick={() => copyKey(createdKey.key)}
             >
               {copied ? (
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}
@@ -346,7 +346,7 @@ export default function APIKeysPage() {
                     {k.expires_at ? (
                       <span
                         className={
-                          isExpired(k.expires_at) ? "text-red-600" : ""
+                          isExpired(k.expires_at) ? "text-red-600 dark:text-red-400" : ""
                         }
                       >
                         {formatTime(k.expires_at)}

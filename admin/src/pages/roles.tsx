@@ -348,7 +348,7 @@ export default function RolesPage() {
                       checked={selectedScopes.includes(scope)}
                       onChange={() => toggleScope(scope)}
                       disabled={scope === "admin"}
-                      className="h-4 w-4 rounded border-gray-300"
+                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-600"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">
