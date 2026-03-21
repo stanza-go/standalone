@@ -14,6 +14,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the API key management routes on the given admin group.
@@ -168,6 +169,8 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
+		adminaudit.Log(db, r, "api_key.create", "api_key", strconv.FormatInt(result.LastInsertID, 10), req.Name)
+
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"api_key": map[string]any{
 				"id":         result.LastInsertID,
@@ -246,6 +249,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		current.Name = name
 		current.Scopes = scopes
 
+		adminaudit.Log(db, r, "api_key.update", "api_key", strconv.FormatInt(id, 10), name)
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"api_key": current,
 		})
@@ -275,6 +280,8 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusNotFound, "api key not found or already revoked")
 			return
 		}
+
+		adminaudit.Log(db, r, "api_key.revoke", "api_key", strconv.FormatInt(id, 10), "")
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

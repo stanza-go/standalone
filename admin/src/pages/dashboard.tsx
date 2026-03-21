@@ -16,7 +16,9 @@ import {
   Users,
   UsersRound,
   KeySquare,
+  ScrollText,
 } from "lucide-react";
+import { Link } from "react-router";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -57,6 +59,47 @@ interface DashboardStats {
   };
 }
 
+interface AuditEntry {
+  id: number;
+  admin_id: string;
+  admin_email: string;
+  admin_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  details: string;
+  ip_address: string;
+  created_at: string;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  "admin.create": "Created admin",
+  "admin.update": "Updated admin",
+  "admin.delete": "Deleted admin",
+  "user.create": "Created user",
+  "user.update": "Updated user",
+  "user.delete": "Deleted user",
+  "user.impersonate": "Impersonated user",
+  "session.revoke": "Revoked session",
+  "setting.update": "Updated setting",
+  "api_key.create": "Created API key",
+  "api_key.update": "Updated API key",
+  "api_key.revoke": "Revoked API key",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  create: "bg-green-100 text-green-700",
+  update: "bg-blue-100 text-blue-700",
+  delete: "bg-red-100 text-red-700",
+  revoke: "bg-orange-100 text-orange-700",
+  impersonate: "bg-amber-100 text-amber-700",
+};
+
+function actionColor(action: string): string {
+  const verb = action.split(".")[1] ?? "";
+  return ACTION_COLORS[verb] ?? "bg-gray-100 text-gray-700";
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -83,6 +126,7 @@ function formatUptime(seconds: number): string {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,9 +134,13 @@ export default function DashboardPage() {
 
     async function load() {
       try {
-        const data = await get<DashboardStats>("/admin/dashboard");
+        const [data, activity] = await Promise.all([
+          get<DashboardStats>("/admin/dashboard"),
+          get<{ entries: AuditEntry[] }>("/admin/audit/recent"),
+        ]);
         if (!cancelled) {
           setStats(data);
+          setRecentActivity(activity.entries);
           setError(null);
         }
       } catch (err) {
@@ -262,6 +310,56 @@ export default function DashboardPage() {
               />
             </div>
           </section>
+
+          {/* Recent Activity */}
+          {recentActivity.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  Recent Activity
+                </h2>
+                <Link
+                  to="/audit"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  View all
+                </Link>
+              </div>
+              <Card>
+                <CardContent className="p-0">
+                  <div className="divide-y">
+                    {recentActivity.map((entry) => (
+                      <div key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <ScrollText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${actionColor(entry.action)}`}
+                            >
+                              {ACTION_LABELS[entry.action] || entry.action}
+                            </span>
+                            {entry.entity_type && (
+                              <span className="text-xs font-mono text-muted-foreground">
+                                {entry.entity_type}
+                                {entry.entity_id ? `#${entry.entity_id}` : ""}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {entry.admin_name || entry.admin_email || `Admin #${entry.admin_id}`}
+                            {entry.details ? ` \u2014 ${entry.details}` : ""}
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0" title={formatRelativeTime(entry.created_at)}>
+                          {formatRelativeTime(entry.created_at)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+          )}
         </div>
       )}
     </div>

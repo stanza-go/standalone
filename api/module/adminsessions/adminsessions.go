@@ -8,6 +8,7 @@ import (
 
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the session management routes on the given admin group.
@@ -85,6 +86,8 @@ func revokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusNotFound, "session not found")
 			return
 		}
+
+		adminaudit.Log(db, r, "session.revoke", "session", id, "")
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

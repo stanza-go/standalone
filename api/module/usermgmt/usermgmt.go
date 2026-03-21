@@ -12,6 +12,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts end-user management routes on the given admin group.
@@ -131,6 +132,8 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusInternalServerError, "failed to create user")
 			return
 		}
+
+		adminaudit.Log(db, r, "user.create", "user", strconv.FormatInt(result.LastInsertID, 10), req.Email)
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"user": userJSON{
@@ -262,6 +265,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			_, _ = db.Exec(sql, args...)
 		}
 
+		adminaudit.Log(db, r, "user.update", "user", strconv.FormatInt(id, 10), currentEmail)
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user": userJSON{
 				ID:        id,
@@ -308,6 +313,8 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		_, _ = db.Exec(sql, args...)
 
+		adminaudit.Log(db, r, "user.delete", "user", strconv.FormatInt(id, 10), "")
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
@@ -350,6 +357,8 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 			http.WriteError(w, http.StatusInternalServerError, "failed to issue token")
 			return
 		}
+
+		adminaudit.Log(db, r, "user.impersonate", "user", strconv.FormatInt(id, 10), email)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"token": token,

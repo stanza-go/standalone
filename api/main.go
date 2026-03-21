@@ -20,6 +20,7 @@ import (
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
+	"github.com/stanza-go/standalone/module/adminaudit"
 	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/admincron"
 	"github.com/stanza-go/standalone/module/admindb"
@@ -249,6 +250,21 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 		return nil, fmt.Errorf("cron add purge-stale-api-keys: %w", err)
 	}
 
+	// Purge audit log entries older than 90 days, daily at 4:00 AM.
+	if err := s.Add("purge-old-audit-log", "0 4 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+		res, err := db.Exec("DELETE FROM audit_log WHERE created_at < ?", cutoff)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged old audit log entries", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-audit-log: %w", err)
+	}
+
 	lc.Append(lifecycle.Hook{
 		OnStart: s.Start,
 		OnStop:  s.Stop,
@@ -336,6 +352,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	adminsettings.Register(admin, db)
 	usermgmt.Register(admin, a, db)
 	apikeys.Register(admin, db)
+	adminaudit.Register(admin, db)
 
 	// Protected user routes — require valid JWT + user scope.
 	user := api.Group("/user")

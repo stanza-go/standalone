@@ -8,6 +8,7 @@ import (
 
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the settings admin routes on the given admin group.
@@ -106,6 +107,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusInternalServerError, "failed to read updated setting")
 			return
 		}
+
+		adminaudit.Log(db, r, "setting.update", "setting", key, req.Value)
 
 		http.WriteJSON(w, http.StatusOK, s)
 	}

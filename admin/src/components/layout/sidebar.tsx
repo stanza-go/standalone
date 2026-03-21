@@ -15,6 +15,7 @@ import {
   UsersRound,
   KeyRound,
   KeySquare,
+  ScrollText,
   Menu,
   X,
 } from "lucide-react";
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
   { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
   { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
+  { label: "Audit Log", to: "/audit", icon: <ScrollText className="h-4 w-4" /> },
   { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
 ];
 

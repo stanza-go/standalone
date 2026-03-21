@@ -14,6 +14,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428802, "create_refresh_tokens", createRefreshTokensUp, createRefreshTokensDown)
 	db.AddMigration(1742428803, "create_users", createUsersUp, createUsersDown)
 	db.AddMigration(1742428804, "create_api_keys", createAPIKeysUp, createAPIKeysDown)
+	db.AddMigration(1742428805, "create_audit_log", createAuditLogUp, createAuditLogDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -141,5 +142,39 @@ func createAPIKeysUp(tx *sqlite.Tx) error {
 
 func createAPIKeysDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS api_keys`)
+	return err
+}
+
+func createAuditLogUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE audit_log (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		admin_id    TEXT    NOT NULL,
+		action      TEXT    NOT NULL,
+		entity_type TEXT    NOT NULL DEFAULT '',
+		entity_id   TEXT    NOT NULL DEFAULT '',
+		details     TEXT    NOT NULL DEFAULT '',
+		ip_address  TEXT    NOT NULL DEFAULT '',
+		created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_audit_log_admin_id ON audit_log(admin_id)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_audit_log_action ON audit_log(action)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_audit_log_created_at ON audit_log(created_at)`)
+	return err
+}
+
+func createAuditLogDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS audit_log`)
 	return err
 }

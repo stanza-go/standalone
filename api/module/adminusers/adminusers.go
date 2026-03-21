@@ -11,6 +11,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the admin user management routes on the given admin group.
@@ -133,6 +134,8 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
+		adminaudit.Log(db, r, "admin.create", "admin", strconv.FormatInt(result.LastInsertID, 10), req.Email)
+
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"admin": adminJSON{
 				ID:        result.LastInsertID,
@@ -237,6 +240,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
+		adminaudit.Log(db, r, "admin.update", "admin", strconv.FormatInt(id, 10), currentEmail)
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"admin": adminJSON{
 				ID:        id,
@@ -290,6 +295,8 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", strconv.FormatInt(id, 10)).
 			Build()
 		_, _ = db.Exec(sql, args...)
+
+		adminaudit.Log(db, r, "admin.delete", "admin", strconv.FormatInt(id, 10), "")
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
