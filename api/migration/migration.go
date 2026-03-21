@@ -20,6 +20,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428808, "create_uploads", createUploadsUp, createUploadsDown)
 	db.AddMigration(1742428809, "create_password_reset_tokens", createPasswordResetTokensUp, createPasswordResetTokensDown)
 	db.AddMigration(1742428810, "create_roles", createRolesUp, createRolesDown)
+	db.AddMigration(1742428811, "create_notifications", createNotificationsUp, createNotificationsDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -329,7 +330,8 @@ func createRolesUp(tx *sqlite.Tx) error {
 	_, err = tx.Exec(`INSERT INTO role_scopes (role_id, scope) VALUES
 		(1, 'admin'), (1, 'admin:users'), (1, 'admin:settings'),
 		(1, 'admin:jobs'), (1, 'admin:logs'), (1, 'admin:audit'),
-		(1, 'admin:uploads'), (1, 'admin:database'), (1, 'admin:roles')`)
+		(1, 'admin:uploads'), (1, 'admin:database'), (1, 'admin:roles'),
+		(1, 'admin:notifications')`)
 	if err != nil {
 		return err
 	}
@@ -353,5 +355,40 @@ func createRolesDown(tx *sqlite.Tx) error {
 		return err
 	}
 	_, err = tx.Exec(`DROP TABLE IF EXISTS roles`)
+	return err
+}
+
+func createNotificationsUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE notifications (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		entity_type TEXT    NOT NULL,
+		entity_id   INTEGER NOT NULL,
+		type        TEXT    NOT NULL,
+		title       TEXT    NOT NULL,
+		message     TEXT    NOT NULL DEFAULT '',
+		data        TEXT    NOT NULL DEFAULT '',
+		read_at     TEXT,
+		created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_notifications_entity ON notifications(entity_type, entity_id)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_notifications_unread ON notifications(entity_type, entity_id, read_at) WHERE read_at IS NULL`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_notifications_created_at ON notifications(created_at)`)
+	return err
+}
+
+func createNotificationsDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS notifications`)
 	return err
 }

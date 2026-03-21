@@ -22,6 +22,7 @@ import (
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/adminnotifications"
 	"github.com/stanza-go/standalone/module/adminroles"
 	"github.com/stanza-go/standalone/module/adminuploads"
 	"github.com/stanza-go/standalone/module/adminauth"
@@ -36,6 +37,7 @@ import (
 	"github.com/stanza-go/standalone/module/health"
 	"github.com/stanza-go/standalone/module/apikeys"
 	"github.com/stanza-go/standalone/module/userauth"
+	"github.com/stanza-go/standalone/module/usernotifications"
 	"github.com/stanza-go/standalone/module/userprofile"
 	"github.com/stanza-go/standalone/module/usermgmt"
 	"github.com/stanza-go/standalone/module/userreset"
@@ -336,6 +338,21 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 		return nil, fmt.Errorf("cron add purge-old-reset-tokens: %w", err)
 	}
 
+	// Purge read notifications older than 30 days, daily at 5:00 AM.
+	if err := s.Add("purge-old-notifications", "0 5 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
+		res, err := db.Exec("DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?", cutoff)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged old read notifications", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-notifications: %w", err)
+	}
+
 	lc.Append(lifecycle.Hook{
 		OnStart: s.Start,
 		OnStop:  s.Stop,
@@ -457,12 +474,17 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	withUploads.Use(auth.RequireScope("admin:uploads"))
 	adminuploads.Register(withUploads, db, dir.Uploads)
 
+	withNotifications := admin.Group("")
+	withNotifications.Use(auth.RequireScope("admin:notifications"))
+	adminnotifications.Register(withNotifications, db)
+
 	// Protected user routes — require valid JWT + user scope.
 	user := api.Group("/user")
 	user.Use(ua.RequireAuth())
 	user.Use(auth.RequireScope("user"))
 
 	userprofile.Register(user, db, logger)
+	usernotifications.Register(user, db)
 
 	// API key authenticated routes — for programmatic access.
 	kv := apikeys.NewValidator(db)

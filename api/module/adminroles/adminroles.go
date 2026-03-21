@@ -28,6 +28,7 @@ var KnownScopes = []string{
 	"admin:uploads",
 	"admin:database",
 	"admin:roles",
+	"admin:notifications",
 }
 
 // Register mounts the role management routes on the given admin group.
