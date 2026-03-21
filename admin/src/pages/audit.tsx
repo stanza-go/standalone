@@ -41,6 +41,11 @@ const ACTION_LABELS: Record<string, string> = {
   "api_key.create": "Created API key",
   "api_key.update": "Updated API key",
   "api_key.revoke": "Revoked API key",
+  "cron.trigger": "Triggered cron job",
+  "cron.enable": "Enabled cron job",
+  "cron.disable": "Disabled cron job",
+  "job.retry": "Retried job",
+  "job.cancel": "Cancelled job",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -49,6 +54,11 @@ const ACTION_COLORS: Record<string, string> = {
   delete: "bg-red-100 text-red-700",
   revoke: "bg-orange-100 text-orange-700",
   impersonate: "bg-amber-100 text-amber-700",
+  trigger: "bg-purple-100 text-purple-700",
+  enable: "bg-green-100 text-green-700",
+  disable: "bg-red-100 text-red-700",
+  retry: "bg-blue-100 text-blue-700",
+  cancel: "bg-orange-100 text-orange-700",
 };
 
 function actionColor(action: string): string {

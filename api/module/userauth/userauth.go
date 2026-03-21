@@ -16,6 +16,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 )
 
 // Register mounts the user auth routes on the given router group.
@@ -54,12 +55,14 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.
 		req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 		req.Name = strings.TrimSpace(req.Name)
 
-		if req.Email == "" || req.Password == "" {
-			http.WriteError(w, http.StatusBadRequest, "email and password are required")
-			return
-		}
-		if len(req.Password) < 8 {
-			http.WriteError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		v := validate.Fields(
+			validate.Required("email", req.Email),
+			validate.Email("email", req.Email),
+			validate.Required("password", req.Password),
+			validate.MinLen("password", req.Password, 8),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
@@ -126,8 +129,12 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if req.Email == "" || req.Password == "" {
-			http.WriteError(w, http.StatusBadRequest, "email and password are required")
+		v := validate.Fields(
+			validate.Required("email", req.Email),
+			validate.Required("password", req.Password),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 

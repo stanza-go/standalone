@@ -141,8 +141,8 @@ func TestCreateAPIKey_MissingName(t *testing.T) {
 	testutil.AddAdminAuth(t, req, a, "1")
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Fatalf("status = %d, want 400", rec.Code)
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422", rec.Code)
 	}
 }
 
@@ -182,8 +182,8 @@ func TestCreateAPIKey_PastExpiration(t *testing.T) {
 	testutil.AddAdminAuth(t, req, a, "1")
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
 

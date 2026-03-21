@@ -14,6 +14,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
@@ -100,33 +101,34 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		if req.Name == "" {
-			http.WriteError(w, http.StatusBadRequest, "name is required")
-			return
-		}
-
-		// Validate scopes if provided.
+		// Validate scopes format if provided.
+		scopesOK := true
 		if req.Scopes != "" {
 			for _, s := range strings.Split(req.Scopes, ",") {
-				s = strings.TrimSpace(s)
-				if s == "" {
-					http.WriteError(w, http.StatusBadRequest, "invalid scope format")
-					return
+				if strings.TrimSpace(s) == "" {
+					scopesOK = false
+					break
 				}
 			}
 		}
 
 		// Validate expiration if provided.
-		if req.ExpiresAt != "" {
+		var expiresOK bool
+		if req.ExpiresAt == "" {
+			expiresOK = true
+		} else {
 			t, err := time.Parse("2006-01-02T15:04:05Z", req.ExpiresAt)
-			if err != nil {
-				http.WriteError(w, http.StatusBadRequest, "expires_at must be ISO 8601 format")
-				return
-			}
-			if t.Before(time.Now().UTC()) {
-				http.WriteError(w, http.StatusBadRequest, "expires_at must be in the future")
-				return
-			}
+			expiresOK = err == nil && !t.Before(time.Now().UTC())
+		}
+
+		v := validate.Fields(
+			validate.Required("name", req.Name),
+			validate.Check("scopes", scopesOK, "invalid format, use comma-separated values"),
+			validate.Check("expires_at", expiresOK, "must be a valid ISO 8601 date in the future"),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
+			return
 		}
 
 		// Generate API key: 32 random bytes -> hex.

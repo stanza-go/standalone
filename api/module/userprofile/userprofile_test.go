@@ -197,8 +197,8 @@ func TestUpdateProfile_EmptyFields(t *testing.T) {
 	testutil.AddUserAuth(t, req, a, itoa(uid))
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -268,8 +268,8 @@ func TestChangePassword_TooShort(t *testing.T) {
 	testutil.AddUserAuth(t, req, a, itoa(uid))
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -294,8 +294,8 @@ func TestChangePassword_MissingFields(t *testing.T) {
 			req := testutil.JSONRequest(t, "PUT", "/api/user/profile/password", tt.body)
 			testutil.AddUserAuth(t, req, a, itoa(uid))
 			rec := testutil.Do(router, req)
-			if rec.Code != 400 {
-				t.Errorf("status = %d, want 400", rec.Code)
+			if rec.Code != 422 {
+				t.Errorf("status = %d, want 422", rec.Code)
 			}
 		})
 	}

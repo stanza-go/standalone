@@ -104,8 +104,8 @@ func TestRegister_ShortPassword(t *testing.T) {
 	})
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Errorf("status = %d, want 400", rec.Code)
+	if rec.Code != 422 {
+		t.Errorf("status = %d, want 422", rec.Code)
 	}
 }
 
@@ -126,8 +126,8 @@ func TestRegister_MissingFields(t *testing.T) {
 			t.Parallel()
 			req := testutil.JSONRequest(t, "POST", "/api/auth/register", tt.body)
 			rec := testutil.Do(router, req)
-			if rec.Code != 400 {
-				t.Errorf("status = %d, want 400", rec.Code)
+			if rec.Code != 422 {
+				t.Errorf("status = %d, want 422", rec.Code)
 			}
 		})
 	}

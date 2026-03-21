@@ -12,6 +12,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
@@ -104,8 +105,14 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		if req.Email == "" || req.Password == "" {
-			http.WriteError(w, http.StatusBadRequest, "email and password are required")
+		v := validate.Fields(
+			validate.Required("email", req.Email),
+			validate.Email("email", req.Email),
+			validate.Required("password", req.Password),
+			validate.MinLen("password", req.Password, 8),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 

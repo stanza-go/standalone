@@ -11,6 +11,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
@@ -96,16 +97,19 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		if req.Email == "" || req.Password == "" {
-			http.WriteError(w, http.StatusBadRequest, "email and password are required")
-			return
-		}
-
 		if req.Role == "" {
 			req.Role = "admin"
 		}
-		if !validRole(req.Role) {
-			http.WriteError(w, http.StatusBadRequest, "role must be superadmin, admin, or viewer")
+
+		v := validate.Fields(
+			validate.Required("email", req.Email),
+			validate.Email("email", req.Email),
+			validate.Required("password", req.Password),
+			validate.MinLen("password", req.Password, 8),
+			validate.OneOf("role", req.Role, "superadmin", "admin", "viewer"),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
@@ -171,8 +175,11 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		if req.Role != "" && !validRole(req.Role) {
-			http.WriteError(w, http.StatusBadRequest, "role must be superadmin, admin, or viewer")
+		v := validate.Fields(
+			validate.OneOf("role", req.Role, "superadmin", "admin", "viewer"),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
@@ -304,6 +311,3 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func validRole(role string) bool {
-	return role == "superadmin" || role == "admin" || role == "viewer"
-}

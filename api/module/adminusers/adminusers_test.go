@@ -127,8 +127,8 @@ func TestCreateAdmin_MissingFields(t *testing.T) {
 	testutil.AddAdminAuth(t, req, a, "1")
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Errorf("status = %d, want 400", rec.Code)
+	if rec.Code != 422 {
+		t.Errorf("status = %d, want 422", rec.Code)
 	}
 }
 
@@ -138,14 +138,14 @@ func TestCreateAdmin_InvalidRole(t *testing.T) {
 
 	req := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
 		"email":    "role@stanza.dev",
-		"password": "password",
+		"password": "password123",
 		"role":     "dictator",
 	})
 	testutil.AddAdminAuth(t, req, a, "1")
 	rec := testutil.Do(router, req)
 
-	if rec.Code != 400 {
-		t.Errorf("status = %d, want 400", rec.Code)
+	if rec.Code != 422 {
+		t.Errorf("status = %d, want 422", rec.Code)
 	}
 }
 

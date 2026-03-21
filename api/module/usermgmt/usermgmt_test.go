@@ -131,8 +131,8 @@ func TestCreateUser_MissingFields(t *testing.T) {
 			req := testutil.JSONRequest(t, "POST", "/api/admin/users", tt.body)
 			testutil.AddAdminAuth(t, req, a, "1")
 			rec := testutil.Do(router, req)
-			if rec.Code != 400 {
-				t.Errorf("status = %d, want 400", rec.Code)
+			if rec.Code != 422 {
+				t.Errorf("status = %d, want 422", rec.Code)
 			}
 		})
 	}

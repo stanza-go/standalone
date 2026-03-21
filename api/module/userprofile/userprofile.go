@@ -11,6 +11,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 )
 
 // Register mounts the user profile routes on the given group.
@@ -86,8 +87,12 @@ func updateProfile(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, 
 		req.Name = strings.TrimSpace(req.Name)
 		req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 
-		if req.Name == "" && req.Email == "" {
-			http.WriteError(w, http.StatusBadRequest, "at least one field (name or email) is required")
+		v := validate.Fields(
+			validate.Check("name", req.Name != "" || req.Email != "", "at least one field (name or email) is required"),
+			validate.Email("email", req.Email),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
@@ -168,12 +173,13 @@ func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter,
 			return
 		}
 
-		if req.CurrentPassword == "" || req.NewPassword == "" {
-			http.WriteError(w, http.StatusBadRequest, "current_password and new_password are required")
-			return
-		}
-		if len(req.NewPassword) < 8 {
-			http.WriteError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		v := validate.Fields(
+			validate.Required("current_password", req.CurrentPassword),
+			validate.Required("new_password", req.NewPassword),
+			validate.MinLen("new_password", req.NewPassword, 8),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
