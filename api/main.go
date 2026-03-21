@@ -25,7 +25,9 @@ import (
 	"github.com/stanza-go/standalone/module/adminaudit"
 	"github.com/stanza-go/standalone/module/adminnotifications"
 	"github.com/stanza-go/standalone/module/adminprofile"
+	"github.com/stanza-go/standalone/module/adminwebhooks"
 	"github.com/stanza-go/standalone/module/notifications"
+	"github.com/stanza-go/standalone/module/webhooks"
 	"github.com/stanza-go/standalone/module/adminroles"
 	"github.com/stanza-go/standalone/module/adminuploads"
 	"github.com/stanza-go/standalone/module/adminauth"
@@ -72,6 +74,7 @@ func main() {
 		lifecycle.Provide(provideEmail),
 		lifecycle.Provide(provideNotificationService),
 		lifecycle.Provide(provideQueue),
+		lifecycle.Provide(provideWebhookDispatcher),
 		lifecycle.Provide(provideCron),
 		lifecycle.Provide(provideRouter),
 		lifecycle.Provide(provideServer),
@@ -213,6 +216,10 @@ func provideEmail(cfg *config.Config, logger *log.Logger) *email.Client {
 
 func provideNotificationService(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) *notifications.Service {
 	return notifications.NewService(db, emailClient, logger)
+}
+
+func provideWebhookDispatcher(db *sqlite.DB, q *queue.Queue, logger *log.Logger) *webhooks.Dispatcher {
+	return webhooks.NewDispatcher(db, q, logger)
 }
 
 func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
@@ -501,7 +508,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -568,6 +575,10 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	withNotifications := admin.Group("")
 	withNotifications.Use(auth.RequireScope("admin:notifications"))
 	adminnotifications.Register(withNotifications, db, notifSvc)
+
+	withWebhooks := admin.Group("")
+	withWebhooks.Use(auth.RequireScope("admin:webhooks"))
+	adminwebhooks.Register(withWebhooks, db, whDispatcher)
 
 	// API key validator — shared between user routes and v1 routes.
 	kv := apikeys.NewValidator(db)

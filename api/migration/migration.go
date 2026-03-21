@@ -23,6 +23,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428811, "create_notifications", createNotificationsUp, createNotificationsDown)
 	db.AddMigration(1742428812, "add_api_key_entity", addAPIKeyEntityUp, addAPIKeyEntityDown)
 	db.AddMigration(1742428813, "create_user_settings", createUserSettingsUp, createUserSettingsDown)
+	db.AddMigration(1742428814, "create_webhooks", createWebhooksUp, createWebhooksDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -446,5 +447,71 @@ func createUserSettingsUp(tx *sqlite.Tx) error {
 
 func createUserSettingsDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS user_settings`)
+	return err
+}
+
+func createWebhooksUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE webhooks (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		url         TEXT    NOT NULL,
+		secret      TEXT    NOT NULL,
+		description TEXT    NOT NULL DEFAULT '',
+		events      TEXT    NOT NULL DEFAULT '["*"]',
+		is_active   INTEGER NOT NULL DEFAULT 1,
+		created_by  INTEGER NOT NULL DEFAULT 0,
+		created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_webhooks_active ON webhooks(is_active)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE TABLE webhook_deliveries (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		webhook_id    INTEGER NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+		delivery_id   TEXT    NOT NULL DEFAULT '',
+		event         TEXT    NOT NULL,
+		payload       TEXT    NOT NULL DEFAULT '{}',
+		status        TEXT    NOT NULL DEFAULT 'pending',
+		status_code   INTEGER NOT NULL DEFAULT 0,
+		response_body TEXT    NOT NULL DEFAULT '',
+		attempts      INTEGER NOT NULL DEFAULT 0,
+		created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		completed_at  TEXT
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status)`)
+	if err != nil {
+		return err
+	}
+
+	// Add admin:webhooks scope to superadmin role.
+	_, err = tx.Exec(`INSERT INTO role_scopes (role_id, scope) VALUES (1, 'admin:webhooks')`)
+	return err
+}
+
+func createWebhooksDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS webhook_deliveries`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`DROP TABLE IF EXISTS webhooks`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`DELETE FROM role_scopes WHERE scope = 'admin:webhooks'`)
 	return err
 }
