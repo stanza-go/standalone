@@ -9,11 +9,12 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	fhttp "github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/queue"
+	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/adminqueue"
 	"github.com/stanza-go/standalone/testutil"
 )
 
-func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *queue.Queue) {
+func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *queue.Queue, *sqlite.DB) {
 	t.Helper()
 
 	db := testutil.SetupDB(t)
@@ -31,14 +32,14 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *queue.Queue) {
 	admin := api.Group("/admin")
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
-	adminqueue.Register(admin, q)
+	adminqueue.Register(admin, q, db)
 
-	return router, a, q
+	return router, a, q, db
 }
 
 func TestStats_Empty(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("GET", "/api/admin/queue/stats", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -60,7 +61,7 @@ func TestStats_Empty(t *testing.T) {
 
 func TestStats_Unauthorized(t *testing.T) {
 	t.Parallel()
-	router, _, _ := setup(t)
+	router, _, _, _ := setup(t)
 
 	req := httptest.NewRequest("GET", "/api/admin/queue/stats", nil)
 	rec := testutil.Do(router, req)
@@ -72,7 +73,7 @@ func TestStats_Unauthorized(t *testing.T) {
 
 func TestJobs_Empty(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("GET", "/api/admin/queue/jobs", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -96,7 +97,7 @@ func TestJobs_Empty(t *testing.T) {
 
 func TestJobs_WithEnqueuedJob(t *testing.T) {
 	t.Parallel()
-	router, a, q := setup(t)
+	router, a, q, _ := setup(t)
 
 	_, err := q.Enqueue(context.Background(), "send_email", []byte(`{"to":"test@example.com"}`))
 	if err != nil {
@@ -130,7 +131,7 @@ func TestJobs_WithEnqueuedJob(t *testing.T) {
 
 func TestJobs_FilterByStatus(t *testing.T) {
 	t.Parallel()
-	router, a, q := setup(t)
+	router, a, q, _ := setup(t)
 
 	_, err := q.Enqueue(context.Background(), "send_email", []byte(`{}`))
 	if err != nil {
@@ -156,7 +157,7 @@ func TestJobs_FilterByStatus(t *testing.T) {
 
 func TestCancel_PendingJob(t *testing.T) {
 	t.Parallel()
-	router, a, q := setup(t)
+	router, a, q, _ := setup(t)
 
 	jobID, err := q.Enqueue(context.Background(), "send_email", []byte(`{}`))
 	if err != nil {
@@ -180,7 +181,7 @@ func TestCancel_PendingJob(t *testing.T) {
 
 func TestCancel_InvalidID(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/queue/jobs/abc/cancel", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -193,7 +194,7 @@ func TestCancel_InvalidID(t *testing.T) {
 
 func TestRetry_InvalidID(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/queue/jobs/abc/retry", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -206,7 +207,7 @@ func TestRetry_InvalidID(t *testing.T) {
 
 func TestRetry_NonExistentJob(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/queue/jobs/99999/retry", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -217,3 +218,33 @@ func TestRetry_NonExistentJob(t *testing.T) {
 	}
 }
 
+func TestCancel_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, q, db := setup(t)
+
+	jobID, err := q.Enqueue(context.Background(), "send_email", []byte(`{}`))
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/queue/jobs/%d/cancel", jobID), nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType, entityID string
+	err = db.QueryRow("SELECT action, entity_type, entity_id FROM audit_log WHERE action = 'job.cancel'").
+		Scan(&action, &entityType, &entityID)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "job" {
+		t.Errorf("entity_type = %q, want job", entityType)
+	}
+	if entityID != fmt.Sprintf("%d", jobID) {
+		t.Errorf("entity_id = %q, want %d", entityID, jobID)
+	}
+}

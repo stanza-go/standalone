@@ -6,6 +6,8 @@ package admincron
 import (
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
+	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the cron admin routes on the given admin group.
@@ -16,11 +18,11 @@ import (
 //	POST /api/admin/cron/{name}/trigger — trigger a job immediately
 //	POST /api/admin/cron/{name}/enable  — enable a job
 //	POST /api/admin/cron/{name}/disable — disable a job
-func Register(admin *http.Group, s *cron.Scheduler) {
+func Register(admin *http.Group, s *cron.Scheduler, db *sqlite.DB) {
 	admin.HandleFunc("GET /cron", listHandler(s))
-	admin.HandleFunc("POST /cron/{name}/trigger", triggerHandler(s))
-	admin.HandleFunc("POST /cron/{name}/enable", enableHandler(s))
-	admin.HandleFunc("POST /cron/{name}/disable", disableHandler(s))
+	admin.HandleFunc("POST /cron/{name}/trigger", triggerHandler(s, db))
+	admin.HandleFunc("POST /cron/{name}/enable", enableHandler(s, db))
+	admin.HandleFunc("POST /cron/{name}/disable", disableHandler(s, db))
 }
 
 func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
@@ -67,7 +69,7 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func triggerHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
+func triggerHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Trigger(name); err != nil {
@@ -76,13 +78,14 @@ func triggerHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) 
 			})
 			return
 		}
+		adminaudit.Log(db, r, "cron.trigger", "cron", name, "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
 	}
 }
 
-func enableHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
+func enableHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Enable(name); err != nil {
@@ -91,13 +94,14 @@ func enableHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 			})
 			return
 		}
+		adminaudit.Log(db, r, "cron.enable", "cron", name, "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
 	}
 }
 
-func disableHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
+func disableHandler(s *cron.Scheduler, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := s.Disable(name); err != nil {
@@ -106,6 +110,7 @@ func disableHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) 
 			})
 			return
 		}
+		adminaudit.Log(db, r, "cron.disable", "cron", name, "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})

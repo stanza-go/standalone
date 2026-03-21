@@ -8,13 +8,15 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/cron"
 	fhttp "github.com/stanza-go/framework/pkg/http"
+	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/admincron"
 	"github.com/stanza-go/standalone/testutil"
 )
 
-func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *cron.Scheduler) {
+func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *cron.Scheduler, *sqlite.DB) {
 	t.Helper()
 
+	db := testutil.SetupDB(t)
 	a := testutil.NewAdminAuth()
 	logger := testutil.NewLogger(t)
 
@@ -34,14 +36,14 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *cron.Scheduler) {
 	admin := api.Group("/admin")
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
-	admincron.Register(admin, s)
+	admincron.Register(admin, s, db)
 
-	return router, a, s
+	return router, a, s, db
 }
 
 func TestListEntries(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("GET", "/api/admin/cron", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -76,7 +78,7 @@ func TestListEntries(t *testing.T) {
 
 func TestListEntries_Unauthorized(t *testing.T) {
 	t.Parallel()
-	router, _, _ := setup(t)
+	router, _, _, _ := setup(t)
 
 	req := httptest.NewRequest("GET", "/api/admin/cron", nil)
 	rec := testutil.Do(router, req)
@@ -88,7 +90,7 @@ func TestListEntries_Unauthorized(t *testing.T) {
 
 func TestTrigger_Success(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/cron/test-job/trigger", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -107,7 +109,7 @@ func TestTrigger_Success(t *testing.T) {
 
 func TestTrigger_NotFound(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/cron/nonexistent/trigger", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -120,7 +122,7 @@ func TestTrigger_NotFound(t *testing.T) {
 
 func TestDisable_Success(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/cron/test-job/disable", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -146,7 +148,7 @@ func TestDisable_Success(t *testing.T) {
 
 func TestEnable_Success(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	// Disable first.
 	disableReq := httptest.NewRequest("POST", "/api/admin/cron/test-job/disable", nil)
@@ -178,7 +180,7 @@ func TestEnable_Success(t *testing.T) {
 
 func TestEnable_NotFound(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/cron/nonexistent/enable", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -191,7 +193,7 @@ func TestEnable_NotFound(t *testing.T) {
 
 func TestDisable_NotFound(t *testing.T) {
 	t.Parallel()
-	router, a, _ := setup(t)
+	router, a, _, _ := setup(t)
 
 	req := httptest.NewRequest("POST", "/api/admin/cron/nonexistent/disable", nil)
 	testutil.AddAdminAuth(t, req, a, "1")
@@ -199,5 +201,88 @@ func TestDisable_NotFound(t *testing.T) {
 
 	if rec.Code != 404 {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestTrigger_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	req := httptest.NewRequest("POST", "/api/admin/cron/test-job/trigger", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType, entityID string
+	err := db.QueryRow("SELECT action, entity_type, entity_id FROM audit_log WHERE action = 'cron.trigger'").
+		Scan(&action, &entityType, &entityID)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "cron" {
+		t.Errorf("entity_type = %q, want cron", entityType)
+	}
+	if entityID != "test-job" {
+		t.Errorf("entity_id = %q, want test-job", entityID)
+	}
+}
+
+func TestDisable_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	req := httptest.NewRequest("POST", "/api/admin/cron/test-job/disable", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType, entityID string
+	err := db.QueryRow("SELECT action, entity_type, entity_id FROM audit_log WHERE action = 'cron.disable'").
+		Scan(&action, &entityType, &entityID)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "cron" {
+		t.Errorf("entity_type = %q, want cron", entityType)
+	}
+	if entityID != "test-job" {
+		t.Errorf("entity_id = %q, want test-job", entityID)
+	}
+}
+
+func TestEnable_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, _, db := setup(t)
+
+	// Disable first so enable has something to do.
+	disableReq := httptest.NewRequest("POST", "/api/admin/cron/test-job/disable", nil)
+	testutil.AddAdminAuth(t, disableReq, a, "1")
+	testutil.Do(router, disableReq)
+
+	req := httptest.NewRequest("POST", "/api/admin/cron/test-job/enable", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType, entityID string
+	err := db.QueryRow("SELECT action, entity_type, entity_id FROM audit_log WHERE action = 'cron.enable'").
+		Scan(&action, &entityType, &entityID)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "cron" {
+		t.Errorf("entity_type = %q, want cron", entityType)
+	}
+	if entityID != "test-job" {
+		t.Errorf("entity_id = %q, want test-job", entityID)
 	}
 }

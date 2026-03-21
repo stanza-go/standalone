@@ -8,6 +8,8 @@ import (
 
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/queue"
+	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the queue admin routes on the given admin group.
@@ -18,11 +20,11 @@ import (
 //	GET  /api/admin/queue/jobs        — list jobs (query: status, type, limit, offset)
 //	POST /api/admin/queue/jobs/{id}/retry  — retry a failed/dead job
 //	POST /api/admin/queue/jobs/{id}/cancel — cancel a pending job
-func Register(admin *http.Group, q *queue.Queue) {
+func Register(admin *http.Group, q *queue.Queue, db *sqlite.DB) {
 	admin.HandleFunc("GET /queue/stats", statsHandler(q))
 	admin.HandleFunc("GET /queue/jobs", jobsHandler(q))
-	admin.HandleFunc("POST /queue/jobs/{id}/retry", retryHandler(q))
-	admin.HandleFunc("POST /queue/jobs/{id}/cancel", cancelHandler(q))
+	admin.HandleFunc("POST /queue/jobs/{id}/retry", retryHandler(q, db))
+	admin.HandleFunc("POST /queue/jobs/{id}/cancel", cancelHandler(q, db))
 }
 
 func statsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
@@ -127,7 +129,7 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func retryHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
+func retryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -142,13 +144,14 @@ func retryHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			})
 			return
 		}
+		adminaudit.Log(db, r, "job.retry", "job", strconv.FormatInt(id, 10), "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
 	}
 }
 
-func cancelHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
+func cancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -163,6 +166,7 @@ func cancelHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			})
 			return
 		}
+		adminaudit.Log(db, r, "job.cancel", "job", strconv.FormatInt(id, 10), "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
