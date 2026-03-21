@@ -434,9 +434,19 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 
 	// Public routes.
 	health.Register(api, db)
-	adminauth.Register(api, a, db, logger)
-	userauth.Register(api, ua.Auth, db, logger)
-	userreset.Register(api, db, emailClient, logger)
+
+	// Auth routes — rate limited to prevent brute force attacks.
+	// 20 requests per minute per IP covers legitimate use (including
+	// status polling from multiple tabs) while stopping automated attacks.
+	authRL := api.Group("")
+	authRL.Use(http.RateLimit(http.RateLimitConfig{
+		Limit:   20,
+		Window:  time.Minute,
+		Message: "too many requests, please try again later",
+	}))
+	adminauth.Register(authRL, a, db, logger)
+	userauth.Register(authRL, ua.Auth, db, logger)
+	userreset.Register(authRL, db, emailClient, logger)
 
 	// Protected admin routes — require valid JWT + admin scope.
 	admin := api.Group("/admin")
