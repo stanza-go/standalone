@@ -23,6 +23,7 @@ import (
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
 	"github.com/stanza-go/standalone/module/adminnotifications"
+	"github.com/stanza-go/standalone/module/adminprofile"
 	"github.com/stanza-go/standalone/module/notifications"
 	"github.com/stanza-go/standalone/module/adminroles"
 	"github.com/stanza-go/standalone/module/adminuploads"
@@ -456,8 +457,9 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
 
-	// Dashboard: base admin scope only.
+	// Dashboard and profile: base admin scope only.
 	dashboard.Register(admin, db, q, s)
+	adminprofile.Register(admin, db, logger)
 
 	// Scoped admin sub-groups — each module gets its specific scope.
 	withUsers := admin.Group("")

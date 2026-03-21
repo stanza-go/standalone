@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from "react-router";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
@@ -51,6 +51,7 @@ const navItems: NavItem[] = [
 
 export default function SidebarLayout() {
   const { admin, logout } = useAuth();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
@@ -161,14 +162,17 @@ export default function SidebarLayout() {
         <div className="border-t border-border p-3">
           {(mobileOpen || !collapsed) ? (
             <div className="flex items-center justify-between">
-              <div className="min-w-0">
+              <button
+                className="min-w-0 text-left hover:opacity-80 transition-opacity"
+                onClick={() => navigate("/profile")}
+              >
                 <p className="truncate text-sm font-medium">
                   {admin?.name || admin?.email}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {admin?.role}
                 </p>
-              </div>
+              </button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={logout}>
                 <LogOut className="h-4 w-4" />
               </Button>

@@ -18,6 +18,7 @@ import AuditPage from "@/pages/audit";
 import NotificationsPage from "@/pages/notifications";
 import RolesPage from "@/pages/roles";
 import UploadsPage from "@/pages/uploads";
+import ProfilePage from "@/pages/profile";
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="roles" element={<RolesPage />} />
             <Route path="uploads" element={<UploadsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
