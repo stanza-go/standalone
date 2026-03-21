@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, RefreshCw, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { EmptyState } from "@/components/ui/empty-state";
+
 
 interface Setting {
   key: string;
