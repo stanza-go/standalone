@@ -371,6 +371,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router := http.NewRouter()
 
+	router.Use(http.RequestID(http.RequestIDConfig{}))
 	router.Use(http.RequestLogger(logger))
 	router.Use(http.SecureHeaders(http.SecureHeadersConfig{}))
 
