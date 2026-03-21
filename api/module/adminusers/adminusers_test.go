@@ -3,6 +3,7 @@ package adminusers_test
 import (
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -313,5 +314,280 @@ func TestListAdmins_Pagination(t *testing.T) {
 	total := int(resp["total"].(float64))
 	if total != 4 {
 		t.Errorf("total = %d, want 4", total)
+	}
+}
+
+func TestCreateAdmin_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("POST", "/api/admin/admins", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestCreateAdmin_ShortPassword(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "short@stanza.dev",
+		"password": "123",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 422 {
+		t.Errorf("status = %d, want 422 for short password", rec.Code)
+	}
+}
+
+func TestCreateAdmin_DefaultRole(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "default-role@stanza.dev",
+		"password": "password123",
+		"name":     "Default Role Admin",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	admin := resp["admin"].(map[string]any)
+	if admin["role"] != "admin" {
+		t.Errorf("role = %v, want admin (default)", admin["role"])
+	}
+}
+
+func TestCreateAdmin_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	req := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "audit-create@stanza.dev",
+		"password": "password123",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType string
+	err := db.QueryRow("SELECT action, entity_type FROM audit_log WHERE action = 'admin.create'").
+		Scan(&action, &entityType)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "admin" {
+		t.Errorf("entity_type = %q, want admin", entityType)
+	}
+}
+
+func TestUpdateAdmin_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("PUT", "/api/admin/admins/1", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestUpdateAdmin_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/admin/admins/abc", map[string]string{
+		"name": "Test",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestDeleteAdmin_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("DELETE", "/api/admin/admins/abc", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestUpdateAdmin_SelfDeactivation(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	isActive := false
+	req := testutil.JSONRequest(t, "PUT", "/api/admin/admins/1", map[string]any{
+		"is_active": isActive,
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for self-deactivation", rec.Code)
+	}
+}
+
+func TestUpdateAdmin_InvalidRole(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	// Create an admin first.
+	createReq := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "invalid-role-update@stanza.dev",
+		"password": "password123",
+	})
+	testutil.AddAdminAuth(t, createReq, a, "1")
+	createRec := testutil.Do(router, createReq)
+	if createRec.Code != 201 {
+		t.Fatalf("create status = %d", createRec.Code)
+	}
+
+	var createResp map[string]any
+	testutil.DecodeJSON(t, createRec, &createResp)
+	id := int(createResp["admin"].(map[string]any)["id"].(float64))
+
+	req := testutil.JSONRequest(t, "PUT", fmt.Sprintf("/api/admin/admins/%d", id), map[string]string{
+		"role": "nonexistent-role",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid role", rec.Code)
+	}
+}
+
+func TestDeleteAdmin_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	createReq := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "audit-delete@stanza.dev",
+		"password": "password123",
+	})
+	testutil.AddAdminAuth(t, createReq, a, "1")
+	createRec := testutil.Do(router, createReq)
+	if createRec.Code != 201 {
+		t.Fatalf("create status = %d", createRec.Code)
+	}
+
+	var createResp map[string]any
+	testutil.DecodeJSON(t, createRec, &createResp)
+	id := int(createResp["admin"].(map[string]any)["id"].(float64))
+
+	deleteReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/admin/admins/%d", id), nil)
+	testutil.AddAdminAuth(t, deleteReq, a, "1")
+	deleteRec := testutil.Do(router, deleteReq)
+
+	if deleteRec.Code != 200 {
+		t.Fatalf("delete status = %d", deleteRec.Code)
+	}
+
+	var action, entityType string
+	err := db.QueryRow("SELECT action, entity_type FROM audit_log WHERE action = 'admin.delete'").
+		Scan(&action, &entityType)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "admin" {
+		t.Errorf("entity_type = %q, want admin", entityType)
+	}
+}
+
+func TestDeleteAdmin_RevokesRefreshTokens(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	// Create an admin.
+	createReq := testutil.JSONRequest(t, "POST", "/api/admin/admins", map[string]string{
+		"email":    "revoke-sessions@stanza.dev",
+		"password": "password123",
+	})
+	testutil.AddAdminAuth(t, createReq, a, "1")
+	createRec := testutil.Do(router, createReq)
+	if createRec.Code != 201 {
+		t.Fatalf("create status = %d", createRec.Code)
+	}
+
+	var createResp map[string]any
+	testutil.DecodeJSON(t, createRec, &createResp)
+	id := int(createResp["admin"].(map[string]any)["id"].(float64))
+	idStr := fmt.Sprintf("%d", id)
+
+	// Insert a fake refresh token for this admin.
+	_, err := db.Exec(
+		`INSERT INTO refresh_tokens (id, entity_type, entity_id, token_hash, expires_at) VALUES (?, 'admin', ?, 'fakehash', datetime('now', '+1 day'))`,
+		"fake-token-id", idStr,
+	)
+	if err != nil {
+		t.Fatalf("insert refresh token: %v", err)
+	}
+
+	// Delete the admin.
+	deleteReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/admin/admins/%d", id), nil)
+	testutil.AddAdminAuth(t, deleteReq, a, "1")
+	testutil.Do(router, deleteReq)
+
+	// Verify refresh token was deleted.
+	var count int
+	_ = db.QueryRow("SELECT COUNT(*) FROM refresh_tokens WHERE entity_type = 'admin' AND entity_id = ?", idStr).Scan(&count)
+	if count != 0 {
+		t.Errorf("expected 0 refresh tokens after delete, got %d", count)
+	}
+}
+
+func TestListAdmins_AdminStructure(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/admins", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	admins := resp["admins"].([]any)
+	if len(admins) == 0 {
+		t.Fatal("expected at least 1 admin")
+	}
+
+	admin := admins[0].(map[string]any)
+	for _, field := range []string{"id", "email", "name", "role", "is_active", "created_at", "updated_at"} {
+		if _, ok := admin[field]; !ok {
+			t.Errorf("missing field %q in admin", field)
+		}
 	}
 }

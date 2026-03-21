@@ -2,6 +2,7 @@ package adminsettings_test
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -196,5 +197,149 @@ func TestUpdateSetting_VerifyPersistence(t *testing.T) {
 	}
 	if !found {
 		t.Error("persist_test setting not found in list")
+	}
+}
+
+func TestUpdateSetting_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("PUT", "/api/admin/settings/some_key", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateSetting_Unauthorized(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/admin/settings/test_key", map[string]string{
+		"value": "new_value",
+	})
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestUpdateSetting_AuditLog(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	_, err := db.Exec(
+		`INSERT INTO settings (key, value, group_name, updated_at) VALUES (?, ?, ?, ?)`,
+		"audit_test", "old", "general", "2026-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("insert setting: %v", err)
+	}
+
+	req := testutil.JSONRequest(t, "PUT", "/api/admin/settings/audit_test", map[string]string{
+		"value": "new",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var action, entityType, entityID string
+	err = db.QueryRow("SELECT action, entity_type, entity_id FROM audit_log WHERE action = 'setting.update'").
+		Scan(&action, &entityType, &entityID)
+	if err != nil {
+		t.Fatalf("audit log query: %v", err)
+	}
+	if entityType != "setting" {
+		t.Errorf("entity_type = %q, want setting", entityType)
+	}
+	if entityID != "audit_test" {
+		t.Errorf("entity_id = %q, want audit_test", entityID)
+	}
+}
+
+func TestUpdateSetting_VerifyTimestamp(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	_, err := db.Exec(
+		`INSERT INTO settings (key, value, group_name, updated_at) VALUES (?, ?, ?, ?)`,
+		"ts_test", "old", "general", "2020-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("insert setting: %v", err)
+	}
+
+	req := testutil.JSONRequest(t, "PUT", "/api/admin/settings/ts_test", map[string]string{
+		"value": "new",
+	})
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	updatedAt := resp["updated_at"].(string)
+	if strings.HasPrefix(updatedAt, "2020") {
+		t.Errorf("updated_at should be current, got %s", updatedAt)
+	}
+}
+
+func TestListSettings_Ordering(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	// Insert settings in different groups.
+	for _, s := range []struct{ key, group string }{
+		{"z_key", "auth"},
+		{"a_key", "auth"},
+		{"m_key", "general"},
+	} {
+		_, err := db.Exec(
+			`INSERT OR IGNORE INTO settings (key, value, group_name, updated_at) VALUES (?, 'v', ?, datetime('now'))`,
+			s.key, s.group,
+		)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/admin/settings", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	settings := resp["settings"].([]any)
+	if len(settings) < 3 {
+		t.Fatalf("expected at least 3 settings, got %d", len(settings))
+	}
+
+	// Verify ordered by group_name ASC, then key ASC.
+	var lastGroup, lastKey string
+	for _, s := range settings {
+		setting := s.(map[string]any)
+		group := setting["group_name"].(string)
+		key := setting["key"].(string)
+		if group < lastGroup || (group == lastGroup && key < lastKey) {
+			t.Errorf("settings not sorted: %s/%s came after %s/%s", group, key, lastGroup, lastKey)
+		}
+		lastGroup = group
+		lastKey = key
 	}
 }

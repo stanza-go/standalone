@@ -563,3 +563,196 @@ func TestServeFile_DeletedNotFound(t *testing.T) {
 		t.Fatalf("status = %d, want 404 for deleted file", rec.Code)
 	}
 }
+
+func TestGetUpload_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/uploads/abc", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestDeleteUpload_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("DELETE", "/api/user/uploads/abc", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestServeFile_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/uploads/abc/file", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestServeThumbnail_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/uploads/abc/thumb", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400 for invalid ID", rec.Code)
+	}
+}
+
+func TestServeFile_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/uploads/9999/file", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestServeThumbnail_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/uploads/9999/thumb", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestDeleteUpload_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("DELETE", "/api/user/uploads/9999", nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestUpload_ContentTypeDetection(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	tests := []struct {
+		filename    string
+		contentType string
+	}{
+		{"doc.pdf", "application/pdf"},
+		{"archive.zip", "application/zip"},
+		{"data.json", "application/json"},
+		{"data.csv", "text/csv"},
+		{"video.mp4", "video/mp4"},
+		{"song.mp3", "audio/mpeg"},
+		{"unknown.xyz", "application/octet-stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			t.Parallel()
+			rec := uploadFile(t, router, a, "100", tt.filename, []byte("data"))
+			if rec.Code != 201 {
+				t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+			}
+
+			var resp map[string]any
+			testutil.DecodeJSON(t, rec, &resp)
+			upload := resp["upload"].(map[string]any)
+			if upload["content_type"] != tt.contentType {
+				t.Errorf("content_type = %v, want %s", upload["content_type"], tt.contentType)
+			}
+		})
+	}
+}
+
+func TestUpload_SmallImageNoResize(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	// 100x100 — smaller than 300px threshold — should still get a thumbnail.
+	pngData := createTestPNG(t, 100, 100)
+	rec := uploadFile(t, router, a, "100", "small.png", pngData)
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	upload := resp["upload"].(map[string]any)
+
+	if upload["has_thumbnail"] != true {
+		t.Error("small images should still get thumbnails")
+	}
+}
+
+func TestUpload_ResponseStructure(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	rec := uploadFile(t, router, a, "100", "struct.txt", []byte("test"))
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	upload := resp["upload"].(map[string]any)
+
+	for _, field := range []string{"id", "uuid", "original_name", "content_type", "size_bytes", "has_thumbnail", "created_at"} {
+		if _, ok := upload[field]; !ok {
+			t.Errorf("missing field %q in upload response", field)
+		}
+	}
+}
+
+func TestServeThumbnail_DeletedUpload(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	pngData := createTestPNG(t, 600, 400)
+	upRec := uploadFile(t, router, a, "100", "thumb-del.png", pngData)
+	var upResp map[string]any
+	testutil.DecodeJSON(t, upRec, &upResp)
+	id := upResp["upload"].(map[string]any)["id"].(float64)
+
+	// Delete the upload.
+	delReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/user/uploads/%d", int(id)), nil)
+	testutil.AddUserAuth(t, delReq, a, "100")
+	testutil.Do(router, delReq)
+
+	// Try to get thumbnail of deleted upload.
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/user/uploads/%d/thumb", int(id)), nil)
+	testutil.AddUserAuth(t, req, a, "100")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404 for deleted upload thumbnail", rec.Code)
+	}
+}

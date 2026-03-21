@@ -3,6 +3,7 @@ package userprofile_test
 import (
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -298,6 +299,162 @@ func TestChangePassword_MissingFields(t *testing.T) {
 				t.Errorf("status = %d, want 422", rec.Code)
 			}
 		})
+	}
+}
+
+func TestUpdateProfile_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "badjson@example.com", "password123", "User")
+
+	req := httptest.NewRequest("PUT", "/api/user/profile", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateProfile_BothNameAndEmail(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "both@example.com", "password123", "Old Name")
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile", map[string]string{
+		"name":  "New Name",
+		"email": "both-new@example.com",
+	})
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	user := resp["user"].(map[string]any)
+	if user["name"] != "New Name" {
+		t.Errorf("name = %v, want New Name", user["name"])
+	}
+	if user["email"] != "both-new@example.com" {
+		t.Errorf("email = %v, want both-new@example.com", user["email"])
+	}
+}
+
+func TestUpdateProfile_Unauthorized(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile", map[string]string{
+		"name": "Hacker",
+	})
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestUpdateProfile_DeletedUser(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "del-update@example.com", "password123", "User")
+	_, _ = db.Exec(`UPDATE users SET deleted_at = datetime('now') WHERE id = ?`, uid)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile", map[string]string{
+		"name": "New Name",
+	})
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404 for deleted user", rec.Code)
+	}
+}
+
+func TestChangePassword_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "badjson-pw@example.com", "password123", "User")
+
+	req := httptest.NewRequest("PUT", "/api/user/profile/password", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestChangePassword_Unauthorized(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile/password", map[string]string{
+		"current_password": "password123",
+		"new_password":     "newpass123",
+	})
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestChangePassword_DeletedUser(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "del-pw@example.com", "password123", "User")
+	_, _ = db.Exec(`UPDATE users SET deleted_at = datetime('now') WHERE id = ?`, uid)
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile/password", map[string]string{
+		"current_password": "password123",
+		"new_password":     "newpass123",
+	})
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404 for deleted user", rec.Code)
+	}
+}
+
+func TestGetProfile_NonExistentUser(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/user/profile", nil)
+	testutil.AddUserAuth(t, req, a, "99999")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Errorf("status = %d, want 404 for non-existent user", rec.Code)
+	}
+}
+
+func TestUpdateProfile_InvalidEmail(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	uid := createTestUser(t, db, "validemail@example.com", "password123", "User")
+
+	req := testutil.JSONRequest(t, "PUT", "/api/user/profile", map[string]string{
+		"email": "not-an-email",
+	})
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 422 {
+		t.Errorf("status = %d, want 422 for invalid email\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
 
