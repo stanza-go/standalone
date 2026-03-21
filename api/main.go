@@ -372,6 +372,7 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router := http.NewRouter()
 
 	router.Use(http.RequestLogger(logger))
+	router.Use(http.SecureHeaders(http.SecureHeadersConfig{}))
 
 	// CORS: allow cross-origin requests from admin and UI dev servers.
 	// Configure via STANZA_CORS_ORIGINS (comma-separated) or cors.origins
