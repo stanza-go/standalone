@@ -45,6 +45,7 @@ import (
 	"github.com/stanza-go/standalone/module/usermgmt"
 	"github.com/stanza-go/standalone/module/userapikeys"
 	"github.com/stanza-go/standalone/module/userreset"
+	"github.com/stanza-go/standalone/module/usersettings"
 	"github.com/stanza-go/standalone/seed"
 )
 
@@ -516,6 +517,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	usernotifications.Register(user, db)
 	useruploads.Register(user, db, dir.Uploads)
 	userapikeys.Register(user, db)
+	usersettings.Register(user, db)
 
 	// API key authenticated routes — for programmatic access.
 	v1 := api.Group("/v1")

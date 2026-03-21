@@ -22,6 +22,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428810, "create_roles", createRolesUp, createRolesDown)
 	db.AddMigration(1742428811, "create_notifications", createNotificationsUp, createNotificationsDown)
 	db.AddMigration(1742428812, "add_api_key_entity", addAPIKeyEntityUp, addAPIKeyEntityDown)
+	db.AddMigration(1742428813, "create_user_settings", createUserSettingsUp, createUserSettingsDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -423,4 +424,27 @@ func addAPIKeyEntityDown(tx *sqlite.Tx) error {
 	// SQLite doesn't support DROP COLUMN before 3.35.0; recreate table if needed.
 	// For simplicity, just drop the index — the columns become unused.
 	return nil
+}
+
+func createUserSettingsUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE user_settings (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id    INTEGER NOT NULL,
+		key        TEXT    NOT NULL,
+		value      TEXT    NOT NULL DEFAULT '',
+		created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		UNIQUE(user_id, key)
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_user_settings_user_id ON user_settings(user_id)`)
+	return err
+}
+
+func createUserSettingsDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS user_settings`)
+	return err
 }
