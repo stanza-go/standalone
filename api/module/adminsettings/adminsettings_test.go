@@ -23,7 +23,7 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *sqlite.DB) {
 	admin := api.Group("/admin")
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
-	adminsettings.Register(admin, db)
+	adminsettings.Register(admin, db, nil)
 
 	return router, a, db
 }

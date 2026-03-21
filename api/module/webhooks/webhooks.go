@@ -56,6 +56,10 @@ type deliveryJob struct {
 // Delivery is asynchronous — jobs are enqueued and processed by the queue
 // worker.
 func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) error {
+	if d == nil {
+		return nil
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err

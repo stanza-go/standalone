@@ -20,7 +20,7 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *sqlite.DB) {
 	logger := testutil.NewLogger(t)
 	router := testutil.NewRouter()
 	api := router.Group("/api")
-	userauth.Register(api, a, db, logger)
+	userauth.Register(api, a, db, logger, nil)
 	return router, a, db
 }
 

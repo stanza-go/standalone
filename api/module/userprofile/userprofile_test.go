@@ -25,7 +25,7 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *sqlite.DB) {
 	user := api.Group("/user")
 	user.Use(a.RequireAuth())
 	user.Use(auth.RequireScope("user"))
-	userprofile.Register(user, db, logger)
+	userprofile.Register(user, db, logger, nil)
 
 	return router, a, db
 }
