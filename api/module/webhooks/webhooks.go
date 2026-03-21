@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,7 +190,7 @@ type DeliveryError struct {
 }
 
 func (e *DeliveryError) Error() string {
-	return "webhook: delivery failed with status " + strings.TrimSpace(json.Number(string(rune(e.StatusCode))).String())
+	return "webhook: delivery failed with status " + strconv.Itoa(e.StatusCode)
 }
 
 // GenerateSecret creates a random webhook secret in the format "whsec_<hex>".

@@ -457,6 +457,9 @@ func generateThumbnail(srcPath, dstPath string) bool {
 // thumbDimensions computes thumbnail width/height to fit within maxDim
 // while preserving aspect ratio.
 func thumbDimensions(srcW, srcH, maxDim int) (int, int) {
+	if srcW <= 0 || srcH <= 0 {
+		return 0, 0
+	}
 	if srcW <= maxDim && srcH <= maxDim {
 		return srcW, srcH
 	}
