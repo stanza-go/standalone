@@ -423,3 +423,71 @@ func TestValidator_NotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent key")
 	}
 }
+
+func TestValidator_IncrementsRequestCount(t *testing.T) {
+	t.Parallel()
+	_, _, db := setup(t)
+
+	fullKey := "stza_" + "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5"
+	hash := sha256.Sum256([]byte(fullKey))
+	keyHash := hex.EncodeToString(hash[:])
+
+	_, err := db.Exec(
+		`INSERT INTO api_keys (name, key_prefix, key_hash, scopes, created_by, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+		"count-test", "stza_d4e5f6a1", keyHash, "read", 1,
+	)
+	if err != nil {
+		t.Fatalf("insert api key: %v", err)
+	}
+
+	validator := apikeys.NewValidator(db)
+
+	// Validate 3 times.
+	for range 3 {
+		if _, err := validator(keyHash); err != nil {
+			t.Fatalf("validator error: %v", err)
+		}
+	}
+
+	// Check request_count is 3.
+	var count int
+	row := db.QueryRow(`SELECT request_count FROM api_keys WHERE key_hash = ?`, keyHash)
+	if err := row.Scan(&count); err != nil {
+		t.Fatalf("scan request_count: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("request_count = %d, want 3", count)
+	}
+}
+
+func TestListAPIKeys_IncludesRequestCount(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	createAPIKey(t, router, a, "Count Key")
+
+	req := httptest.NewRequest("GET", "/api/admin/api-keys", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	keys := resp["api_keys"].([]any)
+	if len(keys) == 0 {
+		t.Fatal("expected at least 1 key")
+	}
+
+	key := keys[0].(map[string]any)
+	rc, ok := key["request_count"]
+	if !ok {
+		t.Fatal("missing request_count in response")
+	}
+	if int(rc.(float64)) != 0 {
+		t.Errorf("request_count = %v, want 0 for new key", rc)
+	}
+}

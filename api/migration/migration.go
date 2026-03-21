@@ -16,6 +16,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428804, "create_api_keys", createAPIKeysUp, createAPIKeysDown)
 	db.AddMigration(1742428805, "create_audit_log", createAuditLogUp, createAuditLogDown)
 	db.AddMigration(1742428806, "create_cron_runs", createCronRunsUp, createCronRunsDown)
+	db.AddMigration(1742428807, "add_api_key_request_count", addAPIKeyRequestCountUp, addAPIKeyRequestCountDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -205,5 +206,15 @@ func createCronRunsUp(tx *sqlite.Tx) error {
 
 func createCronRunsDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS cron_runs`)
+	return err
+}
+
+func addAPIKeyRequestCountUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE api_keys ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+func addAPIKeyRequestCountDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE api_keys DROP COLUMN request_count`)
 	return err
 }

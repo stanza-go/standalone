@@ -22,6 +22,7 @@ interface APIKey {
   key_prefix: string;
   scopes: string;
   created_by: number;
+  request_count: number;
   last_used_at: string;
   expires_at: string;
   created_at: string;
@@ -245,6 +246,7 @@ export default function APIKeysPage() {
               <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Last Used</th>
+              <th className="text-right p-3 font-medium hidden lg:table-cell">Requests</th>
               <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>
               <th className="text-left p-3 font-medium">Status</th>
               <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
@@ -253,7 +255,7 @@ export default function APIKeysPage() {
           </thead>
           <tbody>
             {keys.length === 0 ? (
-              <TableEmptyRow colSpan={8} message="No API keys found" />
+              <TableEmptyRow colSpan={9} message="No API keys found" />
             ) : (
               keys.map((k) => (
                 <tr
@@ -279,6 +281,9 @@ export default function APIKeysPage() {
                   </td>
                   <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
                     {formatTime(k.last_used_at)}
+                  </td>
+                  <td className="p-3 text-right text-xs font-mono hidden lg:table-cell">
+                    {k.request_count > 0 ? k.request_count.toLocaleString() : "\u2014"}
                   </td>
                   <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
                     {k.expires_at ? (

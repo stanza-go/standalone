@@ -34,15 +34,16 @@ func Register(admin *http.Group, db *sqlite.DB) {
 }
 
 type apiKeyJSON struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	KeyPrefix  string `json:"key_prefix"`
-	Scopes     string `json:"scopes"`
-	CreatedBy  int64  `json:"created_by"`
-	LastUsedAt string `json:"last_used_at"`
-	ExpiresAt  string `json:"expires_at"`
-	CreatedAt  string `json:"created_at"`
-	RevokedAt  string `json:"revoked_at"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	KeyPrefix    string `json:"key_prefix"`
+	Scopes       string `json:"scopes"`
+	CreatedBy    int64  `json:"created_by"`
+	RequestCount int64  `json:"request_count"`
+	LastUsedAt   string `json:"last_used_at"`
+	ExpiresAt    string `json:"expires_at"`
+	CreatedAt    string `json:"created_at"`
+	RevokedAt    string `json:"revoked_at"`
 }
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
@@ -55,7 +56,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = sqlite.Select("id", "name", "key_prefix", "scopes", "created_by",
-			"COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
+			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys").
 			OrderBy("id", "DESC").
@@ -73,7 +74,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		for rows.Next() {
 			var k apiKeyJSON
 			if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scopes, &k.CreatedBy,
-				&k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RevokedAt); err != nil {
+				&k.RequestCount, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RevokedAt); err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "failed to scan api key")
 				return
 			}
@@ -210,14 +211,14 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Load current key.
 		var current apiKeyJSON
 		sql, args := sqlite.Select("name", "scopes", "key_prefix", "created_by",
-			"COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
+			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys").
 			Where("id = ?", id).
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&current.Name, &current.Scopes, &current.KeyPrefix, &current.CreatedBy,
-			&current.LastUsedAt, &current.ExpiresAt, &current.CreatedAt, &current.RevokedAt); err != nil {
+			&current.RequestCount, &current.LastUsedAt, &current.ExpiresAt, &current.CreatedAt, &current.RevokedAt); err != nil {
 			http.WriteError(w, http.StatusNotFound, "api key not found")
 			return
 		}

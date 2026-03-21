@@ -40,13 +40,9 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 			}
 		}
 
-		// Update last_used_at asynchronously — don't block the request.
+		// Update last_used_at and request_count — don't block the request.
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		usql, uargs := sqlite.Update("api_keys").
-			Set("last_used_at", now).
-			Where("id = ?", id).
-			Build()
-		db.Exec(usql, uargs...)
+		db.Exec(`UPDATE api_keys SET last_used_at = ?, request_count = request_count + 1 WHERE id = ?`, now, id)
 
 		// Build claims from key scopes.
 		var scopeList []string
