@@ -222,6 +222,172 @@ func TestUserNotifications_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestUserListNotifications_UnreadFilter(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	id1, _ := notifications.NotifyUser(db, uid, "info", "Read me", "msg1")
+	notifications.NotifyUser(db, uid, "info", "Unread", "msg2")
+
+	// Mark first as read.
+	db.Exec("UPDATE notifications SET read_at = datetime('now') WHERE id = ?", id1)
+
+	// Request with unread filter.
+	req := httptest.NewRequest("GET", "/api/user/notifications?unread=true", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	items := resp["notifications"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 unread notification, got %d", len(items))
+	}
+	n := items[0].(map[string]any)
+	if n["title"] != "Unread" {
+		t.Errorf("title = %v, want 'Unread'", n["title"])
+	}
+	if resp["total"].(float64) != 1 {
+		t.Errorf("total = %v, want 1 (unread count)", resp["total"])
+	}
+}
+
+func TestUserMarkRead_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	req := httptest.NewRequest("POST", "/api/user/notifications/notanumber/read", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUserMarkRead_AlreadyRead(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	id, _ := notifications.NotifyUser(db, uid, "info", "Already read", "msg")
+
+	// Mark it as read.
+	markReq := httptest.NewRequest("POST", "/api/user/notifications/"+itoa(id)+"/read", nil)
+	testutil.AddUserAuth(t, markReq, a, itoa(uid))
+	markRec := testutil.Do(router, markReq)
+	if markRec.Code != 200 {
+		t.Fatalf("first mark: status = %d", markRec.Code)
+	}
+
+	// Try to mark again — should be 404 (already read).
+	markReq2 := httptest.NewRequest("POST", "/api/user/notifications/"+itoa(id)+"/read", nil)
+	testutil.AddUserAuth(t, markReq2, a, itoa(uid))
+	markRec2 := testutil.Do(router, markReq2)
+
+	if markRec2.Code != 404 {
+		t.Fatalf("status = %d, want 404 (already read)\nbody: %s", markRec2.Code, markRec2.Body.String())
+	}
+}
+
+func TestUserMarkRead_NonexistentNotification(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	req := httptest.NewRequest("POST", "/api/user/notifications/99999/read", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUserDeleteNotification_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	req := httptest.NewRequest("DELETE", "/api/user/notifications/notanumber", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUserDeleteNotification_Nonexistent(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	req := httptest.NewRequest("DELETE", "/api/user/notifications/99999", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUserMarkAllRead_NoUnread(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	// No notifications created — mark all read should succeed with marked=0.
+	req := httptest.NewRequest("POST", "/api/user/notifications/read-all", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	if resp["marked"].(float64) != 0 {
+		t.Errorf("marked = %v, want 0", resp["marked"])
+	}
+}
+
+func TestUserListNotifications_Pagination(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+	uid := createTestUser(t, db)
+
+	for i := 0; i < 5; i++ {
+		notifications.NotifyUser(db, uid, "info", fmt.Sprintf("N%d", i), "")
+	}
+
+	req := httptest.NewRequest("GET", "/api/user/notifications?limit=2&offset=0", nil)
+	testutil.AddUserAuth(t, req, a, itoa(uid))
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	items := resp["notifications"].([]any)
+	if len(items) != 2 {
+		t.Errorf("page size = %d, want 2", len(items))
+	}
+	if resp["total"].(float64) != 5 {
+		t.Errorf("total = %v, want 5", resp["total"])
+	}
+}
+
 func itoa(id int64) string {
 	return fmt.Sprintf("%d", id)
 }

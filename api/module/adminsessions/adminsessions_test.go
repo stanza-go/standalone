@@ -182,3 +182,96 @@ func TestRevokeSession_NotFound(t *testing.T) {
 		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestRevokeSession_AuditLogged(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	insertSession(t, db, "sess-audit", "admin", "1", time.Now().Add(24*time.Hour))
+
+	req := httptest.NewRequest("DELETE", "/api/admin/sessions/sess-audit", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	// Verify audit log entry was created.
+	var count int
+	row := db.QueryRow("SELECT COUNT(*) FROM audit_log WHERE action = 'session.revoke' AND entity_id = 'sess-audit'")
+	_ = row.Scan(&count)
+	if count != 1 {
+		t.Errorf("expected 1 audit log entry, got %d", count)
+	}
+}
+
+func TestListSessions_AdminEmailJoin(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	// Insert a session for admin ID 1 (admin@stanza.dev from seed).
+	insertSession(t, db, "sess-email", "admin", "1", time.Now().Add(24*time.Hour))
+
+	req := httptest.NewRequest("GET", "/api/admin/sessions", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	sessions := resp["sessions"].([]any)
+
+	// Find the admin session and verify email is populated.
+	found := false
+	for _, s := range sessions {
+		sess := s.(map[string]any)
+		if sess["id"] == "sess-email" {
+			found = true
+			if sess["email"] != "admin@stanza.dev" {
+				t.Errorf("email = %v, want admin@stanza.dev", sess["email"])
+			}
+			if sess["name"] == "" || sess["name"] == nil {
+				t.Error("name should be populated for admin sessions")
+			}
+			if sess["entity_type"] != "admin" {
+				t.Errorf("entity_type = %v, want admin", sess["entity_type"])
+			}
+		}
+	}
+	if !found {
+		t.Error("session 'sess-email' not found in list")
+	}
+}
+
+func TestListSessions_UserSessionEmptyEmail(t *testing.T) {
+	t.Parallel()
+	router, a, db := setup(t)
+
+	// Insert a user-type session (not an admin — email should be empty from LEFT JOIN).
+	insertSession(t, db, "sess-user", "user", "999", time.Now().Add(24*time.Hour))
+
+	req := httptest.NewRequest("GET", "/api/admin/sessions", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	sessions := resp["sessions"].([]any)
+
+	for _, s := range sessions {
+		sess := s.(map[string]any)
+		if sess["id"] == "sess-user" {
+			if sess["email"] != "" {
+				t.Errorf("user session email = %v, want empty", sess["email"])
+			}
+		}
+	}
+}

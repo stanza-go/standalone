@@ -3,6 +3,7 @@ package adminauth_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,5 +278,109 @@ func TestLogout_NoToken(t *testing.T) {
 	// Logout should succeed even without a token.
 	if rec.Code != 200 {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestLogin_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := httptest.NewRequest("POST", "/api/admin/auth/login", strings.NewReader("not-json"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Errorf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestStatus_DeactivatedAdmin(t *testing.T) {
+	t.Parallel()
+	router, _, db := setup(t)
+
+	// Login first to get a refresh token.
+	loginReq := testutil.JSONRequest(t, "POST", "/api/admin/auth/login", map[string]string{
+		"email":    "admin@stanza.dev",
+		"password": "admin",
+	})
+	loginRec := testutil.Do(router, loginReq)
+	if loginRec.Code != 200 {
+		t.Fatalf("login failed: %d", loginRec.Code)
+	}
+
+	var refreshToken string
+	for _, c := range loginRec.Result().Cookies() {
+		if c.Name == auth.RefreshTokenCookie {
+			refreshToken = c.Value
+		}
+	}
+	if refreshToken == "" {
+		t.Fatal("no refresh token in login response")
+	}
+
+	// Deactivate the admin account.
+	_, err := db.Exec("UPDATE admins SET is_active = 0 WHERE email = 'admin@stanza.dev'")
+	if err != nil {
+		t.Fatalf("deactivate admin: %v", err)
+	}
+
+	// Status should now fail with 401 (account deactivated).
+	statusReq := httptest.NewRequest("GET", "/api/admin/auth/", nil)
+	testutil.AddRefreshToken(statusReq, refreshToken)
+	statusRec := testutil.Do(router, statusReq)
+
+	if statusRec.Code != 401 {
+		t.Fatalf("status = %d, want 401\nbody: %s", statusRec.Code, statusRec.Body.String())
+	}
+
+	// Verify the refresh token was cleaned up.
+	tokenHash := auth.HashToken(refreshToken)
+	var count int
+	row := db.QueryRow("SELECT COUNT(*) FROM refresh_tokens WHERE token_hash = ?", tokenHash)
+	_ = row.Scan(&count)
+	if count != 0 {
+		t.Error("refresh token should be deleted after deactivation")
+	}
+}
+
+func TestStatus_InvalidRefreshToken(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/auth/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.RefreshTokenCookie, Value: "invalid-token-value"})
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestLogin_ResponseStructure(t *testing.T) {
+	t.Parallel()
+	router, _, _ := setup(t)
+
+	req := testutil.JSONRequest(t, "POST", "/api/admin/auth/login", map[string]string{
+		"email":    "admin@stanza.dev",
+		"password": "admin",
+	})
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	admin := resp["admin"].(map[string]any)
+
+	// Verify all expected fields exist.
+	for _, field := range []string{"id", "email", "name", "role"} {
+		if _, ok := admin[field]; !ok {
+			t.Errorf("missing field %q in admin response", field)
+		}
+	}
+	if admin["name"] == nil || admin["name"] == "" {
+		t.Error("admin name should not be empty")
 	}
 }

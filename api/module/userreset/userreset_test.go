@@ -377,6 +377,98 @@ func TestForgotPasswordWithEmailClient(t *testing.T) {
 	}
 }
 
+func TestForgotPasswordInvalidJSON(t *testing.T) {
+	_, router, _ := setup(t)
+
+	rec := doJSON(router, "POST", "/api/auth/forgot-password", "not-json")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestResetPasswordInvalidJSON(t *testing.T) {
+	_, router, _ := setup(t)
+
+	rec := doJSON(router, "POST", "/api/auth/reset-password", "not-json")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestResetPasswordDeletedUser(t *testing.T) {
+	db, router, _ := setup(t)
+	createTestUser(t, db, "deleted@example.com", "oldpassword123")
+
+	// Soft-delete the user.
+	_, err := db.Exec("UPDATE users SET deleted_at = datetime('now') WHERE email = 'deleted@example.com'")
+	if err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	// Insert a valid reset token.
+	token := "deleted-user-00000000000000000000000000000000000000000000000000000"
+	tokenHash := auth.HashToken(token)
+	expiresAt := time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339)
+	_, err = db.Exec(
+		"INSERT INTO password_reset_tokens (id, email, token_hash, expires_at) VALUES ('del-id', 'deleted@example.com', ?, ?)",
+		tokenHash, expiresAt,
+	)
+	if err != nil {
+		t.Fatalf("insert reset token: %v", err)
+	}
+
+	rec := doJSON(router, "POST", "/api/auth/reset-password", map[string]string{
+		"token":    token,
+		"password": "newpassword456",
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for deleted user, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestForgotPasswordEmailSendError(t *testing.T) {
+	// Email server that returns 500 error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		_, _ = w.Write([]byte(`{"error":"server error"}`))
+	}))
+	defer srv.Close()
+
+	db := testutil.SetupDB(t)
+	router := testutil.NewRouter()
+	logger := testutil.NewLogger(t)
+
+	emailClient := email.New("re_test_key",
+		email.WithFrom("noreply@test.com"),
+		email.WithEndpoint(srv.URL),
+	)
+
+	api := router.Group("/api")
+	Register(api, db, emailClient, logger)
+
+	createTestUser(t, db, "error@example.com", "password123")
+
+	// Should still return 200 despite email failure.
+	rec := doJSON(router, "POST", "/api/auth/forgot-password", map[string]string{
+		"email": "error@example.com",
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 even with email error, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Token should still be stored.
+	var count int
+	row := db.QueryRow("SELECT COUNT(*) FROM password_reset_tokens WHERE email = 'error@example.com'")
+	_ = row.Scan(&count)
+	if count != 1 {
+		t.Fatalf("expected 1 token stored despite email error, got %d", count)
+	}
+}
+
 func TestResetPasswordDeactivatedUser(t *testing.T) {
 	db, router, _ := setup(t)
 	createTestUser(t, db, "test@example.com", "oldpassword123")

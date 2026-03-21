@@ -657,3 +657,215 @@ func TestUpload_CleanupOnDBError(t *testing.T) {
 		t.Errorf("expected 1 file in uploads dir, got %d", count)
 	}
 }
+
+func TestDetectContentType_AllExtensions(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	tests := []struct {
+		filename string
+		wantType string
+	}{
+		{"image.png", "image/png"},
+		{"animation.gif", "image/gif"},
+		{"photo.webp", "image/webp"},
+		{"icon.svg", "image/svg+xml"},
+		{"readme.txt", "text/plain"},
+		{"page.html", "text/html"},
+		{"page.htm", "text/html"},
+		{"style.css", "text/css"},
+		{"script.js", "application/javascript"},
+		{"video.mp4", "video/mp4"},
+		{"song.mp3", "audio/mpeg"},
+		{"audio.wav", "audio/wav"},
+		{"document.doc", "application/msword"},
+		{"document.docx", "application/msword"},
+		{"spreadsheet.xls", "application/vnd.ms-excel"},
+		{"spreadsheet.xlsx", "application/vnd.ms-excel"},
+		{"config.json", "application/json"},
+	}
+
+	for _, tc := range tests {
+		rec := uploadFile(t, router, a, tc.filename, []byte("x"), nil)
+		if rec.Code != 201 {
+			t.Fatalf("%s: status = %d, want 201\nbody: %s", tc.filename, rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		testutil.DecodeJSON(t, rec, &resp)
+		upload := resp["upload"].(map[string]any)
+		if upload["content_type"] != tc.wantType {
+			t.Errorf("%s: content_type = %v, want %s", tc.filename, upload["content_type"], tc.wantType)
+		}
+	}
+}
+
+func TestGetUpload_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads/notanumber", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeleteUpload_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("DELETE", "/api/admin/uploads/notanumber", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeFile_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads/notanumber/file", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeThumbnail_InvalidID(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads/notanumber/thumb", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeThumbnail_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads/99999/thumb", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeFile_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads/99999/file", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeleteUpload_NotFound(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("DELETE", "/api/admin/uploads/99999", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListUploads_FilterByEntityType(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	uploadFile(t, router, a, "admin.txt", []byte("x"), map[string]string{"entity_type": "admin", "entity_id": "1"})
+	uploadFile(t, router, a, "user.txt", []byte("y"), map[string]string{"entity_type": "user", "entity_id": "42"})
+
+	req := httptest.NewRequest("GET", "/api/admin/uploads?entity_type=user", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	uploads := resp["uploads"].([]any)
+
+	if len(uploads) != 1 {
+		t.Errorf("expected 1 upload with entity_type=user, got %d", len(uploads))
+	}
+	if len(uploads) > 0 {
+		u := uploads[0].(map[string]any)
+		if u["entity_type"] != "user" {
+			t.Errorf("entity_type = %v, want user", u["entity_type"])
+		}
+	}
+}
+
+func TestThumbnail_TallImage(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	// Upload a tall image (height > width) to test height-dominant scaling.
+	pngData := createTestPNG(t, 200, 800)
+	rec := uploadFile(t, router, a, "tall.png", pngData, nil)
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+	upload := resp["upload"].(map[string]any)
+
+	if upload["has_thumbnail"] != true {
+		t.Error("expected has_thumbnail=true for tall image")
+	}
+}
+
+func TestServeFile_DiskFileMissing(t *testing.T) {
+	t.Parallel()
+	router, a, _, uploadsDir := setup(t)
+
+	// Upload a file.
+	upRec := uploadFile(t, router, a, "vanish.txt", []byte("bye"), nil)
+	var upResp map[string]any
+	testutil.DecodeJSON(t, upRec, &upResp)
+	upload := upResp["upload"].(map[string]any)
+	id := upload["id"].(float64)
+	uuid := upload["uuid"].(string)
+
+	// Delete the file from disk.
+	pattern := filepath.Join(uploadsDir, "*", "*", "*", uuid, "vanish.txt")
+	matches, _ := filepath.Glob(pattern)
+	for _, m := range matches {
+		os.Remove(m)
+	}
+
+	// Try to serve — should get 404 (file not found on disk).
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/admin/uploads/%d/file", int(id)), nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
