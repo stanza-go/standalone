@@ -11,7 +11,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 
@@ -147,7 +147,15 @@ export default function AuditPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Audit Log</h1>
-        <Spinner />
+        <TableSkeleton columns={[
+          { width: "w-6" },
+          { width: "w-24" },
+          { width: "w-20" },
+          { width: "w-24" },
+          { width: "w-20", hidden: "hidden md:table-cell" },
+          { width: "w-24", hidden: "hidden lg:table-cell" },
+          { width: "w-20", hidden: "hidden lg:table-cell" },
+        ]} rows={8} />
       </div>
     );
   }

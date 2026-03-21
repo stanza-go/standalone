@@ -23,7 +23,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 
@@ -212,7 +212,14 @@ export default function UsersPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Users</h1>
-        <Spinner />
+        <TableSkeleton columns={[
+          { width: "w-10", hidden: "hidden md:table-cell" },
+          { width: "w-32" },
+          { width: "w-24" },
+          { width: "w-16" },
+          { width: "w-24", hidden: "hidden md:table-cell" },
+          { width: "w-20" },
+        ]} />
       </div>
     );
   }

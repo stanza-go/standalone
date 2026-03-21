@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 
@@ -158,7 +158,13 @@ export default function RolesPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Roles & Permissions</h1>
-        <Spinner />
+        <TableSkeleton columns={[
+          { width: "w-24" },
+          { width: "w-32", hidden: "hidden md:table-cell" },
+          { width: "w-40" },
+          { width: "w-14", hidden: "hidden md:table-cell" },
+          { width: "w-20" },
+        ]} rows={3} />
       </div>
     );
   }

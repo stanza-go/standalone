@@ -17,7 +17,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -385,7 +385,17 @@ export default function QueuePage() {
         </CardHeader>
         <CardContent className="p-0">
           {loading && jobs.length === 0 ? (
-            <div className="p-4"><Spinner /></div>
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-28 hidden md:block" />
+                </div>
+              ))}
+            </div>
           ) : jobs.length === 0 ? (
             <EmptyState message="No jobs found" className="py-6" />
           ) : (

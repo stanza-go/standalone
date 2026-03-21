@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -263,7 +263,23 @@ export default function CronPage() {
         <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
-      {loading && entries.length === 0 && <Spinner />}
+      {loading && entries.length === 0 && (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-8 w-20 rounded-md" />
+              </div>
+              <div className="flex gap-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && entries.length === 0 && !error && (
         <EmptyState message="No cron jobs registered" />

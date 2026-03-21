@@ -12,7 +12,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -156,7 +156,13 @@ export default function NotificationsPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Notifications</h1>
-        <Spinner />
+        <TableSkeleton columns={[
+          { width: "w-6" },
+          { width: "w-48" },
+          { width: "w-16", hidden: "hidden md:table-cell" },
+          { width: "w-20", hidden: "hidden sm:table-cell" },
+          { width: "w-20" },
+        ]} />
       </div>
     );
   }

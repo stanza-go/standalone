@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { get, post, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Bell, Check, CheckCheck, Trash2, ExternalLink, Wifi, WifiOff } from "lucide-react";
@@ -133,12 +134,19 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
         setUnreadCount(evt.unread_count);
 
         if (evt.type === "notification" && evt.notification) {
+          const n = evt.notification;
           // Prepend the new notification to the cached list.
           setNotifications((prev) => {
-            const updated = [evt.notification!, ...prev];
+            const updated = [n, ...prev];
             // Keep at most 10 in the dropdown cache.
             return updated.slice(0, 10);
           });
+          // Show toast for new real-time notification.
+          const toastFn = n.type === "error" ? toast.error
+            : n.type === "warning" ? toast.warning
+            : n.type === "success" ? toast.success
+            : toast.info;
+          toastFn(n.title, { description: n.message });
         }
       } catch {
         // Ignore malformed messages.
