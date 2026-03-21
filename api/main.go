@@ -43,6 +43,7 @@ import (
 	"github.com/stanza-go/standalone/module/userprofile"
 	"github.com/stanza-go/standalone/module/useruploads"
 	"github.com/stanza-go/standalone/module/usermgmt"
+	"github.com/stanza-go/standalone/module/userapikeys"
 	"github.com/stanza-go/standalone/module/userreset"
 	"github.com/stanza-go/standalone/seed"
 )
@@ -501,17 +502,22 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	withNotifications.Use(auth.RequireScope("admin:notifications"))
 	adminnotifications.Register(withNotifications, db, notifSvc)
 
-	// Protected user routes — require valid JWT + user scope.
+	// API key validator — shared between user routes and v1 routes.
+	kv := apikeys.NewValidator(db)
+
+	// Protected user routes — require valid JWT or API key + user scope.
+	// RequireAuthOrAPIKey tries JWT cookie first, then falls back to
+	// Bearer token API key auth, enabling programmatic access.
 	user := api.Group("/user")
-	user.Use(ua.RequireAuth())
+	user.Use(ua.RequireAuthOrAPIKey(kv))
 	user.Use(auth.RequireScope("user"))
 
 	userprofile.Register(user, db, logger)
 	usernotifications.Register(user, db)
 	useruploads.Register(user, db, dir.Uploads)
+	userapikeys.Register(user, db)
 
 	// API key authenticated routes — for programmatic access.
-	kv := apikeys.NewValidator(db)
 	v1 := api.Group("/v1")
 	v1.Use(auth.RequireAPIKey(kv))
 

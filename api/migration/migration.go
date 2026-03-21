@@ -21,6 +21,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428809, "create_password_reset_tokens", createPasswordResetTokensUp, createPasswordResetTokensDown)
 	db.AddMigration(1742428810, "create_roles", createRolesUp, createRolesDown)
 	db.AddMigration(1742428811, "create_notifications", createNotificationsUp, createNotificationsDown)
+	db.AddMigration(1742428812, "add_api_key_entity", addAPIKeyEntityUp, addAPIKeyEntityDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -391,4 +392,35 @@ func createNotificationsUp(tx *sqlite.Tx) error {
 func createNotificationsDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS notifications`)
 	return err
+}
+
+func addAPIKeyEntityUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE api_keys ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'admin'`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`ALTER TABLE api_keys ADD COLUMN entity_id TEXT NOT NULL DEFAULT ''`)
+	if err != nil {
+		return err
+	}
+
+	// Backfill: existing keys were created by admins.
+	_, err = tx.Exec(`UPDATE api_keys SET entity_id = CAST(created_by AS TEXT) WHERE entity_id = ''`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_api_keys_entity ON api_keys(entity_type, entity_id)`)
+	return err
+}
+
+func addAPIKeyEntityDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP INDEX IF EXISTS idx_api_keys_entity`)
+	if err != nil {
+		return err
+	}
+	// SQLite doesn't support DROP COLUMN before 3.35.0; recreate table if needed.
+	// For simplicity, just drop the index — the columns become unused.
+	return nil
 }

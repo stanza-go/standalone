@@ -13,19 +13,26 @@ import (
 // NewValidator returns a KeyValidator that looks up API keys in the
 // database by their SHA-256 hash. It checks for revocation and
 // expiration, and updates last_used_at on each successful lookup.
+//
+// For admin keys (entity_type="admin"), claims use UID="apikey:<id>"
+// with the key's custom scopes. For user keys (entity_type="user"),
+// claims use UID=<userID> with the "user" scope, matching JWT auth.
 func NewValidator(db *sqlite.DB) auth.KeyValidator {
 	return func(keyHash string) (auth.Claims, error) {
 		var id int64
 		var scopes string
+		var entityType string
+		var entityID string
 		var expiresAt string
 		var revokedAt string
 
-		sql, args := sqlite.Select("id", "scopes", "COALESCE(expires_at, '')", "COALESCE(revoked_at, '')").
+		sql, args := sqlite.Select("id", "scopes", "entity_type", "COALESCE(entity_id, '')",
+			"COALESCE(expires_at, '')", "COALESCE(revoked_at, '')").
 			From("api_keys").
 			Where("key_hash = ?", keyHash).
 			Build()
 		row := db.QueryRow(sql, args...)
-		if err := row.Scan(&id, &scopes, &expiresAt, &revokedAt); err != nil {
+		if err := row.Scan(&id, &scopes, &entityType, &entityID, &expiresAt, &revokedAt); err != nil {
 			return auth.Claims{}, errors.New("api key not found")
 		}
 
@@ -44,7 +51,16 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 		db.Exec(`UPDATE api_keys SET last_used_at = ?, request_count = request_count + 1 WHERE id = ?`, now, id)
 
-		// Build claims from key scopes.
+		// User keys: return the user's ID with "user" scope so the claims
+		// match what JWT auth produces — user endpoints work transparently.
+		if entityType == "user" && entityID != "" {
+			return auth.Claims{
+				UID:    entityID,
+				Scopes: []string{"user"},
+			}, nil
+		}
+
+		// Admin / system keys: custom scopes from the key record.
 		var scopeList []string
 		if scopes != "" {
 			for _, s := range strings.Split(scopes, ",") {
