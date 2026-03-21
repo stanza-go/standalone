@@ -374,6 +374,7 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router.Use(http.RequestID(http.RequestIDConfig{}))
 	router.Use(http.RequestLogger(logger))
 	router.Use(http.Compress(http.CompressConfig{}))
+	router.Use(http.ETag(http.ETagConfig{}))
 	router.Use(http.SecureHeaders(http.SecureHeadersConfig{}))
 
 	// CORS: allow cross-origin requests from admin and UI dev servers.
