@@ -14,6 +14,7 @@ import SettingsPage from "@/pages/settings";
 import UsersPage from "@/pages/users";
 import APIKeysPage from "@/pages/api-keys";
 import AuditPage from "@/pages/audit";
+import NotificationsPage from "@/pages/notifications";
 import RolesPage from "@/pages/roles";
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="database" element={<DatabasePage />} />
             <Route path="api-keys" element={<APIKeysPage />} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

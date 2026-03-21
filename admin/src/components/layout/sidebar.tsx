@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   LayoutDashboard,
   LogOut,
@@ -17,6 +18,7 @@ import {
   KeySquare,
   ScrollText,
   Shield,
+  Bell,
   Menu,
   X,
 } from "lucide-react";
@@ -40,6 +42,7 @@ const navItems: NavItem[] = [
   { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
   { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
   { label: "Audit Log", to: "/audit", icon: <ScrollText className="h-4 w-4" /> },
+  { label: "Notifications", to: "/notifications", icon: <Bell className="h-4 w-4" /> },
   { label: "Roles", to: "/roles", icon: <Shield className="h-4 w-4" /> },
   { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
 ];
@@ -70,9 +73,12 @@ export default function SidebarLayout() {
           </Button>
           <span className="text-sm font-semibold tracking-tight">Stanza</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout}>
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout}>
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </header>
 
       {/* Mobile backdrop */}
@@ -99,19 +105,25 @@ export default function SidebarLayout() {
           {(mobileOpen || !collapsed) && (
             <span className="text-sm font-semibold tracking-tight">Stanza</span>
           )}
-          {/* Desktop: collapse toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-7 w-7 md:inline-flex"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
+          <div className="flex items-center gap-0.5">
+            {/* Desktop: notification bell */}
+            <div className="hidden md:block">
+              <NotificationBell collapsed={collapsed} />
+            </div>
+            {/* Desktop: collapse toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden h-7 w-7 md:inline-flex"
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
           {/* Mobile: close button */}
           <Button
             variant="ghost"
