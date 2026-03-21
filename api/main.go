@@ -21,6 +21,7 @@ import (
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/adminuploads"
 	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/admincron"
 	"github.com/stanza-go/standalone/module/admindb"
@@ -390,6 +391,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	usermgmt.Register(admin, a, db)
 	apikeys.Register(admin, db)
 	adminaudit.Register(admin, db)
+	adminuploads.Register(admin, db, dir.Uploads)
 
 	// Protected user routes — require valid JWT + user scope.
 	user := api.Group("/user")

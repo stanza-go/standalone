@@ -17,6 +17,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428805, "create_audit_log", createAuditLogUp, createAuditLogDown)
 	db.AddMigration(1742428806, "create_cron_runs", createCronRunsUp, createCronRunsDown)
 	db.AddMigration(1742428807, "add_api_key_request_count", addAPIKeyRequestCountUp, addAPIKeyRequestCountDown)
+	db.AddMigration(1742428808, "create_uploads", createUploadsUp, createUploadsDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -216,5 +217,44 @@ func addAPIKeyRequestCountUp(tx *sqlite.Tx) error {
 
 func addAPIKeyRequestCountDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE api_keys DROP COLUMN request_count`)
+	return err
+}
+
+func createUploadsUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE uploads (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		uuid          TEXT    NOT NULL UNIQUE,
+		original_name TEXT    NOT NULL,
+		stored_name   TEXT    NOT NULL,
+		content_type  TEXT    NOT NULL DEFAULT '',
+		size_bytes    INTEGER NOT NULL DEFAULT 0,
+		storage_path  TEXT    NOT NULL,
+		has_thumbnail INTEGER NOT NULL DEFAULT 0,
+		uploaded_by   TEXT    NOT NULL DEFAULT '',
+		entity_type   TEXT    NOT NULL DEFAULT '',
+		entity_id     TEXT    NOT NULL DEFAULT '',
+		created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		deleted_at    TEXT
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_uploads_uuid ON uploads(uuid)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_uploads_entity ON uploads(entity_type, entity_id) WHERE deleted_at IS NULL`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_uploads_created_at ON uploads(created_at)`)
+	return err
+}
+
+func createUploadsDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS uploads`)
 	return err
 }
