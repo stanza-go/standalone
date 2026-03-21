@@ -26,9 +26,11 @@ func setup(t *testing.T) (*fhttp.Router, *auth.Auth, *sqlite.DB) {
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
 
+	svc := notifications.NewService(db, nil, nil)
+
 	withNotifications := admin.Group("")
 	withNotifications.Use(auth.RequireScope("admin:notifications"))
-	adminnotifications.Register(withNotifications, db)
+	adminnotifications.Register(withNotifications, db, svc)
 
 	return router, a, db
 }
@@ -316,6 +318,73 @@ func TestNotifications_InsufficientScope(t *testing.T) {
 
 	if rec.Code != 403 {
 		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
+func TestSendNotification(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	body := map[string]any{
+		"entity_type": "admin",
+		"entity_id":   1,
+		"type":        "info",
+		"title":       "Test Send",
+		"message":     "Hello from send endpoint",
+		"send_email":  false,
+	}
+	req := testutil.JSONRequest(t, "POST", "/api/admin/notifications/send", body)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	testutil.DecodeJSON(t, rec, &resp)
+
+	if resp["id"].(float64) <= 0 {
+		t.Fatalf("expected positive id, got %v", resp["id"])
+	}
+	if resp["email_sent"].(bool) != false {
+		t.Fatalf("expected email_sent=false, got %v", resp["email_sent"])
+	}
+}
+
+func TestSendNotification_InvalidBody(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	// Missing required fields.
+	body := map[string]any{
+		"entity_type": "",
+		"title":       "",
+	}
+	req := testutil.JSONRequest(t, "POST", "/api/admin/notifications/send", body)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422\nbody: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSendNotification_InvalidEntityType(t *testing.T) {
+	t.Parallel()
+	router, a, _ := setup(t)
+
+	body := map[string]any{
+		"entity_type": "robot",
+		"entity_id":   1,
+		"title":       "Test",
+	}
+	req := testutil.JSONRequest(t, "POST", "/api/admin/notifications/send", body)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 422 {
+		t.Fatalf("status = %d, want 422\nbody: %s", rec.Code, rec.Body.String())
 	}
 }
 

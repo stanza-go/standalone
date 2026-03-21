@@ -23,6 +23,7 @@ import (
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
 	"github.com/stanza-go/standalone/module/adminnotifications"
+	"github.com/stanza-go/standalone/module/notifications"
 	"github.com/stanza-go/standalone/module/adminroles"
 	"github.com/stanza-go/standalone/module/adminuploads"
 	"github.com/stanza-go/standalone/module/adminauth"
@@ -64,6 +65,7 @@ func main() {
 		lifecycle.Provide(provideAuth),
 		lifecycle.Provide(provideUserAuth),
 		lifecycle.Provide(provideEmail),
+		lifecycle.Provide(provideNotificationService),
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideCron),
 		lifecycle.Provide(provideRouter),
@@ -202,6 +204,10 @@ func provideEmail(cfg *config.Config, logger *log.Logger) *email.Client {
 	}
 
 	return email.New(apiKey, email.WithFrom(from))
+}
+
+func provideNotificationService(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) *notifications.Service {
+	return notifications.NewService(db, emailClient, logger)
 }
 
 func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
@@ -422,7 +428,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -477,7 +483,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 
 	withNotifications := admin.Group("")
 	withNotifications.Use(auth.RequireScope("admin:notifications"))
-	adminnotifications.Register(withNotifications, db)
+	adminnotifications.Register(withNotifications, db, notifSvc)
 
 	// Protected user routes — require valid JWT + user scope.
 	user := api.Group("/user")

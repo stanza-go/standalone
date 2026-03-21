@@ -1,6 +1,7 @@
 // Package adminnotifications provides admin endpoints for managing
 // notifications. Admins can list their notifications, get unread counts,
-// mark individual or all notifications as read, and delete notifications.
+// mark individual or all notifications as read, delete notifications, and
+// send notifications (with optional email delivery).
 package adminnotifications
 
 import (
@@ -18,12 +19,14 @@ import (
 //
 //	GET    /api/admin/notifications              — list notifications (paginated)
 //	GET    /api/admin/notifications/unread-count  — count of unread notifications
+//	POST   /api/admin/notifications/send          — send a notification (with optional email)
 //	POST   /api/admin/notifications/{id}/read     — mark one notification as read
 //	POST   /api/admin/notifications/read-all      — mark all notifications as read
 //	DELETE /api/admin/notifications/{id}           — delete a notification
-func Register(admin *http.Group, db *sqlite.DB) {
+func Register(admin *http.Group, db *sqlite.DB, svc *notifications.Service) {
 	admin.HandleFunc("GET /notifications", listHandler(db))
 	admin.HandleFunc("GET /notifications/unread-count", unreadCountHandler(db))
+	admin.HandleFunc("POST /notifications/send", sendHandler(svc))
 	admin.HandleFunc("POST /notifications/{id}/read", markReadHandler(db))
 	admin.HandleFunc("POST /notifications/read-all", markAllReadHandler(db))
 	admin.HandleFunc("DELETE /notifications/{id}", deleteHandler(db))
@@ -162,6 +165,68 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
 			"marked":  result.RowsAffected,
+		})
+	}
+}
+
+// sendHandler creates a notification for a target entity with optional email
+// delivery. Request body:
+//
+//	{
+//	  "entity_type": "admin" | "user",
+//	  "entity_id": 1,
+//	  "type": "info",
+//	  "title": "Hello",
+//	  "message": "World",
+//	  "send_email": true
+//	}
+func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			EntityType string `json:"entity_type"`
+			EntityID   int64  `json:"entity_id"`
+			Type       string `json:"type"`
+			Title      string `json:"title"`
+			Message    string `json:"message"`
+			SendEmail  bool   `json:"send_email"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if req.EntityType == "" || req.EntityID <= 0 || req.Title == "" {
+			http.WriteError(w, http.StatusUnprocessableEntity, "entity_type, entity_id, and title are required")
+			return
+		}
+		if req.Type == "" {
+			req.Type = "info"
+		}
+		if req.EntityType != notifications.EntityAdmin && req.EntityType != notifications.EntityUser {
+			http.WriteError(w, http.StatusUnprocessableEntity, "entity_type must be 'admin' or 'user'")
+			return
+		}
+
+		var opts []notifications.Option
+		if req.SendEmail {
+			opts = append(opts, notifications.WithEmail(r.Context()))
+		}
+
+		var id int64
+		var err error
+		switch req.EntityType {
+		case notifications.EntityAdmin:
+			id, err = svc.NotifyAdmin(req.EntityID, req.Type, req.Title, req.Message, opts...)
+		case notifications.EntityUser:
+			id, err = svc.NotifyUser(req.EntityID, req.Type, req.Title, req.Message, opts...)
+		}
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to create notification")
+			return
+		}
+
+		http.WriteJSON(w, http.StatusCreated, map[string]any{
+			"id":         id,
+			"email_sent": req.SendEmail,
 		})
 	}
 }
