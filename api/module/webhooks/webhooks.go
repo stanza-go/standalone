@@ -61,35 +61,46 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		return err
 	}
 
+	// Collect matching webhooks first, then close rows before doing any
+	// writes. SQLite uses a single connection — holding rows open while
+	// calling Exec would deadlock.
+	type target struct {
+		id     int64
+		url    string
+		secret string
+	}
+
 	rows, err := d.db.Query(
 		"SELECT id, url, secret, events FROM webhooks WHERE is_active = 1",
 	)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-
+	var targets []target
 	for rows.Next() {
 		var id int64
 		var url, secret, eventsJSON string
 		if err := rows.Scan(&id, &url, &secret, &eventsJSON); err != nil {
 			continue
 		}
-
-		if !matchesEvent(eventsJSON, event) {
-			continue
+		if matchesEvent(eventsJSON, event) {
+			targets = append(targets, target{id: id, url: url, secret: secret})
 		}
+	}
+	rows.Close()
 
+	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+
+	for _, t := range targets {
 		// Create delivery record.
 		res, err := d.db.Exec(
 			"INSERT INTO webhook_deliveries (webhook_id, event, payload, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-			id, event, string(body), now,
+			t.id, event, string(body), now,
 		)
 		if err != nil {
 			d.logger.Error("webhook: create delivery record",
-				log.Int64("webhook_id", id),
+				log.Int64("webhook_id", t.id),
 				log.Err(err),
 			)
 			continue
@@ -97,9 +108,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 
 		job := deliveryJob{
 			DeliveryID: res.LastInsertID,
-			WebhookID:  id,
-			URL:        url,
-			Secret:     secret,
+			WebhookID:  t.id,
+			URL:        t.url,
+			Secret:     t.secret,
 			Event:      event,
 			Payload:    string(body),
 		}
@@ -111,7 +122,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 
 		if _, err := d.queue.Enqueue(ctx, queueType, jobPayload, queue.MaxAttempts(4)); err != nil {
 			d.logger.Error("webhook: enqueue delivery",
-				log.Int64("webhook_id", id),
+				log.Int64("webhook_id", t.id),
 				log.Err(err),
 			)
 		}
