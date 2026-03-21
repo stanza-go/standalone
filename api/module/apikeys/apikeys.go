@@ -50,15 +50,24 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit := http.QueryParamInt(r, "limit", 50)
 		offset := http.QueryParamInt(r, "offset", 0)
+		search := r.URL.Query().Get("search")
 
-		var total int
-		sql, args := sqlite.Count("api_keys").Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		sql, args = sqlite.Select("id", "name", "key_prefix", "scopes", "created_by",
+		countQ := sqlite.Count("api_keys")
+		selectQ := sqlite.Select("id", "name", "key_prefix", "scopes", "created_by",
 			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
-			From("api_keys").
+			From("api_keys")
+		if search != "" {
+			like := "%" + escapeLike(search) + "%"
+			countQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
+			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
+		}
+
+		var total int
+		sql, args := countQ.Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = selectQ.
 			OrderBy("id", "DESC").
 			Limit(limit).
 			Offset(offset).
@@ -290,4 +299,13 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"ok": true,
 		})
 	}
+}
+
+// escapeLike escapes LIKE wildcards (% and _) in a search term so they
+// are matched literally when used with ESCAPE '\'.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }

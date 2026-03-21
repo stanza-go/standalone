@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { get } from "@/lib/api";
+import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
+  Calendar,
   X,
 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
@@ -91,9 +93,11 @@ export default function AuditPage() {
   const pageSize = 30;
 
   // Filters.
-  const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const search = useDebounce(searchInput, 300);
   const [actionFilter, setActionFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   // Expanded rows.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -105,6 +109,8 @@ export default function AuditPage() {
       params.set("offset", String(page * pageSize));
       if (search) params.set("search", search);
       if (actionFilter) params.set("action", actionFilter);
+      if (dateFrom) params.set("from", dateFrom + "T00:00:00Z");
+      if (dateTo) params.set("to", dateTo + "T23:59:59Z");
 
       const data = await get<{ entries: AuditEntry[]; total: number }>(
         `/admin/audit?${params}`
@@ -117,17 +123,16 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, actionFilter]);
+  }, [page, search, actionFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  // Reset to first page when search changes.
+  useEffect(() => {
     setPage(0);
-    setSearch(searchInput);
-  }
+  }, [search]);
 
   function toggleExpand(id: number) {
     setExpanded((prev) => {
@@ -179,21 +184,24 @@ export default function AuditPage() {
       )}
 
       {/* Filters */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[200px] max-w-sm">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search actions or details..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            Search
-          </Button>
-        </form>
+      <div className="mb-4 flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search actions or details..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
@@ -214,14 +222,40 @@ export default function AuditPage() {
           </select>
         </div>
 
-        {(search || actionFilter) && (
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setPage(0);
+            }}
+            className="h-9 w-[140px] text-sm"
+            title="From date"
+          />
+          <span className="text-xs text-muted-foreground">&ndash;</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setPage(0);
+            }}
+            className="h-9 w-[140px] text-sm"
+            title="To date"
+          />
+        </div>
+
+        {(search || actionFilter || dateFrom || dateTo) && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               setSearchInput("");
-              setSearch("");
               setActionFilter("");
+              setDateFrom("");
+              setDateTo("");
               setPage(0);
             }}
           >
@@ -249,7 +283,7 @@ export default function AuditPage() {
               <TableEmptyRow
                 colSpan={7}
                 message={
-                  search || actionFilter
+                  search || actionFilter || dateFrom || dateTo
                     ? "No events match your filters"
                     : "No audit events recorded yet"
                 }

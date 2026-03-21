@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
+import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
@@ -35,6 +36,14 @@ export default function AdminsPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
 
+  // Pagination.
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+
+  // Search.
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebounce(searchInput, 300);
+
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Admin | null>(null);
@@ -51,8 +60,13 @@ export default function AdminsPage() {
 
   const load = useCallback(async () => {
     try {
+      const params = new URLSearchParams();
+      params.set("limit", String(pageSize));
+      params.set("offset", String(page * pageSize));
+      if (search) params.set("search", search);
+
       const [adminsData, rolesData] = await Promise.all([
-        get<{ admins: Admin[]; total: number }>("/admin/admins"),
+        get<{ admins: Admin[]; total: number }>(`/admin/admins?${params}`),
         get<{ roles: string[] }>("/admin/role-names"),
       ]);
       setAdmins(adminsData.admins);
@@ -64,13 +78,18 @@ export default function AdminsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, search]);
 
   useEffect(() => {
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Reset to first page when search changes.
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
 
   function openCreate() {
     setEditing(null);
@@ -149,6 +168,8 @@ export default function AdminsPage() {
     return d.toLocaleDateString() + " " + d.toLocaleTimeString();
   }
 
+  const totalPages = Math.ceil(total / pageSize);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -185,6 +206,27 @@ export default function AdminsPage() {
         <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
       )}
 
+      {/* Search bar */}
+      <div className="mb-4 flex gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by email or name..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -200,7 +242,7 @@ export default function AdminsPage() {
           </thead>
           <tbody>
             {admins.length === 0 ? (
-              <TableEmptyRow colSpan={7} message="No admins found" />
+              <TableEmptyRow colSpan={7} message={search ? "No admins match your search" : "No admins found"} />
             ) : (
               admins.map((admin) => (
                 <tr
@@ -266,6 +308,36 @@ export default function AdminsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage(page + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={closeDialog}>

@@ -70,6 +70,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		action := r.URL.Query().Get("action")
 		adminID := r.URL.Query().Get("admin_id")
 		search := r.URL.Query().Get("search")
+		from := r.URL.Query().Get("from")
+		to := r.URL.Query().Get("to")
 
 		// Count query.
 		countSQL := "SELECT count(*) FROM audit_log"
@@ -88,6 +90,14 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			conditions = append(conditions, "(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')")
 			like := "%" + escapeLike(search) + "%"
 			countArgs = append(countArgs, like, like)
+		}
+		if from != "" {
+			conditions = append(conditions, "audit_log.created_at >= ?")
+			countArgs = append(countArgs, from)
+		}
+		if to != "" {
+			conditions = append(conditions, "audit_log.created_at <= ?")
+			countArgs = append(countArgs, to)
 		}
 
 		if len(conditions) > 0 {

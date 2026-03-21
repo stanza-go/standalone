@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
+import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ import {
   UserCheck,
   Copy,
   Check,
+  X,
 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -48,8 +50,8 @@ export default function UsersPage() {
   const pageSize = 20;
 
   // Search.
-  const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const search = useDebounce(searchInput, 300);
 
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -92,11 +94,10 @@ export default function UsersPage() {
     load();
   }, [load]);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  // Reset to first page when search changes.
+  useEffect(() => {
     setPage(0);
-    setSearch(searchInput);
-  }
+  }, [search]);
 
   function openCreate() {
     setEditing(null);
@@ -244,33 +245,25 @@ export default function UsersPage() {
       )}
 
       {/* Search bar */}
-      <form onSubmit={handleSearch} className="mb-4 flex gap-2">
+      <div className="mb-4 flex gap-2">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by email or name..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <Button type="submit" variant="outline">
-          Search
-        </Button>
-        {search && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setSearchInput("");
-              setSearch("");
-              setPage(0);
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </form>
+      </div>
 
       <div className="border rounded-lg overflow-hidden">
         <table className="w-full text-sm">

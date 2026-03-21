@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
+import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Copy, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Check, Search, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
@@ -48,6 +49,14 @@ export default function APIKeysPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
 
+  // Pagination.
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+
+  // Search.
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebounce(searchInput, 300);
+
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<APIKey | null>(null);
@@ -67,8 +76,13 @@ export default function APIKeysPage() {
 
   const load = useCallback(async () => {
     try {
+      const params = new URLSearchParams();
+      params.set("limit", String(pageSize));
+      params.set("offset", String(page * pageSize));
+      if (search) params.set("search", search);
+
       const data = await get<{ api_keys: APIKey[]; total: number }>(
-        "/admin/api-keys"
+        `/admin/api-keys?${params}`
       );
       setKeys(data.api_keys);
       setTotal(data.total);
@@ -78,13 +92,18 @@ export default function APIKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, search]);
 
   useEffect(() => {
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Reset to first page when search changes.
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
 
   function openCreate() {
     setEditing(null);
@@ -176,6 +195,8 @@ export default function APIKeysPage() {
     return new Date(expiresAt) < new Date();
   }
 
+  const totalPages = Math.ceil(total / pageSize);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -213,6 +234,27 @@ export default function APIKeysPage() {
       {error && (
         <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
       )}
+
+      {/* Search bar */}
+      <div className="mb-4 flex gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or key prefix..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Key reveal after creation */}
       {createdKey && (
@@ -269,7 +311,7 @@ export default function APIKeysPage() {
           </thead>
           <tbody>
             {keys.length === 0 ? (
-              <TableEmptyRow colSpan={9} message="No API keys found" />
+              <TableEmptyRow colSpan={9} message={search ? "No API keys match your search" : "No API keys found"} />
             ) : (
               keys.map((k) => (
                 <tr
@@ -372,6 +414,36 @@ export default function APIKeysPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage(page + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={closeDialog}>
