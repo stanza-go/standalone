@@ -3,6 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { CommandPalette } from "@/components/ui/command-palette";
 import {
   LayoutDashboard,
   LogOut,
@@ -23,8 +24,9 @@ import {
   Upload,
   Menu,
   X,
+  Search,
 } from "lucide-react";
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -55,12 +57,26 @@ export default function SidebarLayout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const location = useLocation();
 
   // Close mobile sidebar on route change.
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Global Ctrl+K / Cmd+K to open command palette.
+  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      setPaletteOpen((prev) => !prev);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [handleGlobalKeyDown]);
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -78,6 +94,14 @@ export default function SidebarLayout() {
           <span className="text-sm font-semibold tracking-tight">Stanza</span>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Search className="h-4 w-4" />
+          </Button>
           <ThemeToggle collapsed />
           <NotificationBell />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout}>
@@ -141,6 +165,21 @@ export default function SidebarLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+          {/* Search trigger */}
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors mb-1"
+          >
+            <Search className="h-4 w-4" />
+            {(mobileOpen || !collapsed) && (
+              <>
+                <span className="flex-1 text-left">Search...</span>
+                <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                  {navigator.platform.includes("Mac") ? "\u2318" : "Ctrl"}K
+                </kbd>
+              </>
+            )}
+          </button>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -201,6 +240,8 @@ export default function SidebarLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }
