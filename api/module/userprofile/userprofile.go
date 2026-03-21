@@ -1,6 +1,6 @@
 // Package userprofile implements the authenticated user's profile
-// endpoints: view profile, update profile, and change password.
-// All routes require a valid JWT with the "user" scope.
+// endpoints: view profile, update profile, change password, and
+// session management. All routes require a valid JWT with the "user" scope.
 package userprofile
 
 import (
@@ -19,13 +19,17 @@ import (
 //
 // Routes:
 //
-//	GET  /profile          — get authenticated user's profile
-//	PUT  /profile          — update name and/or email
-//	PUT  /profile/password — change password
+//	GET    /profile              — get authenticated user's profile
+//	PUT    /profile              — update name and/or email
+//	PUT    /profile/password     — change password
+//	GET    /profile/sessions     — list own active sessions
+//	DELETE /profile/sessions/{id} — revoke a specific session
 func Register(user *http.Group, db *sqlite.DB, logger *log.Logger) {
 	user.HandleFunc("GET /profile", getProfile(db))
 	user.HandleFunc("PUT /profile", updateProfile(db, logger))
 	user.HandleFunc("PUT /profile/password", changePassword(db, logger))
+	user.HandleFunc("GET /profile/sessions", getSessions(db))
+	user.HandleFunc("DELETE /profile/sessions/{id}", revokeSession(db))
 }
 
 // getProfile returns the authenticated user's profile.
@@ -223,8 +227,118 @@ func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter,
 			return
 		}
 
+		// Revoke all other sessions for this user (keep current session).
+		refreshToken, _ := auth.ReadRefreshToken(r)
+		if refreshToken != "" {
+			_, _ = db.Exec(
+				"DELETE FROM refresh_tokens WHERE entity_type = 'user' AND entity_id = ? AND token_hash != ?",
+				claims.UID,
+				auth.HashToken(refreshToken),
+			)
+		} else {
+			_, _ = db.Exec(
+				"DELETE FROM refresh_tokens WHERE entity_type = 'user' AND entity_id = ?",
+				claims.UID,
+			)
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"status":           "password updated",
+			"sessions_revoked": true,
+		})
+	}
+}
+
+// ActiveSession represents a session for the user's sessions list.
+type ActiveSession struct {
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	ExpiresAt string `json:"expires_at"`
+	Current   bool   `json:"current"`
+}
+
+// getSessions returns the authenticated user's active sessions.
+func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			http.WriteError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		sql, args := sqlite.Select("id", "created_at", "expires_at", "token_hash").
+			From("refresh_tokens").
+			Where("entity_type = 'user'").
+			Where("entity_id = ?", claims.UID).
+			Where("expires_at > ?", now).
+			OrderBy("created_at", "DESC").
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		defer rows.Close()
+
+		currentTokenHash := ""
+		refreshToken, _ := auth.ReadRefreshToken(r)
+		if refreshToken != "" {
+			currentTokenHash = auth.HashToken(refreshToken)
+		}
+
+		var sessions []ActiveSession
+		for rows.Next() {
+			var s ActiveSession
+			var tokenHash string
+			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt, &tokenHash); err != nil {
+				continue
+			}
+			s.Current = tokenHash == currentTokenHash
+			sessions = append(sessions, s)
+		}
+
+		if sessions == nil {
+			sessions = []ActiveSession{}
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"sessions": sessions,
+		})
+	}
+}
+
+// revokeSession revokes a specific session by ID.
+func revokeSession(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			http.WriteError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		sessionID := r.PathValue("id")
+		if sessionID == "" {
+			http.WriteError(w, http.StatusBadRequest, "invalid session ID")
+			return
+		}
+
+		result, err := db.Exec(
+			"DELETE FROM refresh_tokens WHERE id = ? AND entity_type = 'user' AND entity_id = ?",
+			sessionID, claims.UID,
+		)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		if result.RowsAffected == 0 {
+			http.WriteError(w, http.StatusNotFound, "session not found")
+			return
+		}
+
 		http.WriteJSON(w, http.StatusOK, map[string]string{
-			"status": "password updated",
+			"status": "session revoked",
 		})
 	}
 }
