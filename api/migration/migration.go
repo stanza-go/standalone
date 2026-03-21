@@ -18,6 +18,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428806, "create_cron_runs", createCronRunsUp, createCronRunsDown)
 	db.AddMigration(1742428807, "add_api_key_request_count", addAPIKeyRequestCountUp, addAPIKeyRequestCountDown)
 	db.AddMigration(1742428808, "create_uploads", createUploadsUp, createUploadsDown)
+	db.AddMigration(1742428809, "create_password_reset_tokens", createPasswordResetTokensUp, createPasswordResetTokensDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -256,5 +257,32 @@ func createUploadsUp(tx *sqlite.Tx) error {
 
 func createUploadsDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS uploads`)
+	return err
+}
+
+func createPasswordResetTokensUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE password_reset_tokens (
+		id         TEXT PRIMARY KEY,
+		email      TEXT NOT NULL,
+		token_hash TEXT NOT NULL,
+		expires_at TEXT NOT NULL,
+		used_at    TEXT,
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_password_reset_tokens_hash ON password_reset_tokens(token_hash) WHERE used_at IS NULL`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_password_reset_tokens_email ON password_reset_tokens(email)`)
+	return err
+}
+
+func createPasswordResetTokensDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS password_reset_tokens`)
 	return err
 }

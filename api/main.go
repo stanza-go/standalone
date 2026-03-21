@@ -13,6 +13,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/config"
 	"github.com/stanza-go/framework/pkg/cron"
+	"github.com/stanza-go/framework/pkg/email"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/lifecycle"
 	"github.com/stanza-go/framework/pkg/log"
@@ -36,6 +37,7 @@ import (
 	"github.com/stanza-go/standalone/module/userauth"
 	"github.com/stanza-go/standalone/module/userprofile"
 	"github.com/stanza-go/standalone/module/usermgmt"
+	"github.com/stanza-go/standalone/module/userreset"
 	"github.com/stanza-go/standalone/seed"
 )
 
@@ -57,6 +59,7 @@ func main() {
 		lifecycle.Provide(provideSigningKey),
 		lifecycle.Provide(provideAuth),
 		lifecycle.Provide(provideUserAuth),
+		lifecycle.Provide(provideEmail),
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideCron),
 		lifecycle.Provide(provideRouter),
@@ -186,6 +189,17 @@ func provideUserAuth(sk *signingKey, cfg *config.Config) *userAuth {
 	)}
 }
 
+func provideEmail(cfg *config.Config, logger *log.Logger) *email.Client {
+	apiKey := cfg.GetString("email.resend_api_key")
+	from := cfg.GetStringOr("email.from", "noreply@stanza.dev")
+
+	if apiKey == "" {
+		logger.Warn("email.resend_api_key not set — emails will not be sent")
+	}
+
+	return email.New(apiKey, email.WithFrom(from))
+}
+
 func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
 	q := queue.New(db,
 		queue.WithLogger(logger),
@@ -303,6 +317,24 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, logger 
 		return nil, fmt.Errorf("cron add purge-old-audit-log: %w", err)
 	}
 
+	// Purge used/expired password reset tokens older than 24h, daily at 4:30 AM.
+	if err := s.Add("purge-old-reset-tokens", "30 4 * * *", func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+		res, err := db.Exec(
+			"DELETE FROM password_reset_tokens WHERE used_at IS NOT NULL OR expires_at < ?",
+			cutoff,
+		)
+		if err != nil {
+			return err
+		}
+		if res.RowsAffected > 0 {
+			logger.Info("purged old password reset tokens", log.Int64("count", res.RowsAffected))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-reset-tokens: %w", err)
+	}
+
 	lc.Append(lifecycle.Hook{
 		OnStart: s.Start,
 		OnStop:  s.Stop,
@@ -371,13 +403,14 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
 	health.Register(api, db)
 	adminauth.Register(api, a, db, logger)
 	userauth.Register(api, ua.Auth, db, logger)
+	userreset.Register(api, db, emailClient, logger)
 
 	// Protected admin routes — require valid JWT + admin scope.
 	admin := api.Group("/admin")
