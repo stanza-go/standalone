@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { get, post, put, del } from "@/lib/api";
+import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,6 +56,7 @@ export default function APIKeysPage() {
   const [scopes, setScopes] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Created key reveal state.
@@ -89,6 +90,7 @@ export default function APIKeysPage() {
     setScopes("");
     setExpiresAt("");
     setFormError("");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
@@ -98,6 +100,7 @@ export default function APIKeysPage() {
     setScopes(key.scopes);
     setExpiresAt("");
     setFormError("");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
@@ -109,17 +112,13 @@ export default function APIKeysPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
+    setFieldErrors({});
     setSubmitting(true);
 
     try {
       if (editing) {
         await put(`/admin/api-keys/${editing.id}`, { name, scopes });
       } else {
-        if (!name) {
-          setFormError("Name is required");
-          setSubmitting(false);
-          return;
-        }
         const body: Record<string, unknown> = { name, scopes };
         if (expiresAt) {
           body.expires_at = new Date(expiresAt).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -130,8 +129,13 @@ export default function APIKeysPage() {
       }
       closeDialog();
       await load();
-    } catch (e: any) {
-      setFormError(e.message || "Operation failed");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message);
+        setFieldErrors(err.fields);
+      } else {
+        setFormError("Operation failed");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -359,7 +363,7 @@ export default function APIKeysPage() {
 
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
-            {formError && (
+            {formError && !Object.keys(fieldErrors).length && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
                 {formError}
               </div>
@@ -372,7 +376,11 @@ export default function APIKeysPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Production API"
+                className={fieldErrors.name ? "border-destructive" : ""}
               />
+              {fieldErrors.name && (
+                <p className="text-sm text-destructive">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div className="space-y-2">

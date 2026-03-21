@@ -10,7 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useAuth, type ApiError } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
@@ -19,18 +20,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
     setSubmitting(true);
     try {
       await login(email, password);
       navigate("/", { replace: true });
     } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Login failed");
+      if (err instanceof ApiError) {
+        setError(err.message);
+        setFieldErrors(err.fields);
+      } else {
+        setError("Login failed");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -45,7 +52,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
+            {error && !Object.keys(fieldErrors).length && (
               <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
@@ -61,7 +68,11 @@ export default function LoginPage() {
                 required
                 autoComplete="email"
                 autoFocus
+                className={fieldErrors.email ? "border-destructive" : ""}
               />
+              {fieldErrors.email && (
+                <p className="text-sm text-destructive">{fieldErrors.email}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -72,7 +83,11 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
+                className={fieldErrors.password ? "border-destructive" : ""}
               />
+              {fieldErrors.password && (
+                <p className="text-sm text-destructive">{fieldErrors.password}</p>
+              )}
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting && <Loader2 className="animate-spin" />}

@@ -136,6 +136,20 @@ body {
   border-color: var(--primary);
 }
 
+.form-group input.input-error {
+  border-color: var(--danger);
+}
+
+.form-group input.input-error:focus {
+  border-color: var(--danger);
+}
+
+.field-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+}
+
 .form-group input:disabled {
   opacity: 0.6;
   cursor: not-allowed;

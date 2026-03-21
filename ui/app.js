@@ -20,9 +20,33 @@ async function api(method, path, body) {
   if (!res.ok) {
     const err = new Error(data.error || "Something went wrong");
     err.status = res.status;
+    err.fields = data.fields || null;
     throw err;
   }
   return data;
+}
+
+function applyFieldErrors(formEl, fields, idMap) {
+  // Clear previous field errors.
+  formEl.querySelectorAll(".field-error").forEach((el) => el.remove());
+  formEl
+    .querySelectorAll(".input-error")
+    .forEach((el) => el.classList.remove("input-error"));
+
+  if (!fields) return;
+  for (const [field, msg] of Object.entries(fields)) {
+    const id = idMap && idMap[field] ? idMap[field] : field;
+    const input =
+      formEl.querySelector(`#${CSS.escape(id)}`) ||
+      formEl.querySelector(`[name="${CSS.escape(id)}"]`);
+    if (input) {
+      input.classList.add("input-error");
+      const errorDiv = document.createElement("div");
+      errorDiv.className = "field-error";
+      errorDiv.textContent = msg;
+      input.parentNode.insertBefore(errorDiv, input.nextSibling);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +167,7 @@ function renderLogin() {
     const btn = document.getElementById("login-btn");
     const errorEl = document.getElementById("login-error");
     errorEl.innerHTML = "";
+    applyFieldErrors(form, null);
     btn.disabled = true;
     btn.textContent = "Signing in...";
 
@@ -155,7 +180,11 @@ function renderLogin() {
       startPolling();
       navigate("/");
     } catch (err) {
-      errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      if (err.fields) {
+        applyFieldErrors(form, err.fields);
+      } else {
+        errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
       btn.disabled = false;
       btn.textContent = "Sign in";
     }
@@ -203,6 +232,7 @@ function renderRegister() {
     const btn = document.getElementById("register-btn");
     const errorEl = document.getElementById("register-error");
     errorEl.innerHTML = "";
+    applyFieldErrors(form, null);
     btn.disabled = true;
     btn.textContent = "Creating account...";
 
@@ -216,7 +246,11 @@ function renderRegister() {
       startPolling();
       navigate("/");
     } catch (err) {
-      errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      if (err.fields) {
+        applyFieldErrors(form, err.fields);
+      } else {
+        errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      }
       btn.disabled = false;
       btn.textContent = "Create account";
     }
@@ -364,11 +398,13 @@ async function loadProfile() {
 
 async function handleEditProfile(e) {
   e.preventDefault();
+  const form = document.getElementById("edit-form");
   const btn = document.getElementById("edit-btn");
   const errorEl = document.getElementById("edit-error");
   const successEl = document.getElementById("edit-success");
   errorEl.innerHTML = "";
   successEl.innerHTML = "";
+  applyFieldErrors(form, null);
   btn.disabled = true;
   btn.textContent = "Saving...";
 
@@ -390,7 +426,11 @@ async function handleEditProfile(e) {
     btn.disabled = false;
     btn.textContent = "Save changes";
   } catch (err) {
-    errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    if (err.fields) {
+      applyFieldErrors(form, err.fields, { email: "edit-email", name: "edit-name" });
+    } else {
+      errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    }
     btn.disabled = false;
     btn.textContent = "Save changes";
   }
@@ -398,11 +438,13 @@ async function handleEditProfile(e) {
 
 async function handleChangePassword(e) {
   e.preventDefault();
+  const form = document.getElementById("password-form");
   const btn = document.getElementById("password-btn");
   const errorEl = document.getElementById("password-error");
   const successEl = document.getElementById("password-success");
   errorEl.innerHTML = "";
   successEl.innerHTML = "";
+  applyFieldErrors(form, null);
   btn.disabled = true;
   btn.textContent = "Updating...";
 
@@ -418,7 +460,14 @@ async function handleChangePassword(e) {
     btn.disabled = false;
     btn.textContent = "Update password";
   } catch (err) {
-    errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    if (err.fields) {
+      applyFieldErrors(form, err.fields, {
+        current_password: "current-password",
+        new_password: "new-password",
+      });
+    } else {
+      errorEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    }
     btn.disabled = false;
     btn.textContent = "Update password";
   }

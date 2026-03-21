@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { get, post, put, del } from "@/lib/api";
+import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,7 @@ export default function AdminsPage() {
   const [role, setRole] = useState("admin");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -74,6 +75,7 @@ export default function AdminsPage() {
     setRole("admin");
     setPassword("");
     setFormError("");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
@@ -84,6 +86,7 @@ export default function AdminsPage() {
     setRole(admin.role);
     setPassword("");
     setFormError("");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
@@ -95,6 +98,7 @@ export default function AdminsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
+    setFieldErrors({});
     setSubmitting(true);
 
     try {
@@ -103,17 +107,17 @@ export default function AdminsPage() {
         if (password) body.password = password;
         await put(`/admin/admins/${editing.id}`, body);
       } else {
-        if (!email || !password) {
-          setFormError("Email and password are required");
-          setSubmitting(false);
-          return;
-        }
         await post("/admin/admins", { email, password, name, role });
       }
       closeDialog();
       await load();
-    } catch (e: any) {
-      setFormError(e.message || "Operation failed");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message);
+        setFieldErrors(err.fields);
+      } else {
+        setFormError("Operation failed");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -257,7 +261,7 @@ export default function AdminsPage() {
 
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
-            {formError && (
+            {formError && !Object.keys(fieldErrors).length && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
                 {formError}
               </div>
@@ -272,7 +276,11 @@ export default function AdminsPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={!!editing}
                 placeholder="admin@example.com"
+                className={fieldErrors.email ? "border-destructive" : ""}
               />
+              {fieldErrors.email && (
+                <p className="text-sm text-destructive">{fieldErrors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -282,7 +290,11 @@ export default function AdminsPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Full name"
+                className={fieldErrors.name ? "border-destructive" : ""}
               />
+              {fieldErrors.name && (
+                <p className="text-sm text-destructive">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -313,7 +325,11 @@ export default function AdminsPage() {
                 placeholder={
                   editing ? "Leave empty to keep current" : "Enter password"
                 }
+                className={fieldErrors.password ? "border-destructive" : ""}
               />
+              {fieldErrors.password && (
+                <p className="text-sm text-destructive">{fieldErrors.password}</p>
+              )}
             </div>
           </DialogBody>
 
