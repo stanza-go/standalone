@@ -140,6 +140,62 @@ func TestBackup_Success(t *testing.T) {
 	}
 }
 
+func TestDownload_Success(t *testing.T) {
+	t.Parallel()
+	router, a, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/database/download", nil)
+	testutil.AddAdminAuth(t, req, a, "1")
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200\nbody: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify Content-Type and Content-Disposition headers.
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/octet-stream" {
+		t.Errorf("Content-Type = %q, want application/octet-stream", ct)
+	}
+
+	cd := rec.Header().Get("Content-Disposition")
+	if cd != `attachment; filename="database.sqlite"` {
+		t.Errorf("Content-Disposition = %q, want attachment with database.sqlite", cd)
+	}
+
+	// Verify Content-Length is set and body has content.
+	cl := rec.Header().Get("Content-Length")
+	if cl == "" || cl == "0" {
+		t.Error("Content-Length should be non-zero")
+	}
+
+	if rec.Body.Len() == 0 {
+		t.Error("response body is empty")
+	}
+
+	// Verify body starts with SQLite magic bytes.
+	body := rec.Body.Bytes()
+	if len(body) < 16 {
+		t.Fatal("response body too small to be a SQLite file")
+	}
+	magic := string(body[:16])
+	if magic != "SQLite format 3\x00" {
+		t.Errorf("body does not start with SQLite magic bytes, got %q", magic[:16])
+	}
+}
+
+func TestDownload_Unauthorized(t *testing.T) {
+	t.Parallel()
+	router, _, _, _ := setup(t)
+
+	req := httptest.NewRequest("GET", "/api/admin/database/download", nil)
+	rec := testutil.Do(router, req)
+
+	if rec.Code != 401 {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
 func TestBackup_AppearsInInfo(t *testing.T) {
 	t.Parallel()
 	router, a, _, _ := setup(t)

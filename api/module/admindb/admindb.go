@@ -1,5 +1,6 @@
 // Package admindb provides the database administration endpoints. It exposes
-// SQLite statistics, migration history, table inventory, and manual backup.
+// SQLite statistics, migration history, table inventory, manual backup, and
+// database file download.
 package admindb
 
 import (
@@ -12,17 +13,20 @@ import (
 
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/standalone/module/adminaudit"
 )
 
 // Register mounts the database admin routes on the given admin group.
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET  /api/admin/database        — stats, tables, migrations
-//	POST /api/admin/database/backup — trigger manual backup
+//	GET  /api/admin/database          — stats, tables, migrations
+//	POST /api/admin/database/backup   — trigger manual backup
+//	GET  /api/admin/database/download — download the SQLite file
 func Register(admin *http.Group, db *sqlite.DB, backupsDir string) {
 	admin.HandleFunc("GET /database", infoHandler(db, backupsDir))
 	admin.HandleFunc("POST /database/backup", backupHandler(db, backupsDir))
+	admin.HandleFunc("GET /database/download", downloadHandler(db))
 }
 
 func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *http.Request) {
@@ -175,11 +179,45 @@ func backupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *
 			return
 		}
 
+		adminaudit.Log(db, r, "database.backup", "database", "", fmt.Sprintf("file=%s size=%d", backupName, written))
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"name":       backupName,
 			"path":       backupPath,
 			"size_bytes": written,
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
+	}
+}
+
+// downloadHandler streams the SQLite database file as a download.
+// A passive WAL checkpoint is attempted first to flush recent writes
+// into the main database file, but download proceeds regardless.
+func downloadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Passive checkpoint — flushes WAL without blocking writers.
+		_, _ = db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
+
+		f, err := os.Open(db.Path())
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to open database file")
+			return
+		}
+		defer f.Close()
+
+		info, err := f.Stat()
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to stat database file")
+			return
+		}
+
+		adminaudit.Log(db, r, "database.download", "database", "", fmt.Sprintf("size=%d", info.Size()))
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="database.sqlite"`)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+		w.WriteHeader(200)
+
+		io.Copy(w, f)
 	}
 }

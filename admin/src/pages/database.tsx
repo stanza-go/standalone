@@ -54,6 +54,7 @@ export default function DatabasePage() {
   const [error, setError] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState(false);
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   async function load() {
     try {
@@ -83,6 +84,32 @@ export default function DatabasePage() {
     }
   }
 
+  async function downloadDB() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/admin/database/download", {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(data.error ?? "Download failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "database.sqlite";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -97,11 +124,19 @@ export default function DatabasePage() {
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={downloadDB} disabled={downloading}>
+            {downloading ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-3.5 w-3.5" />
+            )}
+            Download
+          </Button>
           <Button size="sm" onClick={triggerBackup} disabled={backingUp}>
             {backingUp ? (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="mr-2 h-3.5 w-3.5" />
+              <FileArchive className="mr-2 h-3.5 w-3.5" />
             )}
             Backup Now
           </Button>
