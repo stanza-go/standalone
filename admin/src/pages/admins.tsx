@@ -29,6 +29,7 @@ interface Admin {
 export default function AdminsPage() {
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [total, setTotal] = useState(0);
+  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
@@ -49,11 +50,13 @@ export default function AdminsPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await get<{ admins: Admin[]; total: number }>(
-        "/admin/admins"
-      );
-      setAdmins(data.admins);
-      setTotal(data.total);
+      const [adminsData, rolesData] = await Promise.all([
+        get<{ admins: Admin[]; total: number }>("/admin/admins"),
+        get<{ roles: string[] }>("/admin/role-names"),
+      ]);
+      setAdmins(adminsData.admins);
+      setTotal(adminsData.total);
+      setAvailableRoles(rolesData.roles);
       setError("");
     } catch (e: any) {
       setError(e.message || "Failed to load admins");
@@ -305,9 +308,11 @@ export default function AdminsPage() {
                 onChange={(e) => setRole(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <option value="viewer">Viewer</option>
-                <option value="admin">Admin</option>
-                <option value="superadmin">Super Admin</option>
+                {availableRoles.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -359,7 +364,7 @@ function RoleBadge({ role }: { role: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[role] || colors.viewer}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[role] || "bg-indigo-100 text-indigo-700"}`}
     >
       {role}
     </span>

@@ -14,6 +14,7 @@ import SettingsPage from "@/pages/settings";
 import UsersPage from "@/pages/users";
 import APIKeysPage from "@/pages/api-keys";
 import AuditPage from "@/pages/audit";
+import RolesPage from "@/pages/roles";
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="database" element={<DatabasePage />} />
             <Route path="api-keys" element={<APIKeysPage />} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="roles" element={<RolesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

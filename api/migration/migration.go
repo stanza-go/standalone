@@ -19,6 +19,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428807, "add_api_key_request_count", addAPIKeyRequestCountUp, addAPIKeyRequestCountDown)
 	db.AddMigration(1742428808, "create_uploads", createUploadsUp, createUploadsDown)
 	db.AddMigration(1742428809, "create_password_reset_tokens", createPasswordResetTokensUp, createPasswordResetTokensDown)
+	db.AddMigration(1742428810, "create_roles", createRolesUp, createRolesDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -284,5 +285,73 @@ func createPasswordResetTokensUp(tx *sqlite.Tx) error {
 
 func createPasswordResetTokensDown(tx *sqlite.Tx) error {
 	_, err := tx.Exec(`DROP TABLE IF EXISTS password_reset_tokens`)
+	return err
+}
+
+func createRolesUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE roles (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		name        TEXT    NOT NULL UNIQUE,
+		description TEXT    NOT NULL DEFAULT '',
+		is_system   INTEGER NOT NULL DEFAULT 0,
+		created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE TABLE role_scopes (
+		id      INTEGER PRIMARY KEY AUTOINCREMENT,
+		role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+		scope   TEXT    NOT NULL,
+		UNIQUE(role_id, scope)
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`CREATE INDEX idx_role_scopes_role_id ON role_scopes(role_id)`)
+	if err != nil {
+		return err
+	}
+
+	// Seed built-in roles.
+	_, err = tx.Exec(`INSERT INTO roles (name, description, is_system) VALUES
+		('superadmin', 'Full access to all admin features', 1),
+		('admin', 'Standard admin with user and settings access', 1),
+		('viewer', 'Read-only admin access', 1)`)
+	if err != nil {
+		return err
+	}
+
+	// superadmin scopes (role_id=1).
+	_, err = tx.Exec(`INSERT INTO role_scopes (role_id, scope) VALUES
+		(1, 'admin'), (1, 'admin:users'), (1, 'admin:settings'),
+		(1, 'admin:jobs'), (1, 'admin:logs'), (1, 'admin:audit'),
+		(1, 'admin:uploads'), (1, 'admin:database'), (1, 'admin:roles')`)
+	if err != nil {
+		return err
+	}
+
+	// admin scopes (role_id=2).
+	_, err = tx.Exec(`INSERT INTO role_scopes (role_id, scope) VALUES
+		(2, 'admin'), (2, 'admin:users'), (2, 'admin:settings')`)
+	if err != nil {
+		return err
+	}
+
+	// viewer scopes (role_id=3).
+	_, err = tx.Exec(`INSERT INTO role_scopes (role_id, scope) VALUES
+		(3, 'admin')`)
+	return err
+}
+
+func createRolesDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS role_scopes`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`DROP TABLE IF EXISTS roles`)
 	return err
 }

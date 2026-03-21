@@ -22,6 +22,7 @@ import (
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/adminroles"
 	"github.com/stanza-go/standalone/module/adminuploads"
 	"github.com/stanza-go/standalone/module/adminauth"
 	"github.com/stanza-go/standalone/module/admincron"
@@ -417,18 +418,44 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
 
+	// Dashboard: base admin scope only.
 	dashboard.Register(admin, db, q, s)
-	adminusers.Register(admin, db)
-	adminsessions.Register(admin, db)
-	admincron.Register(admin, s, db)
-	adminqueue.Register(admin, q, db)
-	adminlogs.Register(admin, dir.Logs)
-	admindb.Register(admin, db, dir.Backups)
-	adminsettings.Register(admin, db)
-	usermgmt.Register(admin, a, db)
-	apikeys.Register(admin, db)
-	adminaudit.Register(admin, db)
-	adminuploads.Register(admin, db, dir.Uploads)
+
+	// Scoped admin sub-groups — each module gets its specific scope.
+	withUsers := admin.Group("")
+	withUsers.Use(auth.RequireScope("admin:users"))
+	adminusers.Register(withUsers, db)
+	adminsessions.Register(withUsers, db)
+	usermgmt.Register(withUsers, a, db)
+	apikeys.Register(withUsers, db)
+
+	withSettings := admin.Group("")
+	withSettings.Use(auth.RequireScope("admin:settings"))
+	adminsettings.Register(withSettings, db)
+
+	withJobs := admin.Group("")
+	withJobs.Use(auth.RequireScope("admin:jobs"))
+	admincron.Register(withJobs, s, db)
+	adminqueue.Register(withJobs, q, db)
+
+	withLogs := admin.Group("")
+	withLogs.Use(auth.RequireScope("admin:logs"))
+	adminlogs.Register(withLogs, dir.Logs)
+
+	withDB := admin.Group("")
+	withDB.Use(auth.RequireScope("admin:database"))
+	admindb.Register(withDB, db, dir.Backups)
+
+	withAudit := admin.Group("")
+	withAudit.Use(auth.RequireScope("admin:audit"))
+	adminaudit.Register(withAudit, db)
+
+	// Roles module handles its own scope check internally.
+	adminroles.Register(admin, db)
+
+	withUploads := admin.Group("")
+	withUploads.Use(auth.RequireScope("admin:uploads"))
+	adminuploads.Register(withUploads, db, dir.Uploads)
 
 	// Protected user routes — require valid JWT + user scope.
 	user := api.Group("/user")

@@ -108,7 +108,7 @@ func JSONRequest(t *testing.T, method, path string, body any) *http.Request {
 // AddAdminAuth adds an admin access token cookie to the request.
 func AddAdminAuth(t *testing.T, req *http.Request, a *auth.Auth, uid string) {
 	t.Helper()
-	token, err := a.IssueAccessToken(uid, []string{"admin", "admin:users", "admin:settings", "admin:jobs", "admin:logs"})
+	token, err := a.IssueAccessToken(uid, []string{"admin", "admin:users", "admin:settings", "admin:jobs", "admin:logs", "admin:audit", "admin:uploads", "admin:database", "admin:roles"})
 	if err != nil {
 		t.Fatalf("issue admin token: %v", err)
 	}

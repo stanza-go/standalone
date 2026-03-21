@@ -72,7 +72,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		}
 
 		uid := strconv.FormatInt(id, 10)
-		scopes := scopesForRole(role)
+		scopes := scopesForRole(db, role)
 
 		// Issue access token.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
@@ -185,7 +185,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		}
 
 		uid := strconv.FormatInt(id, 10)
-		scopes := scopesForRole(role)
+		scopes := scopesForRole(db, role)
 
 		// Issue fresh access token with current scopes.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
@@ -226,17 +226,32 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 	}
 }
 
-// scopesForRole returns the scopes granted to a given role. For now
-// this is a simple mapping. Future sessions can move this to the DB.
-func scopesForRole(role string) []string {
-	switch role {
-	case "superadmin":
-		return []string{"admin", "admin:users", "admin:settings", "admin:jobs", "admin:logs"}
-	case "admin":
-		return []string{"admin", "admin:users", "admin:settings"}
-	default:
+// scopesForRole loads the scopes for a role from the database. Falls
+// back to a minimal "admin" scope if the role is not found.
+func scopesForRole(db *sqlite.DB, role string) []string {
+	sql, args := sqlite.Select("rs.scope").
+		From("role_scopes rs").
+		Join("roles r", "r.id = rs.role_id").
+		Where("r.name = ?", role).
+		Build()
+	rows, err := db.Query(sql, args...)
+	if err != nil {
 		return []string{"admin"}
 	}
+	defer rows.Close()
+
+	var scopes []string
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			continue
+		}
+		scopes = append(scopes, scope)
+	}
+	if len(scopes) == 0 {
+		return []string{"admin"}
+	}
+	return scopes
 }
 
 // randomID generates a 16-byte hex-encoded random ID (32 characters).

@@ -13,6 +13,7 @@ import (
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/adminroles"
 )
 
 // Register mounts the admin user management routes on the given admin group.
@@ -106,10 +107,13 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			validate.Email("email", req.Email),
 			validate.Required("password", req.Password),
 			validate.MinLen("password", req.Password, 8),
-			validate.OneOf("role", req.Role, "superadmin", "admin", "viewer"),
 		)
 		if v.HasErrors() {
 			v.WriteError(w)
+			return
+		}
+		if !adminroles.ValidateRoleExists(db, req.Role) {
+			http.WriteError(w, http.StatusUnprocessableEntity, "invalid role: "+req.Role)
 			return
 		}
 
@@ -175,11 +179,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		v := validate.Fields(
-			validate.OneOf("role", req.Role, "superadmin", "admin", "viewer"),
-		)
-		if v.HasErrors() {
-			v.WriteError(w)
+		if req.Role != "" && !adminroles.ValidateRoleExists(db, req.Role) {
+			http.WriteError(w, http.StatusBadRequest, "invalid role: "+req.Role)
 			return
 		}
 
