@@ -12,6 +12,9 @@ import {
   Ban,
   RefreshCw,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface QueueStats {
   pending: number;
@@ -158,9 +161,7 @@ export default function QueuePage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={loadAll} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
       {stats && (
@@ -197,9 +198,9 @@ export default function QueuePage() {
         </CardHeader>
         <CardContent className="p-0">
           {loading && jobs.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Loading...</div>
+            <div className="p-4"><Spinner /></div>
           ) : jobs.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">No jobs found.</div>
+            <EmptyState message="No jobs found" className="py-6" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

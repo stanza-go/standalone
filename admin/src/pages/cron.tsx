@@ -11,6 +11,9 @@ import {
   XCircle,
   Loader2,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface CronEntry {
   name: string;
@@ -97,17 +100,13 @@ export default function CronPage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
-      {loading && entries.length === 0 && (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
+      {loading && entries.length === 0 && <Spinner />}
 
       {!loading && entries.length === 0 && !error && (
-        <div className="text-sm text-muted-foreground">No cron jobs registered.</div>
+        <EmptyState message="No cron jobs registered" />
       )}
 
       {entries.length > 0 && (

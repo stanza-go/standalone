@@ -11,6 +11,8 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 interface DatabaseInfo {
   files: {
@@ -107,9 +109,7 @@ export default function DatabasePage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
       {backupMsg && (
@@ -118,9 +118,7 @@ export default function DatabasePage() {
         </div>
       )}
 
-      {!info && !error && (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
+      {!info && !error && <Spinner />}
 
       {info && (
         <div className="space-y-6">

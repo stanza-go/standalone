@@ -17,6 +17,8 @@ import {
   UsersRound,
   KeySquare,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 interface DashboardStats {
   system: {
@@ -116,14 +118,10 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={() => { setError(null); }} className="mb-6" />
       )}
 
-      {!stats && !error && (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
+      {!stats && !error && <Spinner />}
 
       {stats && (
         <div className="space-y-6">

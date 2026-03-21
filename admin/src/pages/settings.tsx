@@ -3,6 +3,9 @@ import { get, put } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, RefreshCw, X } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface Setting {
   key: string;
@@ -99,14 +102,10 @@ export default function SettingsPage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
-      {settings.length === 0 && !error && (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
+      {settings.length === 0 && !error && <Spinner />}
 
       <div className="space-y-6">
         {groupOrder.map((group) => (

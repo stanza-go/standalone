@@ -9,6 +9,9 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { TableEmptyRow } from "@/components/ui/empty-state";
 
 interface Session {
   id: string;
@@ -89,7 +92,7 @@ export default function SessionsPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Active Sessions</h1>
-        <p className="text-muted-foreground">Loading...</p>
+        <Spinner />
       </div>
     );
   }
@@ -104,9 +107,7 @@ export default function SessionsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
       )}
 
       <div className="border rounded-lg overflow-hidden">
@@ -123,14 +124,7 @@ export default function SessionsPage() {
           </thead>
           <tbody>
             {sessions.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="text-center p-6 text-muted-foreground"
-                >
-                  No active sessions
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={6} message="No active sessions" />
             ) : (
               sessions.map((session) => (
                 <tr

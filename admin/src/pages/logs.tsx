@@ -10,6 +10,9 @@ import {
   Pause,
   Play,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface LogEntry {
   time: string;
@@ -190,9 +193,7 @@ export default function LogsPage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={loadAll} onDismiss={() => setError(null)} className="mb-6" />
       )}
 
       <Card className="mb-4">
@@ -269,9 +270,9 @@ export default function LogsPage() {
         </CardHeader>
         <CardContent className="p-0">
           {loading && entries.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Loading...</div>
+            <div className="p-4"><Spinner /></div>
           ) : entries.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">No log entries found.</div>
+            <EmptyState message="No log entries found" className="py-6" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

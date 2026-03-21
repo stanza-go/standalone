@@ -22,6 +22,9 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { TableEmptyRow } from "@/components/ui/empty-state";
 
 interface User {
   id: number;
@@ -200,7 +203,7 @@ export default function UsersPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">Users</h1>
-        <p className="text-muted-foreground">Loading...</p>
+        <Spinner />
       </div>
     );
   }
@@ -221,9 +224,7 @@ export default function UsersPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
       )}
 
       {/* Search bar */}
@@ -269,14 +270,7 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="text-center p-6 text-muted-foreground"
-                >
-                  {search ? "No users match your search" : "No users found"}
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={6} message={search ? "No users match your search" : "No users found"} />
             ) : (
               users.map((user) => (
                 <tr

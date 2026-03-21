@@ -12,6 +12,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Copy, Check } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { TableEmptyRow } from "@/components/ui/empty-state";
 
 interface APIKey {
   id: number;
@@ -168,7 +171,7 @@ export default function APIKeysPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">API Keys</h1>
-        <p className="text-muted-foreground">Loading...</p>
+        <Spinner />
       </div>
     );
   }
@@ -189,9 +192,7 @@ export default function APIKeysPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
+        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
       )}
 
       {/* Key reveal after creation */}
@@ -248,14 +249,7 @@ export default function APIKeysPage() {
           </thead>
           <tbody>
             {keys.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="text-center p-6 text-muted-foreground"
-                >
-                  No API keys found
-                </td>
-              </tr>
+              <TableEmptyRow colSpan={8} message="No API keys found" />
             ) : (
               keys.map((k) => (
                 <tr
