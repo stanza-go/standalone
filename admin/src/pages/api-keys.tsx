@@ -238,12 +238,12 @@ export default function APIKeysPage() {
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="text-left p-3 font-medium">Name</th>
-              <th className="text-left p-3 font-medium">Key</th>
-              <th className="text-left p-3 font-medium">Scopes</th>
-              <th className="text-left p-3 font-medium">Last Used</th>
-              <th className="text-left p-3 font-medium">Expires</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>
+              <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>
+              <th className="text-left p-3 font-medium hidden lg:table-cell">Last Used</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>
               <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium">Created</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
@@ -257,10 +257,10 @@ export default function APIKeysPage() {
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
                   <td className="p-3 font-medium">{k.name}</td>
-                  <td className="p-3 font-mono text-xs text-muted-foreground">
+                  <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
                     {k.key_prefix}...
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 hidden lg:table-cell">
                     {k.scopes ? (
                       <div className="flex flex-wrap gap-1">
                         {k.scopes.split(",").map((s) => (
@@ -273,10 +273,10 @@ export default function APIKeysPage() {
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-muted-foreground text-xs">
+                  <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
                     {formatTime(k.last_used_at)}
                   </td>
-                  <td className="p-3 text-muted-foreground text-xs">
+                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
                     {k.expires_at ? (
                       <span
                         className={
@@ -295,7 +295,7 @@ export default function APIKeysPage() {
                       expired={isExpired(k.expires_at)}
                     />
                   </td>
-                  <td className="p-3 text-muted-foreground text-xs">
+                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
                     {formatTime(k.created_at)}
                   </td>
                   <td className="p-3 text-right">

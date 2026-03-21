@@ -199,7 +199,7 @@ export default function LogsPage() {
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
           {/* Level filter */}
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {LEVELS.map((l) => (
               <Button
                 key={l || "all"}
@@ -212,15 +212,15 @@ export default function LogsPage() {
             ))}
           </div>
 
-          <div className="h-6 w-px bg-border" />
+          <div className="hidden h-6 w-px bg-border sm:block" />
 
           {/* Search */}
-          <form onSubmit={handleSearch} className="flex items-center gap-2">
+          <form onSubmit={handleSearch} className="flex w-full items-center gap-2 sm:w-auto">
             <Input
               placeholder="Search messages..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="h-8 w-48"
+              className="h-8 min-w-0 flex-1 sm:w-48 sm:flex-none"
             />
             <Button type="submit" variant="outline" size="sm">
               Search
@@ -239,7 +239,7 @@ export default function LogsPage() {
             )}
           </form>
 
-          <div className="h-6 w-px bg-border" />
+          <div className="hidden h-6 w-px bg-border sm:block" />
 
           {/* File selector */}
           <select

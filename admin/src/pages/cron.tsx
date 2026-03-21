@@ -120,11 +120,11 @@ export default function CronPage() {
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Name</th>
-                    <th className="px-4 py-3 font-medium">Schedule</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell">Schedule</th>
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Last Run</th>
-                    <th className="px-4 py-3 font-medium">Next Run</th>
-                    <th className="px-4 py-3 font-medium">Last Error</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell">Next Run</th>
+                    <th className="px-4 py-3 font-medium hidden lg:table-cell">Last Error</th>
                     <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
@@ -132,7 +132,7 @@ export default function CronPage() {
                   {entries.map((entry) => (
                     <tr key={entry.name} className="border-b border-border last:border-0">
                       <td className="px-4 py-3 font-mono text-xs">{entry.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{entry.schedule}</td>
+                      <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{entry.schedule}</td>
                       <td className="px-4 py-3">
                         {entry.running ? (
                           <span className="inline-flex items-center gap-1 text-blue-600">
@@ -156,12 +156,12 @@ export default function CronPage() {
                           {entry.last_run ? relativeTime(entry.last_run) : "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                         <span title={formatTime(entry.next_run)}>
                           {entry.next_run ? relativeTime(entry.next_run) : "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 max-w-[200px] truncate text-destructive">
+                      <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
                         {entry.last_err || "—"}
                       </td>
                       <td className="px-4 py-3">

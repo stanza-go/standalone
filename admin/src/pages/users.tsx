@@ -260,11 +260,11 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">ID</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">ID</th>
               <th className="text-left p-3 font-medium">Email</th>
               <th className="text-left p-3 font-medium">Name</th>
               <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium">Created</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
@@ -277,7 +277,7 @@ export default function UsersPage() {
                   key={user.id}
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
-                  <td className="p-3 font-mono text-xs">{user.id}</td>
+                  <td className="p-3 font-mono text-xs hidden md:table-cell">{user.id}</td>
                   <td className="p-3">{user.email}</td>
                   <td className="p-3">{user.name || "\u2014"}</td>
                   <td className="p-3">
@@ -289,7 +289,7 @@ export default function UsersPage() {
                       <StatusBadge active={user.is_active} />
                     </button>
                   </td>
-                  <td className="p-3 text-muted-foreground text-xs">
+                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
                     {formatTime(user.created_at)}
                   </td>
                   <td className="p-3 text-right">

@@ -181,9 +181,9 @@ export default function QueuePage() {
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base">Jobs</CardTitle>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {STATUS_FILTERS.map((s) => (
               <Button
                 key={s || "all"}
@@ -206,30 +206,30 @@ export default function QueuePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-4 py-3 font-medium">ID</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell">ID</th>
                     <th className="px-4 py-3 font-medium">Type</th>
                     <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Attempts</th>
-                    <th className="px-4 py-3 font-medium">Created</th>
-                    <th className="px-4 py-3 font-medium">Error</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell">Attempts</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell">Created</th>
+                    <th className="px-4 py-3 font-medium hidden lg:table-cell">Error</th>
                     <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {jobs.map((job) => (
                     <tr key={job.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3 font-mono text-xs">{job.id}</td>
+                      <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{job.id}</td>
                       <td className="px-4 py-3 font-mono text-xs">{job.type}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={job.status} />
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                         {job.attempts}/{job.max_attempts}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                         {formatTime(job.created_at)}
                       </td>
-                      <td className="px-4 py-3 max-w-[200px] truncate text-destructive">
+                      <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
                         {job.last_error || "—"}
                       </td>
                       <td className="px-4 py-3">

@@ -114,10 +114,10 @@ export default function SessionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">Token ID</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>
               <th className="text-left p-3 font-medium">Type</th>
               <th className="text-left p-3 font-medium">Admin</th>
-              <th className="text-left p-3 font-medium">Created</th>
+              <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
               <th className="text-left p-3 font-medium">Expires</th>
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
@@ -131,7 +131,7 @@ export default function SessionsPage() {
                   key={session.id}
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
-                  <td className="p-3 font-mono text-xs">
+                  <td className="p-3 font-mono text-xs hidden md:table-cell">
                     {session.id.substring(0, 12)}...
                   </td>
                   <td className="p-3">
@@ -145,7 +145,7 @@ export default function SessionsPage() {
                       {session.email}
                     </div>
                   </td>
-                  <td className="p-3 text-muted-foreground text-xs">
+                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
                     <div>{formatTime(session.created_at)}</div>
                     <div>{relativeTime(session.created_at)}</div>
                   </td>
