@@ -30,7 +30,7 @@ interface CommandItem {
   id: string;
   label: string;
   icon: React.ReactNode;
-  group: "navigation" | "actions";
+  group: "users-access" | "system" | "content" | "config" | "other" | "actions";
   keywords?: string;
   onSelect: () => void;
 }
@@ -59,22 +59,26 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   );
 
   const items: CommandItem[] = [
-    // Navigation
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, group: "navigation", onSelect: () => go("/") },
-    { id: "users", label: "Users", icon: <UsersRound className="h-4 w-4" />, group: "navigation", keywords: "end user customer", onSelect: () => go("/users") },
-    { id: "admins", label: "Admin Users", icon: <Users className="h-4 w-4" />, group: "navigation", keywords: "administrator staff", onSelect: () => go("/admins") },
-    { id: "sessions", label: "Sessions", icon: <KeyRound className="h-4 w-4" />, group: "navigation", keywords: "token login active", onSelect: () => go("/sessions") },
-    { id: "api-keys", label: "API Keys", icon: <KeySquare className="h-4 w-4" />, group: "navigation", keywords: "token bearer programmatic", onSelect: () => go("/api-keys") },
-    { id: "cron", label: "Cron Jobs", icon: <Clock className="h-4 w-4" />, group: "navigation", keywords: "scheduler schedule task periodic", onSelect: () => go("/cron") },
-    { id: "queue", label: "Job Queue", icon: <Inbox className="h-4 w-4" />, group: "navigation", keywords: "background worker task job", onSelect: () => go("/queue") },
-    { id: "logs", label: "Logs", icon: <FileText className="h-4 w-4" />, group: "navigation", keywords: "log viewer stream tail", onSelect: () => go("/logs") },
-    { id: "database", label: "Database", icon: <Database className="h-4 w-4" />, group: "navigation", keywords: "sqlite backup migration", onSelect: () => go("/database") },
-    { id: "uploads", label: "Uploads", icon: <Upload className="h-4 w-4" />, group: "navigation", keywords: "file media image", onSelect: () => go("/uploads") },
-    { id: "audit", label: "Audit Log", icon: <ScrollText className="h-4 w-4" />, group: "navigation", keywords: "audit trail history activity", onSelect: () => go("/audit") },
-    { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />, group: "navigation", keywords: "alert message notify", onSelect: () => go("/notifications") },
-    { id: "roles", label: "Roles", icon: <Shield className="h-4 w-4" />, group: "navigation", keywords: "role scope permission access", onSelect: () => go("/roles") },
-    { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" />, group: "navigation", keywords: "config configuration preference", onSelect: () => go("/settings") },
-    { id: "profile", label: "Profile", icon: <User className="h-4 w-4" />, group: "navigation", keywords: "account my profile password", onSelect: () => go("/profile") },
+    // Dashboard & Profile
+    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, group: "other", onSelect: () => go("/") },
+    { id: "profile", label: "Profile", icon: <User className="h-4 w-4" />, group: "other", keywords: "account my profile password", onSelect: () => go("/profile") },
+    // Users & Access
+    { id: "users", label: "Users", icon: <UsersRound className="h-4 w-4" />, group: "users-access", keywords: "end user customer", onSelect: () => go("/users") },
+    { id: "admins", label: "Admin Users", icon: <Users className="h-4 w-4" />, group: "users-access", keywords: "administrator staff", onSelect: () => go("/admins") },
+    { id: "sessions", label: "Sessions", icon: <KeyRound className="h-4 w-4" />, group: "users-access", keywords: "token login active", onSelect: () => go("/sessions") },
+    { id: "api-keys", label: "API Keys", icon: <KeySquare className="h-4 w-4" />, group: "users-access", keywords: "token bearer programmatic", onSelect: () => go("/api-keys") },
+    { id: "roles", label: "Roles", icon: <Shield className="h-4 w-4" />, group: "users-access", keywords: "role scope permission access", onSelect: () => go("/roles") },
+    // System
+    { id: "cron", label: "Cron Jobs", icon: <Clock className="h-4 w-4" />, group: "system", keywords: "scheduler schedule task periodic", onSelect: () => go("/cron") },
+    { id: "queue", label: "Job Queue", icon: <Inbox className="h-4 w-4" />, group: "system", keywords: "background worker task job", onSelect: () => go("/queue") },
+    { id: "logs", label: "Logs", icon: <FileText className="h-4 w-4" />, group: "system", keywords: "log viewer stream tail", onSelect: () => go("/logs") },
+    { id: "database", label: "Database", icon: <Database className="h-4 w-4" />, group: "system", keywords: "sqlite backup migration", onSelect: () => go("/database") },
+    // Content
+    { id: "uploads", label: "Uploads", icon: <Upload className="h-4 w-4" />, group: "content", keywords: "file media image", onSelect: () => go("/uploads") },
+    { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />, group: "content", keywords: "alert message notify", onSelect: () => go("/notifications") },
+    { id: "audit", label: "Audit Log", icon: <ScrollText className="h-4 w-4" />, group: "content", keywords: "audit trail history activity", onSelect: () => go("/audit") },
+    // Config
+    { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" />, group: "config", keywords: "config configuration preference", onSelect: () => go("/settings") },
     // Quick actions
     {
       id: "theme-light",
@@ -127,9 +131,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     return true;
   });
 
-  const navItems = visible.filter((i) => i.group === "navigation");
-  const actionItems = visible.filter((i) => i.group === "actions");
-  const flatList = [...navItems, ...actionItems];
+  const groups: { key: string; label: string; items: CommandItem[] }[] = [
+    { key: "other", label: "General", items: visible.filter((i) => i.group === "other") },
+    { key: "users-access", label: "Users & Access", items: visible.filter((i) => i.group === "users-access") },
+    { key: "system", label: "System", items: visible.filter((i) => i.group === "system") },
+    { key: "content", label: "Content", items: visible.filter((i) => i.group === "content") },
+    { key: "config", label: "Config", items: visible.filter((i) => i.group === "config") },
+    { key: "actions", label: "Quick Actions", items: visible.filter((i) => i.group === "actions") },
+  ].filter((g) => g.items.length > 0);
+  const flatList = groups.flatMap((g) => g.items);
 
   // Reset active index when filtered list changes.
   useEffect(() => {
@@ -222,12 +232,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             </p>
           )}
 
-          {navItems.length > 0 && (
-            <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Navigation
+          {groups.map((group, groupIdx) => (
+            <div key={group.key}>
+              <div className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", groupIdx > 0 && "mt-1 border-t border-border pt-2")}>
+                {group.label}
               </div>
-              {navItems.map((item) => {
+              {group.items.map((item) => {
                 itemIndex++;
                 const idx = itemIndex;
                 return (
@@ -248,37 +258,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   </button>
                 );
               })}
-            </>
-          )}
-
-          {actionItems.length > 0 && (
-            <>
-              <div className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", navItems.length > 0 && "mt-1 border-t border-border pt-2")}>
-                Quick Actions
-              </div>
-              {actionItems.map((item) => {
-                itemIndex++;
-                const idx = itemIndex;
-                return (
-                  <button
-                    key={item.id}
-                    data-active={idx === activeIndex}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
-                      idx === activeIndex
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:bg-accent/50"
-                    )}
-                    onClick={() => item.onSelect()}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                  >
-                    <span className="shrink-0 text-muted-foreground">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </>
-          )}
+            </div>
+          ))}
         </div>
       </div>
     </dialog>

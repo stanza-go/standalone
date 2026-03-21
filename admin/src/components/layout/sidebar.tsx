@@ -35,21 +35,50 @@ interface NavItem {
   icon: ReactNode;
 }
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", to: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { label: "Users", to: "/users", icon: <UsersRound className="h-4 w-4" /> },
-  { label: "Admin Users", to: "/admins", icon: <Users className="h-4 w-4" /> },
-  { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
-  { label: "API Keys", to: "/api-keys", icon: <KeySquare className="h-4 w-4" /> },
-  { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
-  { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
-  { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
-  { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
-  { label: "Uploads", to: "/uploads", icon: <Upload className="h-4 w-4" /> },
-  { label: "Audit Log", to: "/audit", icon: <ScrollText className="h-4 w-4" /> },
-  { label: "Notifications", to: "/notifications", icon: <Bell className="h-4 w-4" /> },
-  { label: "Roles", to: "/roles", icon: <Shield className="h-4 w-4" /> },
-  { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
+interface NavSection {
+  label?: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    items: [
+      { label: "Dashboard", to: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: "Users & Access",
+    items: [
+      { label: "Users", to: "/users", icon: <UsersRound className="h-4 w-4" /> },
+      { label: "Admin Users", to: "/admins", icon: <Users className="h-4 w-4" /> },
+      { label: "Sessions", to: "/sessions", icon: <KeyRound className="h-4 w-4" /> },
+      { label: "API Keys", to: "/api-keys", icon: <KeySquare className="h-4 w-4" /> },
+      { label: "Roles", to: "/roles", icon: <Shield className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Cron Jobs", to: "/cron", icon: <Clock className="h-4 w-4" /> },
+      { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
+      { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
+      { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { label: "Uploads", to: "/uploads", icon: <Upload className="h-4 w-4" /> },
+      { label: "Notifications", to: "/notifications", icon: <Bell className="h-4 w-4" /> },
+      { label: "Audit Log", to: "/audit", icon: <ScrollText className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: "Config",
+    items: [
+      { label: "Settings", to: "/settings", icon: <Settings className="h-4 w-4" /> },
+    ],
+  },
 ];
 
 export default function SidebarLayout() {
@@ -180,23 +209,35 @@ export default function SidebarLayout() {
               </>
             )}
           </button>
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )
-              }
-            >
-              {item.icon}
-              {(mobileOpen || !collapsed) && <span>{item.label}</span>}
-            </NavLink>
+          {navSections.map((section, sectionIdx) => (
+            <div key={section.label ?? sectionIdx} className={cn(sectionIdx > 0 && "mt-3")}>
+              {section.label && (mobileOpen || !collapsed) && (
+                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  {section.label}
+                </div>
+              )}
+              {section.label && !mobileOpen && collapsed && (
+                <div className="mx-auto mb-1 h-px w-6 bg-border" />
+              )}
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )
+                  }
+                >
+                  {item.icon}
+                  {(mobileOpen || !collapsed) && <span>{item.label}</span>}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
