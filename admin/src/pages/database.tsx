@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,9 +77,12 @@ export default function DatabasePage() {
     try {
       const result = await post<BackupResult>("/admin/database/backup");
       setBackupMsg(`Backup created: ${result.name} (${formatBytes(result.size_bytes)})`);
+      toast.success("Backup created successfully");
       load();
     } catch (err) {
-      setBackupMsg(err instanceof Error ? err.message : "Backup failed");
+      const msg = err instanceof Error ? err.message : "Backup failed";
+      setBackupMsg(msg);
+      toast.error(msg);
     } finally {
       setBackingUp(false);
     }

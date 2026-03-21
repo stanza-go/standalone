@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,8 +134,10 @@ export default function UsersPage() {
         const body: Record<string, unknown> = { name };
         if (password) body.password = password;
         await put(`/admin/users/${editing.id}`, body);
+        toast.success("User updated");
       } else {
         await post("/admin/users", { email, password, name });
+        toast.success("User created");
       }
       closeDialog();
       await load();
@@ -155,9 +158,10 @@ export default function UsersPage() {
     try {
       await del(`/admin/users/${id}`);
       setDeleteId(null);
+      toast.success("User deleted");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to delete user");
+      toast.error(e.message || "Failed to delete user");
     } finally {
       setActing(null);
     }
@@ -167,9 +171,10 @@ export default function UsersPage() {
     setActing(user.id);
     try {
       await put(`/admin/users/${user.id}`, { is_active: !user.is_active });
+      toast.success(user.is_active ? "User deactivated" : "User activated");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to update user");
+      toast.error(e.message || "Failed to update user");
     } finally {
       setActing(null);
     }

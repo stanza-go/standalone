@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, put } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ export default function SettingsPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
-  const [successKey, setSuccessKey] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -43,7 +43,6 @@ export default function SettingsPage() {
   function startEdit(s: Setting) {
     setEditingKey(s.key);
     setEditValue(s.value);
-    setSuccessKey(null);
   }
 
   function cancelEdit() {
@@ -62,8 +61,7 @@ export default function SettingsPage() {
       );
       setEditingKey(null);
       setEditValue("");
-      setSuccessKey(key);
-      setTimeout(() => setSuccessKey(null), 2000);
+      toast.success(`Setting "${key}" updated`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -168,12 +166,7 @@ export default function SettingsPage() {
                       ) : (
                         <>
                           <span
-                            className={
-                              "cursor-pointer rounded px-2 py-1 text-sm font-mono hover:bg-accent transition-colors" +
-                              (successKey === s.key
-                                ? " text-green-600"
-                                : "")
-                            }
+                            className="cursor-pointer rounded px-2 py-1 text-sm font-mono hover:bg-accent transition-colors"
                             onClick={() => startEdit(s)}
                           >
                             {s.value}

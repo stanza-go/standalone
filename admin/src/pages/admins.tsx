@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,8 +110,10 @@ export default function AdminsPage() {
         const body: Record<string, unknown> = { name, role };
         if (password) body.password = password;
         await put(`/admin/admins/${editing.id}`, body);
+        toast.success("Admin updated");
       } else {
         await post("/admin/admins", { email, password, name, role });
+        toast.success("Admin created");
       }
       closeDialog();
       await load();
@@ -131,9 +134,10 @@ export default function AdminsPage() {
     try {
       await del(`/admin/admins/${id}`);
       setDeleteId(null);
+      toast.success("Admin deleted");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to delete admin");
+      toast.error(e.message || "Failed to delete admin");
     } finally {
       setActing(null);
     }

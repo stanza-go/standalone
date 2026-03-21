@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +120,7 @@ export default function APIKeysPage() {
     try {
       if (editing) {
         await put(`/admin/api-keys/${editing.id}`, { name, scopes });
+        toast.success("API key updated");
       } else {
         const body: Record<string, unknown> = { name, scopes };
         if (expiresAt) {
@@ -127,6 +129,7 @@ export default function APIKeysPage() {
         const data = await post<{ api_key: CreatedKey }>("/admin/api-keys", body);
         setCreatedKey(data.api_key);
         setCopied(false);
+        toast.success("API key created");
       }
       closeDialog();
       await load();
@@ -147,9 +150,10 @@ export default function APIKeysPage() {
     try {
       await del(`/admin/api-keys/${id}`);
       setRevokeId(null);
+      toast.success("API key revoked");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to revoke key");
+      toast.error(e.message || "Failed to revoke key");
     } finally {
       setActing(null);
     }

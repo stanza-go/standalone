@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { get, post } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -229,9 +230,11 @@ export default function CronPage() {
     setActing(`${name}:${act}`);
     try {
       await post(`/admin/cron/${encodeURIComponent(name)}/${act}`);
+      const labels: Record<string, string> = { trigger: "triggered", enable: "enabled", disable: "disabled" };
+      toast.success(`Cron job ${labels[act] || act}`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${act} job`);
+      toast.error(err instanceof Error ? err.message : `Failed to ${act} job`);
     } finally {
       setActing(null);
     }

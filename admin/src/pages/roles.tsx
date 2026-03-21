@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post, put, del, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,8 +122,10 @@ export default function RolesPage() {
         };
         if (!editing.is_system) body.name = name;
         await put(`/admin/roles/${editing.id}`, body);
+        toast.success("Role updated");
       } else {
         await post("/admin/roles/", { name, description, scopes: selectedScopes });
+        toast.success("Role created");
       }
       closeDialog();
       await load();
@@ -142,9 +145,10 @@ export default function RolesPage() {
     try {
       await del(`/admin/roles/${id}`);
       setDeleteId(null);
+      toast.success("Role deleted");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to delete role");
+      toast.error(e.message || "Failed to delete role");
     } finally {
       setActing(null);
     }

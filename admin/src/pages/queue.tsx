@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { get, post } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -239,9 +240,10 @@ export default function QueuePage() {
     setActing(id);
     try {
       await post(`/admin/queue/jobs/${id}/retry`);
+      toast.success("Job queued for retry");
       await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to retry job");
+      toast.error(err instanceof Error ? err.message : "Failed to retry job");
     } finally {
       setActing(null);
     }
@@ -251,9 +253,10 @@ export default function QueuePage() {
     setActing(id);
     try {
       await post(`/admin/queue/jobs/${id}/cancel`);
+      toast.success("Job cancelled");
       await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel job");
+      toast.error(err instanceof Error ? err.message : "Failed to cancel job");
     } finally {
       setActing(null);
     }

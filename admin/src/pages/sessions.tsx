@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,9 +58,10 @@ export default function SessionsPage() {
     try {
       await del(`/admin/sessions/${id}`);
       setRevokeTarget(null);
+      toast.success("Session revoked");
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to revoke session");
+      toast.error(e.message || "Failed to revoke session");
     } finally {
       setActing(null);
     }

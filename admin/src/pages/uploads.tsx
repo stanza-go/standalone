@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, del, upload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,10 +135,11 @@ export default function UploadsPage() {
     try {
       await del(`/admin/uploads/${id}`);
       setDeleteId(null);
+      toast.success("Upload deleted");
       await load();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to delete upload";
-      setError(msg);
+      toast.error(msg);
     } finally {
       setActing(null);
     }
@@ -163,9 +165,11 @@ export default function UploadsPage() {
       for (const file of selectedFiles) {
         await upload("/admin/uploads", file);
       }
+      const count = selectedFiles.length;
       setShowUpload(false);
       setSelectedFiles([]);
       setPage(0);
+      toast.success(`${count} file${count !== 1 ? "s" : ""} uploaded`);
       await load();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";

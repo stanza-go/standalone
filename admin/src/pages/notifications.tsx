@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { get, post, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,7 +110,7 @@ export default function NotificationsPage() {
       );
       setUnread((c) => Math.max(0, c - 1));
     } catch (e: any) {
-      setError(e.message || "Failed to mark as read");
+      toast.error(e.message || "Failed to mark as read");
     } finally {
       setActing(false);
     }
@@ -123,8 +124,9 @@ export default function NotificationsPage() {
         prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
       );
       setUnread(0);
+      toast.success("All notifications marked as read");
     } catch (e: any) {
-      setError(e.message || "Failed to mark all as read");
+      toast.error(e.message || "Failed to mark all as read");
     } finally {
       setActing(false);
     }
@@ -140,8 +142,9 @@ export default function NotificationsPage() {
       if (deleted && !deleted.read_at) {
         setUnread((c) => Math.max(0, c - 1));
       }
+      toast.success("Notification deleted");
     } catch (e: any) {
-      setError(e.message || "Failed to delete notification");
+      toast.error(e.message || "Failed to delete notification");
     } finally {
       setActing(false);
     }
