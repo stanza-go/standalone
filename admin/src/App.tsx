@@ -22,6 +22,8 @@ import UploadsPage from "@/pages/uploads";
 import ProfilePage from "@/pages/profile";
 import UserDetailPage from "@/pages/user-detail";
 import AdminDetailPage from "@/pages/admin-detail";
+import WebhooksPage from "@/pages/webhooks";
+import WebhookDetailPage from "@/pages/webhook-detail";
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
@@ -55,6 +57,8 @@ export default function App() {
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="uploads" element={<UploadsPage />} />
+            <Route path="webhooks" element={<WebhooksPage />} />
+            <Route path="webhooks/:id" element={<WebhookDetailPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>

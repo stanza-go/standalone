@@ -13,6 +13,7 @@ import {
   Inbox,
   FileText,
   Database,
+  Webhook,
   Upload,
   ScrollText,
   Bell,
@@ -73,6 +74,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: "queue", label: "Job Queue", icon: <Inbox className="h-4 w-4" />, group: "system", keywords: "background worker task job", onSelect: () => go("/queue") },
     { id: "logs", label: "Logs", icon: <FileText className="h-4 w-4" />, group: "system", keywords: "log viewer stream tail", onSelect: () => go("/logs") },
     { id: "database", label: "Database", icon: <Database className="h-4 w-4" />, group: "system", keywords: "sqlite backup migration", onSelect: () => go("/database") },
+    { id: "webhooks", label: "Webhooks", icon: <Webhook className="h-4 w-4" />, group: "system", keywords: "webhook callback endpoint event subscription", onSelect: () => go("/webhooks") },
     // Content
     { id: "uploads", label: "Uploads", icon: <Upload className="h-4 w-4" />, group: "content", keywords: "file media image", onSelect: () => go("/uploads") },
     { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />, group: "content", keywords: "alert message notify", onSelect: () => go("/notifications") },

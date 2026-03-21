@@ -22,6 +22,7 @@ import {
   Shield,
   Bell,
   Upload,
+  Webhook,
   Menu,
   X,
   Search,
@@ -63,6 +64,7 @@ const navSections: NavSection[] = [
       { label: "Job Queue", to: "/queue", icon: <Inbox className="h-4 w-4" /> },
       { label: "Logs", to: "/logs", icon: <FileText className="h-4 w-4" /> },
       { label: "Database", to: "/database", icon: <Database className="h-4 w-4" /> },
+      { label: "Webhooks", to: "/webhooks", icon: <Webhook className="h-4 w-4" /> },
     ],
   },
   {
