@@ -70,10 +70,24 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			}
 		}
 
-		jobs, err := q.Jobs(f)
-		if err != nil {
+		// SQLite single-mutex: close rows before issuing count query.
+		// Use function scope to ensure rows.Close() runs before JobCount.
+		var jobs []queue.Job
+		var jobsErr error
+		func() {
+			jobs, jobsErr = q.Jobs(f)
+		}()
+		if jobsErr != nil {
 			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": "failed to list jobs",
+			})
+			return
+		}
+
+		total, err := q.JobCount(f)
+		if err != nil {
+			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+				"error": "failed to count jobs",
 			})
 			return
 		}
@@ -124,7 +138,8 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"jobs": result,
+			"jobs":  result,
+			"total": total,
 		})
 	}
 }
