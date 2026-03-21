@@ -35,7 +35,7 @@ build-api:
 
 # Docker — build production image from workspace root
 docker:
-	docker build -t stanza -f Dockerfile ../..
+	docker build -t stanza -f Dockerfile ..
 
 clean:
 	rm -rf api/bin api/ui api/admin ui/dist admin/dist
