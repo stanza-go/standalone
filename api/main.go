@@ -348,8 +348,8 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 
 func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Config, logger *log.Logger) *http.Server {
 	addr := cfg.GetStringOr("server.addr", ":23710")
-	// Railway, Cloud Run, etc. set PORT — use it if server.addr wasn't explicitly configured.
-	if port := os.Getenv("PORT"); port != "" && cfg.GetString("server.addr") == "" {
+	// Railway, Cloud Run, etc. set PORT — always prefer it when present.
+	if port := os.Getenv("PORT"); port != "" {
 		addr = "0.0.0.0:" + port
 	}
 	srv := http.NewServer(router, http.WithAddr(addr))
