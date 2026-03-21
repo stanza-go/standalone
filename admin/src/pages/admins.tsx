@@ -14,6 +14,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -50,7 +51,7 @@ export default function AdminsPage() {
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Admin | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Admin | null>(null);
 
   // Form state.
   const [email, setEmail] = useState("");
@@ -151,11 +152,13 @@ export default function AdminsPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setActing(id);
     try {
       await del(`/admin/admins/${id}`);
-      setDeleteId(null);
+      setDeleteTarget(null);
       toast.success("Admin deleted");
       await load();
     } catch (e: any) {
@@ -272,45 +275,22 @@ export default function AdminsPage() {
                     {formatTime(admin.created_at)}
                   </td>
                   <td className="p-3 text-right">
-                    {deleteId === admin.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Delete?
-                        </span>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={acting === admin.id}
-                          onClick={() => handleDelete(admin.id)}
-                        >
-                          {acting === admin.id ? "Deleting..." : "Confirm"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(admin)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(admin.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(admin)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTarget(admin)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      </Button>
+                    </span>
                   </td>
                 </tr>
               ))
@@ -426,6 +406,23 @@ export default function AdminsPage() {
           </DialogFooter>
         </form>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Admin"
+        message="Are you sure you want to delete this admin? They will lose all access immediately."
+        confirmLabel="Delete"
+        loading={acting === deleteTarget?.id}
+        details={deleteTarget && (
+          <>
+            <div><span className="font-medium">Email:</span> {deleteTarget.email}</div>
+            <div><span className="font-medium">Role:</span> {deleteTarget.role}</div>
+          </>
+        )}
+      />
     </div>
   );
 }

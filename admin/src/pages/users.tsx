@@ -14,6 +14,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Plus,
   Pencil,
@@ -57,7 +58,7 @@ export default function UsersPage() {
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   // Impersonate state.
   const [impersonateToken, setImpersonateToken] = useState<string | null>(null);
@@ -155,11 +156,13 @@ export default function UsersPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setActing(id);
     try {
       await del(`/admin/users/${id}`);
-      setDeleteId(null);
+      setDeleteTarget(null);
       toast.success("User deleted");
       await load();
     } catch (e: any) {
@@ -310,54 +313,31 @@ export default function UsersPage() {
                     {formatTime(user.created_at)}
                   </td>
                   <td className="p-3 text-right">
-                    {deleteId === user.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Delete?
-                        </span>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={acting === user.id}
-                          onClick={() => handleDelete(user.id)}
-                        >
-                          {acting === user.id ? "Deleting..." : "Confirm"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Impersonate"
-                          disabled={!user.is_active}
-                          onClick={() => handleImpersonate(user.id)}
-                        >
-                          <UserCheck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(user)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(user.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Impersonate"
+                        disabled={!user.is_active}
+                        onClick={() => handleImpersonate(user.id)}
+                      >
+                        <UserCheck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(user)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTarget(user)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      </Button>
+                    </span>
                   </td>
                 </tr>
               ))
@@ -499,6 +479,23 @@ export default function UsersPage() {
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete User"
+        message="Are you sure you want to delete this user? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={acting === deleteTarget?.id}
+        details={deleteTarget && (
+          <>
+            <div><span className="font-medium">Email:</span> {deleteTarget.email}</div>
+            <div><span className="font-medium">Name:</span> {deleteTarget.name || "\u2014"}</div>
+          </>
+        )}
+      />
     </div>
   );
 }

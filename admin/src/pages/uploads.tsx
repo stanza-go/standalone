@@ -10,6 +10,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Trash2,
   Download,
@@ -94,7 +95,7 @@ export default function UploadsPage() {
   const [preview, setPreview] = useState<UploadItem | null>(null);
 
   // Delete confirmation.
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UploadItem | null>(null);
 
   // Upload dialog.
   const [showUpload, setShowUpload] = useState(false);
@@ -129,11 +130,13 @@ export default function UploadsPage() {
     load();
   }, [load]);
 
-  async function handleDelete(id: number) {
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setActing(id);
     try {
       await del(`/admin/uploads/${id}`);
-      setDeleteId(null);
+      setDeleteTarget(null);
       toast.success("Upload deleted");
       await load();
     } catch (e: unknown) {
@@ -320,52 +323,31 @@ export default function UploadsPage() {
                     {formatTime(upload.created_at)}
                   </td>
                   <td className="p-3 text-right">
-                    {deleteId === upload.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Delete?</span>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={acting === upload.id}
-                          onClick={() => handleDelete(upload.id)}
-                        >
-                          {acting === upload.id ? "Deleting..." : "Confirm"}
+                    <span className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Preview"
+                        onClick={() => setPreview(upload)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <a href={fileUrl(upload.id)} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="sm" title="Download">
+                          <Download className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
+                      </a>
+                      {!upload.deleted_at && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          title="Preview"
-                          onClick={() => setPreview(upload)}
+                          title="Delete"
+                          onClick={() => setDeleteTarget(upload)}
                         >
-                          <Eye className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </Button>
-                        <a href={fileUrl(upload.id)} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="sm" title="Download">
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
-                        </a>
-                        {!upload.deleted_at && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Delete"
-                            onClick={() => setDeleteId(upload.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
-                        )}
-                      </span>
-                    )}
+                      )}
+                    </span>
                   </td>
                 </tr>
               ))
@@ -452,6 +434,23 @@ export default function UploadsPage() {
           </DialogFooter>
         </Dialog>
       )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Upload"
+        message="Are you sure you want to delete this file? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={acting === deleteTarget?.id}
+        details={deleteTarget && (
+          <>
+            <div><span className="font-medium">File:</span> {deleteTarget.original_name}</div>
+            <div><span className="font-medium">Size:</span> {formatBytes(deleteTarget.size_bytes)}</div>
+          </>
+        )}
+      />
 
       {/* Preview Dialog */}
       {preview && (

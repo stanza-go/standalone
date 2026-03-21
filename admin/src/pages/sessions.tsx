@@ -2,14 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, del } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogCloseButton,
-  DialogBody,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
@@ -178,42 +171,23 @@ export default function SessionsPage() {
         </table>
       </div>
 
-      {/* Revoke Confirmation Dialog */}
-      <Dialog
+      {/* Revoke Confirmation */}
+      <ConfirmDialog
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
-      >
-        <DialogHeader>
-          <DialogTitle>Revoke Session</DialogTitle>
-          <DialogCloseButton onClick={() => setRevokeTarget(null)} />
-        </DialogHeader>
-
-        <DialogBody>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to revoke this session? The user will be logged out immediately.
-          </p>
-          {revokeTarget && (
-            <div className="mt-3 p-3 bg-muted rounded-md text-sm space-y-1">
-              <div><span className="font-medium">User:</span> {revokeTarget.name || revokeTarget.email}</div>
-              <div><span className="font-medium">Type:</span> {revokeTarget.entity_type}</div>
-              <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
-            </div>
-          )}
-        </DialogBody>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setRevokeTarget(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            disabled={acting === revokeTarget?.id}
-            onClick={handleRevoke}
-          >
-            {acting === revokeTarget?.id ? "Revoking..." : "Revoke Session"}
-          </Button>
-        </DialogFooter>
-      </Dialog>
+        onConfirm={handleRevoke}
+        title="Revoke Session"
+        message="Are you sure you want to revoke this session? The user will be logged out immediately."
+        confirmLabel="Revoke Session"
+        loading={acting === revokeTarget?.id}
+        details={revokeTarget && (
+          <>
+            <div><span className="font-medium">User:</span> {revokeTarget.name || revokeTarget.email}</div>
+            <div><span className="font-medium">Type:</span> {revokeTarget.entity_type}</div>
+            <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
+          </>
+        )}
+      />
     </div>
   );
 }

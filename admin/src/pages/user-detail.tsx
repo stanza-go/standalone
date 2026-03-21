@@ -20,6 +20,7 @@ import {
   File,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface UserDetail {
   id: number;
@@ -79,6 +80,7 @@ export default function UserDetailPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
 
   // Uploads
   const [uploads, setUploads] = useState<UploadEntry[]>([]);
@@ -170,10 +172,13 @@ export default function UserDetailPage() {
     if (tab === "uploads") loadUploads();
   }, [tab, loadUploads]);
 
-  async function revokeSession(sessionId: string) {
+  async function revokeSession() {
+    if (!revokeTarget) return;
+    const sessionId = revokeTarget.id;
     setRevokingSession(sessionId);
     try {
       await del(`/admin/sessions/${sessionId}`);
+      setRevokeTarget(null);
       toast.success("Session revoked");
       loadSessions();
     } catch (e: any) {
@@ -417,7 +422,7 @@ export default function UserDetailPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => revokeSession(s.id)}
+                            onClick={() => setRevokeTarget(s)}
                             disabled={revokingSession === s.id}
                           >
                             <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -504,6 +509,23 @@ export default function UserDetailPage() {
           )}
         </div>
       )}
+
+      {/* Revoke Session Confirmation */}
+      <ConfirmDialog
+        open={!!revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={revokeSession}
+        title="Revoke Session"
+        message="Are you sure you want to revoke this session? The user will be logged out immediately."
+        confirmLabel="Revoke"
+        loading={revokingSession === revokeTarget?.id}
+        details={revokeTarget && (
+          <>
+            <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
+            <div><span className="font-medium">Expires:</span> {formatTime(revokeTarget.expires_at)}</div>
+          </>
+        )}
+      />
     </div>
   );
 }

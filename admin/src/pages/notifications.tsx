@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -69,6 +70,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
 
   // Pagination.
   const [page, setPage] = useState(0);
@@ -131,16 +133,18 @@ export default function NotificationsPage() {
     }
   }
 
-  async function deleteNotification(id: number) {
+  async function deleteNotification() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setActing(true);
     try {
       await del(`/admin/notifications/${id}`);
-      const deleted = notifications.find((n) => n.id === id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       setTotal((t) => Math.max(0, t - 1));
-      if (deleted && !deleted.read_at) {
+      if (!deleteTarget.read_at) {
         setUnread((c) => Math.max(0, c - 1));
       }
+      setDeleteTarget(null);
       toast.success("Notification deleted");
     } catch (e: any) {
       toast.error(e.message || "Failed to delete notification");
@@ -334,7 +338,7 @@ export default function NotificationsPage() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         disabled={acting}
-                        onClick={() => deleteNotification(n.id)}
+                        onClick={() => setDeleteTarget(n)}
                         title="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -356,6 +360,23 @@ export default function NotificationsPage() {
         pageSize={pageSize}
         onPrev={() => setPage(page - 1)}
         onNext={() => setPage(page + 1)}
+      />
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={deleteNotification}
+        title="Delete Notification"
+        message="Are you sure you want to delete this notification?"
+        confirmLabel="Delete"
+        loading={acting}
+        details={deleteTarget && (
+          <>
+            <div><span className="font-medium">Title:</span> {deleteTarget.title}</div>
+            <div className="text-xs text-muted-foreground line-clamp-2">{deleteTarget.message}</div>
+          </>
+        )}
       />
     </div>
   );

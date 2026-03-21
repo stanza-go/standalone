@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface QueueStats {
   pending: number;
@@ -181,6 +182,7 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<QueueJob | null>(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -249,10 +251,13 @@ export default function QueuePage() {
     }
   }
 
-  async function cancelJob(id: number) {
+  async function cancelJob() {
+    if (!cancelTarget) return;
+    const id = cancelTarget.id;
     setActing(id);
     try {
       await post(`/admin/queue/jobs/${id}/cancel`);
+      setCancelTarget(null);
       toast.success("Job cancelled");
       await loadAll();
     } catch (err) {
@@ -462,7 +467,7 @@ export default function QueuePage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => cancelJob(job.id)}
+                                  onClick={() => setCancelTarget(job)}
                                   disabled={acting !== null}
                                   title="Cancel"
                                 >
@@ -513,6 +518,23 @@ export default function QueuePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cancel Confirmation */}
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={cancelJob}
+        title="Cancel Job"
+        message="Are you sure you want to cancel this job? It will not be executed."
+        confirmLabel="Cancel Job"
+        loading={acting === cancelTarget?.id}
+        details={cancelTarget && (
+          <>
+            <div><span className="font-medium">Type:</span> {cancelTarget.type}</div>
+            <div><span className="font-medium">Queue:</span> {cancelTarget.queue}</div>
+          </>
+        )}
+      />
     </div>
   );
 }

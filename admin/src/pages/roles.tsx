@@ -12,6 +12,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -49,7 +50,7 @@ export default function RolesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -140,11 +141,13 @@ export default function RolesPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setActing(id);
     try {
       await del(`/admin/roles/${id}`);
-      setDeleteId(null);
+      setDeleteTarget(null);
       toast.success("Role deleted");
       await load();
     } catch (e: any) {
@@ -243,47 +246,24 @@ export default function RolesPage() {
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    {deleteId === role.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Delete?
-                        </span>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={acting === role.id}
-                          onClick={() => handleDelete(role.id)}
-                        >
-                          {acting === role.id ? "Deleting..." : "Confirm"}
-                        </Button>
+                    <span className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(role)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {!role.is_system && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setDeleteId(null)}
+                          onClick={() => setDeleteTarget(role)}
                         >
-                          Cancel
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </Button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(role)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {!role.is_system && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteId(role.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
-                        )}
-                      </span>
-                    )}
+                      )}
+                    </span>
                   </td>
                 </tr>
               ))
@@ -378,6 +358,23 @@ export default function RolesPage() {
           </DialogFooter>
         </form>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Role"
+        message="Are you sure you want to delete this role? Admins assigned to this role will lose their permissions."
+        confirmLabel="Delete"
+        loading={acting === deleteTarget?.id}
+        details={deleteTarget && (
+          <>
+            <div><span className="font-medium">Role:</span> {deleteTarget.name}</div>
+            <div><span className="font-medium">Admins using this role:</span> {deleteTarget.admin_count}</div>
+          </>
+        )}
+      />
     </div>
   );
 }

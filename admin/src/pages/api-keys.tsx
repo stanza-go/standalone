@@ -13,6 +13,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Plus, Pencil, Trash2, Copy, Check, Search, X } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -61,7 +62,7 @@ export default function APIKeysPage() {
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<APIKey | null>(null);
-  const [revokeId, setRevokeId] = useState<number | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<APIKey | null>(null);
 
   // Form state.
   const [name, setName] = useState("");
@@ -165,11 +166,13 @@ export default function APIKeysPage() {
     }
   }
 
-  async function handleRevoke(id: number) {
+  async function handleRevoke() {
+    if (!revokeTarget) return;
+    const id = revokeTarget.id;
     setActing(id);
     try {
       await del(`/admin/api-keys/${id}`);
-      setRevokeId(null);
+      setRevokeTarget(null);
       toast.success("API key revoked");
       await load();
     } catch (e: any) {
@@ -369,27 +372,6 @@ export default function APIKeysPage() {
                       <span className="text-xs text-muted-foreground">
                         Revoked
                       </span>
-                    ) : revokeId === k.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          Revoke?
-                        </span>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={acting === k.id}
-                          onClick={() => handleRevoke(k.id)}
-                        >
-                          {acting === k.id ? "Revoking..." : "Confirm"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRevokeId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
                         <Button
@@ -402,7 +384,7 @@ export default function APIKeysPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setRevokeId(k.id)}
+                          onClick={() => setRevokeTarget(k)}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </Button>
@@ -502,6 +484,23 @@ export default function APIKeysPage() {
           </DialogFooter>
         </form>
       </Dialog>
+
+      {/* Revoke Confirmation */}
+      <ConfirmDialog
+        open={!!revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={handleRevoke}
+        title="Revoke API Key"
+        message="Are you sure you want to revoke this API key? Any application using this key will lose access immediately."
+        confirmLabel="Revoke"
+        loading={acting === revokeTarget?.id}
+        details={revokeTarget && (
+          <>
+            <div><span className="font-medium">Name:</span> {revokeTarget.name}</div>
+            <div><span className="font-medium">Key:</span> <span className="font-mono text-xs">{revokeTarget.key_prefix}...</span></div>
+          </>
+        )}
+      />
     </div>
   );
 }
