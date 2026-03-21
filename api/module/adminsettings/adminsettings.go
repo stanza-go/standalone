@@ -9,6 +9,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // Register mounts the settings admin routes on the given admin group.
@@ -17,9 +18,9 @@ import (
 //
 //	GET /api/admin/settings      — list all settings grouped by category
 //	PUT /api/admin/settings/{key} — update a single setting value
-func Register(admin *http.Group, db *sqlite.DB) {
+func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /settings", listHandler(db))
-	admin.HandleFunc("PUT /settings/{key}", updateHandler(db))
+	admin.HandleFunc("PUT /settings/{key}", updateHandler(db, wh))
 }
 
 type setting struct {
@@ -59,7 +60,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := r.PathValue("key")
 		if key == "" {
@@ -105,6 +106,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		adminaudit.Log(db, r, "setting.update", "setting", key, req.Value)
+
+		_ = wh.Dispatch(r.Context(), "setting.updated", map[string]any{
+			"key":   key,
+			"value": req.Value,
+			"group": s.GroupName,
+		})
 
 		http.WriteJSON(w, http.StatusOK, s)
 	}

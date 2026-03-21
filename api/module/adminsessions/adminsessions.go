@@ -9,6 +9,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // Register mounts the session management routes on the given admin group.
@@ -17,9 +18,9 @@ import (
 //
 //	GET    /api/admin/sessions      - list active sessions
 //	DELETE /api/admin/sessions/{id} - revoke a session
-func Register(admin *http.Group, db *sqlite.DB) {
+func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /sessions", listHandler(db))
-	admin.HandleFunc("DELETE /sessions/{id}", revokeHandler(db))
+	admin.HandleFunc("DELETE /sessions/{id}", revokeHandler(db, wh))
 }
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
@@ -67,7 +68,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func revokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func revokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if id == "" {
@@ -88,6 +89,10 @@ func revokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		adminaudit.Log(db, r, "session.revoke", "session", id, "")
+
+		_ = wh.Dispatch(r.Context(), "session.revoked", map[string]any{
+			"session_id": id,
+		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

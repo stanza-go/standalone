@@ -524,7 +524,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 		Message: "too many requests, please try again later",
 	}))
 	adminauth.Register(authRL, a, db, logger)
-	userauth.Register(authRL, ua.Auth, db, logger)
+	userauth.Register(authRL, ua.Auth, db, logger, whDispatcher)
 	userreset.Register(authRL, db, emailClient, logger)
 
 	// Protected admin routes — require valid JWT + admin scope.
@@ -539,14 +539,14 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	// Scoped admin sub-groups — each module gets its specific scope.
 	withUsers := admin.Group("")
 	withUsers.Use(auth.RequireScope("admin:users"))
-	adminusers.Register(withUsers, db)
-	adminsessions.Register(withUsers, db)
-	usermgmt.Register(withUsers, a, db)
+	adminusers.Register(withUsers, db, whDispatcher)
+	adminsessions.Register(withUsers, db, whDispatcher)
+	usermgmt.Register(withUsers, a, db, whDispatcher)
 	apikeys.Register(withUsers, db)
 
 	withSettings := admin.Group("")
 	withSettings.Use(auth.RequireScope("admin:settings"))
-	adminsettings.Register(withSettings, db)
+	adminsettings.Register(withSettings, db, whDispatcher)
 
 	withJobs := admin.Group("")
 	withJobs.Use(auth.RequireScope("admin:jobs"))
@@ -566,7 +566,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	adminaudit.Register(withAudit, db)
 
 	// Roles module handles its own scope check internally.
-	adminroles.Register(admin, db)
+	adminroles.Register(admin, db, whDispatcher)
 
 	withUploads := admin.Group("")
 	withUploads.Use(auth.RequireScope("admin:uploads"))
@@ -590,7 +590,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	user.Use(ua.RequireAuthOrAPIKey(kv))
 	user.Use(auth.RequireScope("user"))
 
-	userprofile.Register(user, db, logger)
+	userprofile.Register(user, db, logger, whDispatcher)
 	usernotifications.Register(user, db)
 	useruploads.Register(user, db, dir.Uploads)
 	userapikeys.Register(user, db)

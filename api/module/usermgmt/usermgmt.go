@@ -14,6 +14,7 @@ import (
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // Register mounts end-user management routes on the given admin group.
@@ -29,12 +30,12 @@ import (
 //	GET    /api/admin/users/{id}/activity       - audit log entries for this user
 //	GET    /api/admin/users/{id}/sessions       - active sessions for this user
 //	GET    /api/admin/users/{id}/uploads        - uploads belonging to this user
-func Register(admin *http.Group, a *auth.Auth, db *sqlite.DB) {
+func Register(admin *http.Group, a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /users", listHandler(db))
-	admin.HandleFunc("POST /users", createHandler(db))
+	admin.HandleFunc("POST /users", createHandler(db, wh))
 	admin.HandleFunc("GET /users/{id}", getHandler(db))
-	admin.HandleFunc("PUT /users/{id}", updateHandler(db))
-	admin.HandleFunc("DELETE /users/{id}", deleteHandler(db))
+	admin.HandleFunc("PUT /users/{id}", updateHandler(db, wh))
+	admin.HandleFunc("DELETE /users/{id}", deleteHandler(db, wh))
 	admin.HandleFunc("POST /users/{id}/impersonate", impersonateHandler(a, db))
 	admin.HandleFunc("GET /users/{id}/activity", activityHandler(db))
 	admin.HandleFunc("GET /users/{id}/sessions", sessionsHandler(db))
@@ -103,7 +104,7 @@ type createRequest struct {
 	Name     string `json:"name"`
 }
 
-func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req createRequest
 		if err := http.ReadJSON(r, &req); err != nil {
@@ -147,6 +148,12 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		adminaudit.Log(db, r, "user.create", "user", strconv.FormatInt(result.LastInsertID, 10), req.Email)
+
+		_ = wh.Dispatch(r.Context(), "user.created", map[string]any{
+			"id":    result.LastInsertID,
+			"email": req.Email,
+			"name":  req.Name,
+		})
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"user": userJSON{
@@ -205,7 +212,7 @@ type updateRequest struct {
 	Password string `json:"password"`
 }
 
-func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -280,6 +287,13 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		adminaudit.Log(db, r, "user.update", "user", strconv.FormatInt(id, 10), currentEmail)
 
+		_ = wh.Dispatch(r.Context(), "user.updated", map[string]any{
+			"id":        id,
+			"email":     currentEmail,
+			"name":      name,
+			"is_active": isActive == 1,
+		})
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user": userJSON{
 				ID:        id,
@@ -293,7 +307,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -327,6 +341,10 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		_, _ = db.Exec(sql, args...)
 
 		adminaudit.Log(db, r, "user.delete", "user", strconv.FormatInt(id, 10), "")
+
+		_ = wh.Dispatch(r.Context(), "user.deleted", map[string]any{
+			"id": id,
+		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

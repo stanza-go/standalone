@@ -14,6 +14,7 @@ import (
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/adminaudit"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // KnownScopes lists all valid admin scopes. Used for validation when
@@ -39,7 +40,7 @@ var KnownScopes = []string{
 //	PUT    /api/admin/roles/{id} - update a role and its scopes
 //	DELETE /api/admin/roles/{id} - delete a non-system role
 //	GET    /api/admin/scopes     - list all known scopes
-func Register(admin *http.Group, db *sqlite.DB) {
+func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	// Role names endpoint — accessible to any authenticated admin
 	// (base "admin" scope). Used by the admin create/edit form.
 	admin.HandleFunc("GET /role-names", roleNamesHandler(db))
@@ -48,9 +49,9 @@ func Register(admin *http.Group, db *sqlite.DB) {
 	g := admin.Group("/roles")
 	g.Use(auth.RequireScope("admin:roles"))
 	g.HandleFunc("GET /", listHandler(db))
-	g.HandleFunc("POST /", createHandler(db))
-	g.HandleFunc("PUT /{id}", updateHandler(db))
-	g.HandleFunc("DELETE /{id}", deleteHandler(db))
+	g.HandleFunc("POST /", createHandler(db, wh))
+	g.HandleFunc("PUT /{id}", updateHandler(db, wh))
+	g.HandleFunc("DELETE /{id}", deleteHandler(db, wh))
 	g.HandleFunc("GET /scopes", scopesHandler())
 }
 
@@ -120,7 +121,7 @@ type createRequest struct {
 	Scopes      []string `json:"scopes"`
 }
 
-func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req createRequest
 		if err := http.ReadJSON(r, &req); err != nil {
@@ -173,6 +174,12 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		adminaudit.Log(db, r, "role.create", "role", strconv.FormatInt(roleID, 10), req.Name)
 
+		_ = wh.Dispatch(r.Context(), "role.created", map[string]any{
+			"id":     roleID,
+			"name":   req.Name,
+			"scopes": req.Scopes,
+		})
+
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"role": roleJSON{
 				ID:          roleID,
@@ -192,7 +199,7 @@ type updateRequest struct {
 	Scopes      []string `json:"scopes"`
 }
 
-func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -290,6 +297,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		adminaudit.Log(db, r, "role.update", "role", strconv.FormatInt(id, 10), name)
 
+		_ = wh.Dispatch(r.Context(), "role.updated", map[string]any{
+			"id":     id,
+			"name":   name,
+			"scopes": scopes,
+		})
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"role": roleJSON{
 				ID:          id,
@@ -304,7 +317,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
@@ -350,6 +363,11 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		adminaudit.Log(db, r, "role.delete", "role", strconv.FormatInt(id, 10), name)
+
+		_ = wh.Dispatch(r.Context(), "role.deleted", map[string]any{
+			"id":   id,
+			"name": name,
+		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,

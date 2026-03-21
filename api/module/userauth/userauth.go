@@ -17,6 +17,7 @@ import (
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // Register mounts the user auth routes on the given router group.
@@ -26,10 +27,10 @@ import (
 //	POST /api/auth/login    — authenticate with email + password
 //	GET  /api/auth          — status check, refresh access token
 //	POST /api/auth/logout   — revoke session, clear cookies
-func Register(api *http.Group, a *auth.Auth, db *sqlite.DB, logger *log.Logger) {
+func Register(api *http.Group, a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) {
 	g := api.Group("/auth")
 
-	g.HandleFunc("POST /register", registerHandler(a, db, logger))
+	g.HandleFunc("POST /register", registerHandler(a, db, logger, wh))
 	g.HandleFunc("POST /login", loginHandler(a, db, logger))
 	g.HandleFunc("GET /", statusHandler(a, db, logger))
 	g.HandleFunc("POST /logout", logoutHandler(a, db, logger))
@@ -44,7 +45,7 @@ type registerRequest struct {
 
 // registerHandler creates a new user account, issues tokens, and logs
 // them in automatically.
-func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req registerRequest
 		if err := http.ReadJSON(r, &req); err != nil {
@@ -103,6 +104,12 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.
 		}
 
 		logger.Info("user registered", log.String("email", req.Email), log.String("uid", uid))
+
+		_ = wh.Dispatch(r.Context(), "user.registered", map[string]any{
+			"id":    id,
+			"email": req.Email,
+			"name":  req.Name,
+		})
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"user": map[string]any{

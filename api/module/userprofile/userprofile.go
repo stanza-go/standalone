@@ -12,6 +12,7 @@ import (
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
+	"github.com/stanza-go/standalone/module/webhooks"
 )
 
 // Register mounts the user profile routes on the given group.
@@ -24,9 +25,9 @@ import (
 //	PUT    /profile/password     — change password
 //	GET    /profile/sessions     — list own active sessions
 //	DELETE /profile/sessions/{id} — revoke a specific session
-func Register(user *http.Group, db *sqlite.DB, logger *log.Logger) {
+func Register(user *http.Group, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) {
 	user.HandleFunc("GET /profile", getProfile(db))
-	user.HandleFunc("PUT /profile", updateProfile(db, logger))
+	user.HandleFunc("PUT /profile", updateProfile(db, logger, wh))
 	user.HandleFunc("PUT /profile/password", changePassword(db, logger))
 	user.HandleFunc("GET /profile/sessions", getSessions(db))
 	user.HandleFunc("DELETE /profile/sessions/{id}", revokeSession(db))
@@ -74,7 +75,7 @@ type updateRequest struct {
 }
 
 // updateProfile updates the authenticated user's name and/or email.
-func updateProfile(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func updateProfile(db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -143,6 +144,12 @@ func updateProfile(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, 
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+
+		_ = wh.Dispatch(r.Context(), "user.updated", map[string]any{
+			"id":    id,
+			"email": email,
+			"name":  name,
+		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user": map[string]any{
