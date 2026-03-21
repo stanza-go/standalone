@@ -152,7 +152,7 @@ export default function SidebarLayout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "flex flex-col border-r border-border transition-all duration-200",
+          "flex min-h-0 flex-col border-r border-border transition-all duration-200",
           // Mobile: fixed overlay that slides in/out
           "fixed inset-y-0 left-0 z-50 w-64 bg-background shadow-xl",
           mobileOpen ? "translate-x-0" : "-translate-x-full",

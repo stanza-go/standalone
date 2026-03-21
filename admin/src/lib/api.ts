@@ -23,6 +23,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(`${BASE}${path}`, opts);
   const data = await res.json();
   if (!res.ok) {
+    // Redirect to login on 401 from non-auth endpoints (auth endpoints handle 401 themselves)
+    if (res.status === 401 && !path.startsWith("/admin/auth")) {
+      const base = import.meta.env.BASE_URL.replace(/\/+$/, "") || "";
+      window.location.href = base + "/login";
+    }
     throw new ApiError(res.status, data.error ?? "Unknown error", data.fields);
   }
   return data as T;

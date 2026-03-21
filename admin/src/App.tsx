@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Toaster } from "@/components/ui/sonner";
 import SidebarLayout from "@/components/layout/sidebar";
@@ -30,6 +31,7 @@ export default function App() {
 
   return (
     <ThemeProvider>
+    <ErrorBoundary>
     <BrowserRouter basename={basename}>
       <Toaster position="top-right" duration={3000} closeButton richColors />
       <AuthProvider>
@@ -66,6 +68,7 @@ export default function App() {
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
     </ThemeProvider>
   );
 }
