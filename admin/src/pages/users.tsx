@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { get, post, put, del, ApiError } from "@/lib/api";
+import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   Copy,
   Check,
   X,
+  Download,
 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -75,6 +76,22 @@ export default function UsersPage() {
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/users/export?${params}`);
+    } catch {
+      toast.error("Failed to export users");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -244,10 +261,16 @@ export default function UsersPage() {
             {total} user{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create User
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create User
+          </Button>
+        </div>
       </div>
 
       {error && (

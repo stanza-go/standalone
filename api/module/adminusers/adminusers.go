@@ -4,6 +4,8 @@
 package adminusers
 
 import (
+	"encoding/csv"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ import (
 //	GET    /api/admin/admins/{id}/sessions - active sessions for this admin
 func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /admins", listHandler(db))
+	admin.HandleFunc("GET /admins/export", exportHandler(db))
 	admin.HandleFunc("POST /admins", createHandler(db, wh))
 	admin.HandleFunc("GET /admins/{id}", getHandler(db))
 	admin.HandleFunc("PUT /admins/{id}", updateHandler(db, wh))
@@ -100,6 +103,52 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"admins": admins,
 			"total":  total,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		search := r.URL.Query().Get("search")
+
+		q := sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
+			From("admins").
+			Where("deleted_at IS NULL")
+		if search != "" {
+			like := "%" + escapeLike(search) + "%"
+			q.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "email", "name", "role", "is_active", "created_at", "updated_at"},
+			"id", "ASC")
+
+		sql, args := q.OrderBy(sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export admins")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=admins-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "Email", "Name", "Role", "Active", "Created At", "Updated At"})
+
+		for rows.Next() {
+			var id int64
+			var email, name, role, createdAt, updatedAt string
+			var isActive int
+			if err := rows.Scan(&id, &email, &name, &role, &isActive, &createdAt, &updatedAt); err != nil {
+				break
+			}
+			active := "No"
+			if isActive == 1 {
+				active = "Yes"
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), email, name, role, active, createdAt, updatedAt})
+		}
+		cw.Flush()
 	}
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { get } from "@/lib/api";
+import { get, downloadCSV } from "@/lib/api";
+import { toast } from "sonner";
 import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import {
   Filter,
   Calendar,
   X,
+  Download,
 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -102,6 +104,9 @@ export default function AuditPage() {
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
 
+  // Export.
+  const [exporting, setExporting] = useState(false);
+
   // Expanded rows.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -148,6 +153,24 @@ export default function AuditPage() {
     });
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (actionFilter) params.set("action", actionFilter);
+      if (dateFrom) params.set("from", dateFrom + "T00:00:00Z");
+      if (dateTo) params.set("to", dateTo + "T23:59:59Z");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/audit/export?${params}`);
+    } catch {
+      toast.error("Failed to export audit log");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // Collect unique actions for filter dropdown.
   const uniqueActions = Object.keys(ACTION_LABELS);
 
@@ -172,11 +195,17 @@ export default function AuditPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
-        <p className="text-sm text-muted-foreground">
-          {total} event{total !== 1 ? "s" : ""} recorded
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
+          <p className="text-sm text-muted-foreground">
+            {total} event{total !== 1 ? "s" : ""} recorded
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleExport} disabled={exporting}>
+          <Download className="h-4 w-4 mr-2" />
+          {exporting ? "Exporting..." : "Export CSV"}
+        </Button>
       </div>
 
       {error && (

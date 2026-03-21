@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, del } from "@/lib/api";
+import { get, del, downloadCSV } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { Download } from "lucide-react";
 
 interface Session {
   id: string;
@@ -23,6 +24,7 @@ export default function SessionsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Sort.
   const [sort, toggleSort] = useSort("created_at", "desc");
@@ -47,6 +49,20 @@ export default function SessionsPage() {
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, [load]);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/sessions/export?${params}`);
+    } catch {
+      toast.error("Failed to export sessions");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleRevoke() {
     if (!revokeTarget) return;
@@ -105,11 +121,17 @@ export default function SessionsPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Active Sessions</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {sessions.length} active session{sessions.length !== 1 ? "s" : ""}
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Active Sessions</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {sessions.length} active session{sessions.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleExport} disabled={exporting}>
+          <Download className="h-4 w-4 mr-2" />
+          {exporting ? "Exporting..." : "Export CSV"}
+        </Button>
       </div>
 
       {error && (

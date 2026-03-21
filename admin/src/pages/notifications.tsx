@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, post, del } from "@/lib/api";
+import { get, post, del, downloadCSV } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Check,
   CheckCheck,
+  Download,
   Trash2,
   Bell,
   Filter,
@@ -72,6 +73,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Pagination.
   const [page, setPage] = useState(0);
@@ -159,6 +161,21 @@ export default function NotificationsPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (unreadOnly) params.set("unread", "true");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/notifications/export?${params}`);
+    } catch {
+      toast.error("Failed to export notifications");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const totalPages = Math.ceil(total / pageSize);
 
   if (loading) {
@@ -186,17 +203,23 @@ export default function NotificationsPage() {
             {unread > 0 && ` \u00B7 ${unread} unread`}
           </p>
         </div>
-        {unread > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={acting}
-            onClick={markAllRead}
-          >
-            <CheckCheck className="h-4 w-4 mr-1.5" />
-            Mark all as read
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
           </Button>
-        )}
+          {unread > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={acting}
+              onClick={markAllRead}
+            >
+              <CheckCheck className="h-4 w-4 mr-1.5" />
+              Mark all as read
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (

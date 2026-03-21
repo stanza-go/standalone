@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { get, post, put, del, ApiError } from "@/lib/api";
+import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Plus, Pencil, Trash2, Copy, Check, Search, X, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Check, Search, X, ExternalLink, Download } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
@@ -63,6 +63,7 @@ export default function WebhooksPage() {
   const [isActive, setIsActive] = useState(true);
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Created webhook secret reveal.
   const [createdWebhook, setCreatedWebhook] = useState<Webhook | null>(null);
@@ -189,6 +190,21 @@ export default function WebhooksPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (searchInput) params.set("search", searchInput);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/webhooks/export?${params}`);
+    } catch {
+      toast.error("Failed to export webhooks");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function formatTime(iso: string): string {
     if (!iso) return "\u2014";
     const d = new Date(iso);
@@ -222,10 +238,16 @@ export default function WebhooksPage() {
             {total} webhook{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Webhook
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Webhook
+          </Button>
+        </div>
       </div>
 
       {error && (

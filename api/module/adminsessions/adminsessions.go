@@ -4,6 +4,8 @@
 package adminsessions
 
 import (
+	"encoding/csv"
+	"fmt"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -20,6 +22,7 @@ import (
 //	DELETE /api/admin/sessions/{id} - revoke a session
 func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /sessions", listHandler(db))
+	admin.HandleFunc("GET /sessions/export", exportHandler(db))
 	admin.HandleFunc("DELETE /sessions/{id}", revokeHandler(db, wh))
 }
 
@@ -69,6 +72,45 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"sessions": sessions,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"created_at", "expires_at", "entity_type"},
+			"created_at", "DESC")
+
+		sql, args := sqlite.Select(
+			"rt.id", "rt.entity_type", "rt.entity_id", "rt.created_at", "rt.expires_at",
+			"COALESCE(a.email, '')", "COALESCE(a.name, '')").
+			From("refresh_tokens rt").
+			LeftJoin("admins a", "rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)").
+			Where("rt.expires_at > ?", now).
+			OrderBy("rt."+sortCol, sortDir).
+			Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export sessions")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=sessions-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "Entity Type", "Entity ID", "Email", "Name", "Created At", "Expires At"})
+
+		for rows.Next() {
+			var id, entityType, entityID, email, name, createdAt, expiresAt string
+			if err := rows.Scan(&id, &entityType, &entityID, &createdAt, &expiresAt, &email, &name); err != nil {
+				break
+			}
+			_ = cw.Write([]string{id, entityType, entityID, email, name, createdAt, expiresAt})
+		}
+		cw.Flush()
 	}
 }
 

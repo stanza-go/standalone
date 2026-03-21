@@ -4,7 +4,10 @@
 package adminaudit
 
 import (
+	"encoding/csv"
+	"fmt"
 	nethttp "net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 //	GET /api/admin/audit/recent  — last 10 entries for the dashboard activity feed
 func Register(admin *http.Group, db *sqlite.DB) {
 	admin.HandleFunc("GET /audit", listHandler(db))
+	admin.HandleFunc("GET /audit/export", exportHandler(db))
 	admin.HandleFunc("GET /audit/recent", recentHandler(db))
 }
 
@@ -150,6 +154,78 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"entries": entries,
 			"total":   total,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		action := r.URL.Query().Get("action")
+		adminID := r.URL.Query().Get("admin_id")
+		search := r.URL.Query().Get("search")
+		from := r.URL.Query().Get("from")
+		to := r.URL.Query().Get("to")
+
+		var conditions []string
+		var queryArgs []any
+
+		if action != "" {
+			conditions = append(conditions, "audit_log.action = ?")
+			queryArgs = append(queryArgs, action)
+		}
+		if adminID != "" {
+			conditions = append(conditions, "audit_log.admin_id = ?")
+			queryArgs = append(queryArgs, adminID)
+		}
+		if search != "" {
+			conditions = append(conditions, "(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')")
+			like := "%" + escapeLike(search) + "%"
+			queryArgs = append(queryArgs, like, like)
+		}
+		if from != "" {
+			conditions = append(conditions, "audit_log.created_at >= ?")
+			queryArgs = append(queryArgs, from)
+		}
+		if to != "" {
+			conditions = append(conditions, "audit_log.created_at <= ?")
+			queryArgs = append(queryArgs, to)
+		}
+
+		selectSQL := `SELECT audit_log.id, audit_log.admin_id, COALESCE(admins.email, ''), COALESCE(admins.name, ''),
+			audit_log.action, audit_log.entity_type, audit_log.entity_id,
+			audit_log.details, audit_log.ip_address, audit_log.created_at
+			FROM audit_log
+			LEFT JOIN admins ON admins.id = CAST(audit_log.admin_id AS INTEGER)`
+
+		if len(conditions) > 0 {
+			selectSQL += " WHERE " + strings.Join(conditions, " AND ")
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
+			"id", "DESC")
+		selectSQL += " ORDER BY audit_log." + sortCol + " " + sortDir
+
+		rows, err := db.Query(selectSQL, queryArgs...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export audit log")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=audit-log-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "Admin ID", "Admin Email", "Admin Name", "Action", "Entity Type", "Entity ID", "Details", "IP Address", "Created At"})
+
+		for rows.Next() {
+			var id int64
+			var adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt string
+			if err := rows.Scan(&id, &adminIDVal, &adminEmail, &adminName, &actionVal, &entityType, &entityID, &details, &ipAddress, &createdAt); err != nil {
+				break
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt})
+		}
+		cw.Flush()
 	}
 }
 

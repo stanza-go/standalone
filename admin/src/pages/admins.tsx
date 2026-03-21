@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { get, post, put, del, ApiError } from "@/lib/api";
+import { get, post, put, del, ApiError, downloadCSV } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, Download } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
@@ -40,6 +40,7 @@ export default function AdminsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Pagination.
   const [page, setPage] = useState(0);
@@ -174,6 +175,21 @@ export default function AdminsPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/admins/export?${params}`);
+    } catch {
+      toast.error("Failed to export admins");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function formatTime(iso: string): string {
     if (!iso) return "\u2014";
     const d = new Date(iso);
@@ -208,10 +224,16 @@ export default function AdminsPage() {
             {total} admin{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Admin
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Admin
+          </Button>
+        </div>
       </div>
 
       {error && (

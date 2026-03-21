@@ -5,7 +5,9 @@
 package adminnotifications
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 //	DELETE /api/admin/notifications/{id}           — delete a notification
 func Register(admin *http.Group, db *sqlite.DB, svc *notifications.Service) {
 	admin.HandleFunc("GET /notifications", listHandler(db))
+	admin.HandleFunc("GET /notifications/export", exportHandler(db))
 	admin.HandleFunc("GET /notifications/unread-count", unreadCountHandler(db))
 	admin.HandleFunc("GET /notifications/stream", streamHandler(svc))
 	admin.HandleFunc("POST /notifications/send", sendHandler(svc))
@@ -102,6 +105,50 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"total":         total,
 			"unread":        notifications.UnreadCount(db, notifications.EntityAdmin, adminID),
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, _ := auth.ClaimsFromContext(r.Context())
+		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+
+		unreadOnly := r.URL.Query().Get("unread") == "true"
+
+		q := sqlite.Select("id", "type", "title", "message", "COALESCE(read_at, '')", "created_at").
+			From("notifications").
+			Where("entity_type = ?", notifications.EntityAdmin).
+			Where("entity_id = ?", adminID)
+		if unreadOnly {
+			q.Where("read_at IS NULL")
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "type", "created_at"},
+			"id", "DESC")
+
+		sql, args := q.OrderBy(sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export notifications")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=notifications-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "Type", "Title", "Message", "Read At", "Created At"})
+
+		for rows.Next() {
+			var id int64
+			var typ, title, message, readAt, createdAt string
+			if err := rows.Scan(&id, &typ, &title, &message, &readAt, &createdAt); err != nil {
+				break
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), typ, title, message, readAt, createdAt})
+		}
+		cw.Flush()
 	}
 }
 

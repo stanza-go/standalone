@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, post, put, del, ApiError } from "@/lib/api";
+import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Plus, Pencil, Trash2, Copy, Check, Search, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Check, Search, X, Download } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
@@ -76,9 +76,27 @@ export default function APIKeysPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Export state.
+  const [exporting, setExporting] = useState(false);
+
   // Created key reveal state.
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
   const [copied, setCopied] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/api-keys/export?${params}`);
+    } catch {
+      toast.error("Failed to export API keys");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -235,10 +253,16 @@ export default function APIKeysPage() {
             {total} key{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Key
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Key
+          </Button>
+        </div>
       </div>
 
       {error && (

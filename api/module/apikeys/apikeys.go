@@ -6,7 +6,9 @@ package apikeys
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +30,7 @@ import (
 //	DELETE /api/admin/api-keys/{id} - revoke an API key
 func Register(admin *http.Group, db *sqlite.DB) {
 	admin.HandleFunc("GET /api-keys", listHandler(db))
+	admin.HandleFunc("GET /api-keys/export", exportHandler(db))
 	admin.HandleFunc("POST /api-keys", createHandler(db))
 	admin.HandleFunc("PUT /api-keys/{id}", updateHandler(db))
 	admin.HandleFunc("DELETE /api-keys/{id}", deleteHandler(db))
@@ -102,6 +105,49 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"api_keys": keys,
 			"total":    total,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		search := r.URL.Query().Get("search")
+
+		q := sqlite.Select("id", "name", "key_prefix", "scopes",
+			"entity_type", "COALESCE(entity_id, '')", "request_count",
+			"COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
+			"created_at", "COALESCE(revoked_at, '')").
+			From("api_keys")
+		if search != "" {
+			like := "%" + escapeLike(search) + "%"
+			q.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "name", "created_at", "last_used_at", "request_count"},
+			"id", "DESC")
+
+		sql, args := q.OrderBy(sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export api keys")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=api-keys-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "Name", "Key Prefix", "Scopes", "Entity Type", "Entity ID", "Request Count", "Last Used At", "Expires At", "Created At", "Revoked At"})
+
+		for rows.Next() {
+			var id, requestCount int64
+			var name, keyPrefix, scopes, entityType, entityID, lastUsedAt, expiresAt, createdAt, revokedAt string
+			if err := rows.Scan(&id, &name, &keyPrefix, &scopes, &entityType, &entityID, &requestCount, &lastUsedAt, &expiresAt, &createdAt, &revokedAt); err != nil {
+				break
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), name, keyPrefix, scopes, entityType, entityID, strconv.FormatInt(requestCount, 10), lastUsedAt, expiresAt, createdAt, revokedAt})
+		}
+		cw.Flush()
 	}
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, del, upload } from "@/lib/api";
+import { get, del, upload, downloadCSV } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -104,6 +104,7 @@ export default function UploadsPage() {
   // Upload dialog.
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState("");
@@ -198,6 +199,22 @@ export default function UploadsPage() {
     setPage(0);
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (typeFilter) params.set("content_type", typeFilter);
+      if (includeDeleted) params.set("include_deleted", "true");
+      params.set("sort", sort.column);
+      params.set("order", sort.direction);
+      await downloadCSV(`/admin/uploads/export?${params}`);
+    } catch {
+      toast.error("Failed to export uploads");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const totalPages = Math.ceil(total / pageSize);
 
   if (loading) {
@@ -226,10 +243,16 @@ export default function UploadsPage() {
             {total} file{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Upload File
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload File
+          </Button>
+        </div>
       </div>
 
       {error && (

@@ -5,6 +5,7 @@ package adminuploads
 
 import (
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"image"
@@ -43,6 +44,7 @@ const (
 //	GET    /api/admin/uploads/{id}/thumb — serve the thumbnail (images only)
 func Register(admin *http.Group, db *sqlite.DB, uploadsDir string) {
 	admin.HandleFunc("GET /uploads", listHandler(db))
+	admin.HandleFunc("GET /uploads/export", exportHandler(db))
 	admin.HandleFunc("POST /uploads", uploadHandler(db, uploadsDir))
 	admin.HandleFunc("GET /uploads/{id}", detailHandler(db))
 	admin.HandleFunc("DELETE /uploads/{id}", deleteHandler(db))
@@ -135,6 +137,60 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"uploads": uploads,
 			"total":   total,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		contentType := http.QueryParam(r, "content_type")
+		entityType := http.QueryParam(r, "entity_type")
+		includeDeleted := http.QueryParam(r, "include_deleted") == "true"
+
+		q := sqlite.Select("id", "uuid", "original_name", "content_type",
+			"size_bytes", "has_thumbnail", "uploaded_by",
+			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
+			From("uploads")
+		if !includeDeleted {
+			q.Where("deleted_at IS NULL")
+		}
+		if contentType != "" {
+			q.Where("content_type LIKE ?", contentType+"%")
+		}
+		if entityType != "" {
+			q.Where("entity_type = ?", entityType)
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
+			"id", "DESC")
+
+		sql, args := q.OrderBy(sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export uploads")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=uploads-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "UUID", "Original Name", "Content Type", "Size (bytes)", "Has Thumbnail", "Uploaded By", "Entity Type", "Entity ID", "Created At", "Deleted At"})
+
+		for rows.Next() {
+			var id, sizeBytes int64
+			var uuid, originalName, ct, uploadedBy, et, entityID, createdAt, deletedAt string
+			var hasThumbnail int
+			if err := rows.Scan(&id, &uuid, &originalName, &ct, &sizeBytes, &hasThumbnail, &uploadedBy, &et, &entityID, &createdAt, &deletedAt); err != nil {
+				break
+			}
+			thumb := "No"
+			if hasThumbnail == 1 {
+				thumb = "Yes"
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), uuid, originalName, ct, strconv.FormatInt(sizeBytes, 10), thumb, uploadedBy, et, entityID, createdAt, deletedAt})
+		}
+		cw.Flush()
 	}
 }
 

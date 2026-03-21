@@ -4,7 +4,9 @@
 package adminwebhooks
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ import (
 //	POST   /api/admin/webhooks/{id}/test    — send a test event
 func Register(admin *http.Group, db *sqlite.DB, dispatcher *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /webhooks", listHandler(db))
+	admin.HandleFunc("GET /webhooks/export", exportHandler(db))
 	admin.HandleFunc("POST /webhooks", createHandler(db))
 	admin.HandleFunc("GET /webhooks/{id}", getHandler(db))
 	admin.HandleFunc("PUT /webhooks/{id}", updateHandler(db))
@@ -124,6 +127,51 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"webhooks": items,
 			"total":    total,
 		})
+	}
+}
+
+func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		search := r.URL.Query().Get("search")
+
+		qb := sqlite.Select("id", "url", "description", "events", "is_active", "created_by", "created_at", "updated_at").
+			From("webhooks")
+		if search != "" {
+			escaped := escapeLike(search)
+			qb = qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
+		}
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "url", "is_active", "created_at", "updated_at"},
+			"created_at", "DESC")
+
+		sql, args := qb.OrderBy(sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to export webhooks")
+			return
+		}
+		defer rows.Close()
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=webhooks-%s.csv", time.Now().UTC().Format("20060102")))
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ID", "URL", "Description", "Events", "Active", "Created By", "Created At", "Updated At"})
+
+		for rows.Next() {
+			var id, createdBy int64
+			var url, description, eventsStr, createdAt, updatedAt string
+			var active int
+			if err := rows.Scan(&id, &url, &description, &eventsStr, &active, &createdBy, &createdAt, &updatedAt); err != nil {
+				break
+			}
+			isActive := "No"
+			if active == 1 {
+				isActive = "Yes"
+			}
+			_ = cw.Write([]string{strconv.FormatInt(id, 10), url, description, eventsStr, isActive, strconv.FormatInt(createdBy, 10), createdAt, updatedAt})
+		}
+		cw.Flush()
 	}
 }
 
