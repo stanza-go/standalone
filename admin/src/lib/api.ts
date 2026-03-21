@@ -43,3 +43,23 @@ export function put<T>(path: string, body?: unknown): Promise<T> {
 export function del<T>(path: string): Promise<T> {
   return request<T>("DELETE", path);
 }
+
+export async function upload<T>(path: string, file: File, fields?: Record<string, string>): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  if (fields) {
+    for (const [k, v] of Object.entries(fields)) {
+      form.append(k, v);
+    }
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new ApiError(res.status, data.error ?? "Upload failed", data.fields);
+  }
+  return data as T;
+}

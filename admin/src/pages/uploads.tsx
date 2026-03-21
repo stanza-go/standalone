@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { get, del } from "@/lib/api";
+import { get, del, upload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import {
   Film,
   File,
   Eye,
+  Upload,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -95,6 +96,13 @@ export default function UploadsPage() {
   // Delete confirmation.
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
+  // Upload dialog.
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadError, setUploadError] = useState("");
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -135,6 +143,44 @@ export default function UploadsPage() {
     }
   }
 
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) setSelectedFiles(files);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) setSelectedFiles(files);
+  }
+
+  async function handleUpload() {
+    if (selectedFiles.length === 0) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      for (const file of selectedFiles) {
+        await upload("/admin/uploads", file);
+      }
+      setShowUpload(false);
+      setSelectedFiles([]);
+      setPage(0);
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      setUploadError(msg);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function closeUploadDialog() {
+    setShowUpload(false);
+    setSelectedFiles([]);
+    setUploadError("");
+  }
+
   function handleFilterChange(value: string) {
     setTypeFilter(value);
     setPage(0);
@@ -160,6 +206,10 @@ export default function UploadsPage() {
             {total} file{total !== 1 ? "s" : ""}
           </p>
         </div>
+        <Button onClick={() => setShowUpload(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Upload File
+        </Button>
       </div>
 
       {error && (
@@ -341,6 +391,75 @@ export default function UploadsPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Upload Dialog */}
+      {showUpload && (
+        <Dialog open={showUpload} onClose={closeUploadDialog}>
+          <DialogHeader>
+            <DialogTitle>Upload File</DialogTitle>
+            <DialogCloseButton onClick={closeUploadDialog} />
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            {uploadError && (
+              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                {uploadError}
+              </div>
+            )}
+
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                dragOver
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-2">
+                Drag and drop files here, or
+              </p>
+              <label className="inline-flex">
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <span className="text-sm font-medium text-primary hover:underline cursor-pointer">
+                  browse files
+                </span>
+              </label>
+              <p className="text-xs text-muted-foreground mt-2">Max 50 MB per file</p>
+            </div>
+
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  {selectedFiles.length} file{selectedFiles.length !== 1 ? "s" : ""} selected
+                </p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {selectedFiles.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
+                      <span className="truncate mr-2">{f.name}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">{formatBytes(f.size)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeUploadDialog} disabled={uploading}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpload} disabled={uploading || selectedFiles.length === 0}>
+              {uploading ? "Uploading..." : `Upload ${selectedFiles.length > 0 ? selectedFiles.length : ""} file${selectedFiles.length !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
+        </Dialog>
       )}
 
       {/* Preview Dialog */}
