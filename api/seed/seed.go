@@ -13,7 +13,8 @@ import (
 // INSERT OR IGNORE so they are always safe to re-run.
 func Run(db *sqlite.DB, logger *log.Logger) error {
 	var count int
-	row := db.QueryRow(`SELECT COUNT(*) FROM admins`)
+	cSQL, cArgs := sqlite.Count("admins").Build()
+	row := db.QueryRow(cSQL, cArgs...)
 	if err := row.Scan(&count); err != nil {
 		return err
 	}
@@ -23,10 +24,13 @@ func Run(db *sqlite.DB, logger *log.Logger) error {
 			return err
 		}
 
-		_, err = db.Exec(
-			`INSERT INTO admins (email, password, name, role) VALUES (?, ?, ?, ?)`,
-			"admin@stanza.dev", password, "Admin", "superadmin",
-		)
+		iSQL, iArgs := sqlite.Insert("admins").
+			Set("email", "admin@stanza.dev").
+			Set("password", password).
+			Set("name", "Admin").
+			Set("role", "superadmin").
+			Build()
+		_, err = db.Exec(iSQL, iArgs...)
 		if err != nil {
 			return err
 		}
@@ -59,10 +63,13 @@ func seedSettings(db *sqlite.DB, logger *log.Logger) error {
 	}
 
 	for _, s := range defaults {
-		_, err := db.Exec(
-			`INSERT OR IGNORE INTO settings (key, value, group_name) VALUES (?, ?, ?)`,
-			s.key, s.value, s.group,
-		)
+		sql, args := sqlite.Insert("settings").
+			OrIgnore().
+			Set("key", s.key).
+			Set("value", s.value).
+			Set("group_name", s.group).
+			Build()
+		_, err := db.Exec(sql, args...)
 		if err != nil {
 			return err
 		}
