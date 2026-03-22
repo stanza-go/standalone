@@ -49,7 +49,12 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 
 		// Update last_used_at and request_count — don't block the request.
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		db.Exec(`UPDATE api_keys SET last_used_at = ?, request_count = request_count + 1 WHERE id = ?`, now, id)
+		usageSQL, usageArgs := sqlite.Update("api_keys").
+			Set("last_used_at", now).
+			SetExpr("request_count", "request_count + 1").
+			Where("id = ?", id).
+			Build()
+		db.Exec(usageSQL, usageArgs...)
 
 		// User keys: return the user's ID with "user" scope so the claims
 		// match what JWT auth produces — user endpoints work transparently.

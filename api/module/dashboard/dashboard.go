@@ -224,11 +224,14 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 
 	// Users created per day.
 	userCounts := make(map[string]int, days+1)
-	rows, err := db.Query(
-		`SELECT date(created_at) as day, COUNT(*) as cnt
-		 FROM users
-		 WHERE created_at >= ? AND deleted_at IS NULL
-		 GROUP BY day ORDER BY day`, since)
+	userSQL, userArgs := sqlite.Select("date(created_at) as day", "COUNT(*) as cnt").
+		From("users").
+		Where("created_at >= ?", since).
+		Where("deleted_at IS NULL").
+		GroupBy("day").
+		OrderBy("day", "ASC").
+		Build()
+	rows, err := db.Query(userSQL, userArgs...)
 	if err == nil {
 		for rows.Next() {
 			var day string
@@ -246,11 +249,13 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 
 	// Audit log activity per day.
 	activityCounts := make(map[string]int, days+1)
-	rows, err = db.Query(
-		`SELECT date(created_at) as day, COUNT(*) as cnt
-		 FROM audit_log
-		 WHERE created_at >= ?
-		 GROUP BY day ORDER BY day`, since)
+	activitySQL, activityArgs := sqlite.Select("date(created_at) as day", "COUNT(*) as cnt").
+		From("audit_log").
+		Where("created_at >= ?", since).
+		GroupBy("day").
+		OrderBy("day", "ASC").
+		Build()
+	rows, err = db.Query(activitySQL, activityArgs...)
 	if err == nil {
 		for rows.Next() {
 			var day string
@@ -272,13 +277,17 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 		failed    int
 	}
 	jobCounts := make(map[string]*jobDay, days+1)
-	rows, err = db.Query(
-		`SELECT date(created_at) as day,
-		        SUM(CASE WHEN status IN ('completed') THEN 1 ELSE 0 END) as completed,
-		        SUM(CASE WHEN status IN ('failed','dead') THEN 1 ELSE 0 END) as failed
-		 FROM _queue_jobs
-		 WHERE created_at >= ?
-		 GROUP BY day ORDER BY day`, since)
+	jobSQL, jobArgs := sqlite.Select(
+		"date(created_at) as day",
+		"SUM(CASE WHEN status IN ('completed') THEN 1 ELSE 0 END) as completed",
+		"SUM(CASE WHEN status IN ('failed','dead') THEN 1 ELSE 0 END) as failed",
+	).
+		From("_queue_jobs").
+		Where("created_at >= ?", since).
+		GroupBy("day").
+		OrderBy("day", "ASC").
+		Build()
+	rows, err = db.Query(jobSQL, jobArgs...)
 	if err == nil {
 		for rows.Next() {
 			var day string
