@@ -49,30 +49,18 @@ func Run(db *sqlite.DB, logger *log.Logger) error {
 }
 
 func seedSettings(db *sqlite.DB, logger *log.Logger) error {
-	defaults := []struct {
-		key   string
-		value string
-		group string
-	}{
-		{"app.name", "Stanza", "general"},
-		{"app.url", "http://localhost:23710", "general"},
-		{"app.timezone", "UTC", "general"},
-		{"auth.access_token_ttl", "300", "auth"},
-		{"auth.refresh_token_ttl", "86400", "auth"},
-		{"auth.max_sessions_per_user", "10", "auth"},
-	}
-
-	for _, s := range defaults {
-		sql, args := sqlite.Insert("settings").
-			OrIgnore().
-			Set("key", s.key).
-			Set("value", s.value).
-			Set("group_name", s.group).
-			Build()
-		_, err := db.Exec(sql, args...)
-		if err != nil {
-			return err
-		}
+	sql, args := sqlite.InsertBatch("settings").
+		Columns("key", "value", "group_name").
+		Row("app.name", "Stanza", "general").
+		Row("app.url", "http://localhost:23710", "general").
+		Row("app.timezone", "UTC", "general").
+		Row("auth.access_token_ttl", "300", "auth").
+		Row("auth.refresh_token_ttl", "86400", "auth").
+		Row("auth.max_sessions_per_user", "10", "auth").
+		OrIgnore().
+		Build()
+	if _, err := db.Exec(sql, args...); err != nil {
+		return err
 	}
 
 	logger.Info("seed: default settings created")
