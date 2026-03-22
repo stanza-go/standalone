@@ -21,6 +21,7 @@ api/admin/
 ui/dist/
 admin/dist/
 admin-next/dist/
+*.tsbuildinfo
 
 # Data directory
 .stanza/
