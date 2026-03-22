@@ -5,9 +5,6 @@
 package userapikeys
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"strconv"
 	"time"
 
@@ -130,19 +127,12 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		// Generate API key: 32 random bytes -> hex.
-		keyBytes := make([]byte, 32)
-		if _, err := rand.Read(keyBytes); err != nil {
+		// Generate API key with prefix, display prefix, and hash.
+		fullKey, prefix, keyHash, err := auth.GenerateAPIKey("stza_")
+		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to generate key")
 			return
 		}
-		rawKey := hex.EncodeToString(keyBytes)
-		fullKey := "stza_" + rawKey
-		prefix := fullKey[:13] // "stza_" + 8 hex chars
-
-		// Hash for storage.
-		hash := sha256.Sum256([]byte(fullKey))
-		keyHash := hex.EncodeToString(hash[:])
 
 		createdBy, _ := strconv.ParseInt(userID, 10, 64)
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")

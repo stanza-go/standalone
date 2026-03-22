@@ -4,10 +4,7 @@
 package apikeys
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -187,19 +184,12 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		// Generate API key: 32 random bytes -> hex.
-		keyBytes := make([]byte, 32)
-		if _, err := rand.Read(keyBytes); err != nil {
+		// Generate API key with prefix, display prefix, and hash.
+		fullKey, prefix, keyHash, err := auth.GenerateAPIKey("stza_")
+		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to generate key")
 			return
 		}
-		rawKey := hex.EncodeToString(keyBytes)
-		fullKey := "stza_" + rawKey
-		prefix := fullKey[:13] // "stza_" + 8 hex chars
-
-		// Hash for storage.
-		hash := sha256.Sum256([]byte(fullKey))
-		keyHash := hex.EncodeToString(hash[:])
 
 		// Get the creating admin's ID from JWT claims.
 		var createdBy int64
@@ -363,12 +353,7 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if len(req.IDs) == 0 {
-			http.WriteError(w, http.StatusBadRequest, "ids required")
-			return
-		}
-		if len(req.IDs) > 100 {
-			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+		if !http.CheckBulkIDs(w, req.IDs, 100) {
 			return
 		}
 

@@ -554,12 +554,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if len(req.IDs) == 0 {
-			http.WriteError(w, http.StatusBadRequest, "ids required")
-			return
-		}
-		if len(req.IDs) > 100 {
-			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+		if !http.CheckBulkIDs(w, req.IDs, 100) {
 			return
 		}
 
