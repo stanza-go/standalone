@@ -570,18 +570,18 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		placeholders := make([]string, len(req.IDs))
-		args := make([]any, 0, len(req.IDs)+4)
-		args = append(args, now, 0, now)
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+			ids[i] = id
 		}
 
-		query := fmt.Sprintf(
-			"UPDATE admins SET deleted_at = ?, is_active = ?, updated_at = ? WHERE id IN (%s) AND deleted_at IS NULL",
-			strings.Join(placeholders, ","),
-		)
+		query, args := sqlite.Update("admins").
+			Set("deleted_at", now).
+			Set("is_active", 0).
+			Set("updated_at", now).
+			Where("deleted_at IS NULL").
+			WhereIn("id", ids...).
+			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete admins")

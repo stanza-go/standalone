@@ -375,18 +375,16 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		placeholders := make([]string, len(req.IDs))
-		args := make([]any, 0, len(req.IDs)+1)
-		args = append(args, now)
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+			ids[i] = id
 		}
 
-		query := fmt.Sprintf(
-			"UPDATE api_keys SET revoked_at = ? WHERE id IN (%s) AND revoked_at IS NULL",
-			strings.Join(placeholders, ","),
-		)
+		query, args := sqlite.Update("api_keys").
+			Set("revoked_at", now).
+			Where("revoked_at IS NULL").
+			WhereIn("id", ids...).
+			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke api keys")

@@ -365,22 +365,19 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		placeholders := make([]string, len(req.IDs))
-		args := make([]any, len(req.IDs))
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args[i] = id
+			ids[i] = id
 		}
-		inExpr := strings.Join(placeholders, ",")
 
 		// Delete deliveries first (FK constraint).
 		dq, da := sqlite.Delete("webhook_deliveries").
-			Where("webhook_id IN ("+inExpr+")", args...).
+			WhereIn("webhook_id", ids...).
 			Build()
 		_, _ = db.Exec(dq, da...)
 
 		dq, da = sqlite.Delete("webhooks").
-			Where("id IN ("+inExpr+")", args...).
+			WhereIn("id", ids...).
 			Build()
 		result, err := db.Exec(dq, da...)
 		if err != nil {

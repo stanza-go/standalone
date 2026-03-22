@@ -462,18 +462,16 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		placeholders := make([]string, len(req.IDs))
-		args := make([]any, 0, len(req.IDs)+1)
-		args = append(args, now)
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+			ids[i] = id
 		}
 
-		query := fmt.Sprintf(
-			"UPDATE uploads SET deleted_at = ? WHERE id IN (%s) AND deleted_at IS NULL",
-			strings.Join(placeholders, ","),
-		)
+		query, args := sqlite.Update("uploads").
+			Set("deleted_at", now).
+			Where("deleted_at IS NULL").
+			WhereIn("id", ids...).
+			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete uploads")

@@ -6,7 +6,6 @@ package adminsessions
 import (
 	"encoding/csv"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -134,17 +133,15 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			return
 		}
 
-		args := make([]any, len(req.IDs))
-		placeholders := make([]string, len(req.IDs))
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args[i] = id
+			ids[i] = id
 		}
 
-		sql, sqlArgs := sqlite.Delete("refresh_tokens").
-			Where("id IN ("+strings.Join(placeholders, ",")+")", args...).
+		sql, args := sqlite.Delete("refresh_tokens").
+			WhereIn("id", ids...).
 			Build()
-		result, err := db.Exec(sql, sqlArgs...)
+		result, err := db.Exec(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke sessions")
 			return

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -367,18 +366,16 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		placeholders := make([]string, len(req.IDs))
-		args := make([]any, 0, len(req.IDs)+2)
-		args = append(args, notifications.EntityAdmin, adminID)
+		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			placeholders[i] = "?"
-			args = append(args, id)
+			ids[i] = id
 		}
 
-		query := fmt.Sprintf(
-			"DELETE FROM notifications WHERE entity_type = ? AND entity_id = ? AND id IN (%s)",
-			strings.Join(placeholders, ","),
-		)
+		query, args := sqlite.Delete("notifications").
+			Where("entity_type = ?", notifications.EntityAdmin).
+			Where("entity_id = ?", adminID).
+			WhereIn("id", ids...).
+			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete notifications")
