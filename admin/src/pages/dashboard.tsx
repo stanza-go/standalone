@@ -8,6 +8,7 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  ThemeIcon,
   Title,
 } from "@mantine/core";
 import {
@@ -56,10 +57,10 @@ interface DashboardData {
   };
 }
 
-function StatCard({ title, value, icon: Icon }: { title: string; value: string | number; icon: React.FC<{ size?: number; stroke?: number }> }) {
+function StatCard({ title, value, icon: Icon, color }: { title: string; value: string | number; icon: React.FC<{ size?: number; stroke?: number }>; color: string }) {
   return (
     <Card withBorder padding="lg" radius="md">
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="nowrap">
         <div>
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
             {title}
@@ -68,7 +69,9 @@ function StatCard({ title, value, icon: Icon }: { title: string; value: string |
             {value}
           </Text>
         </div>
-        <Icon size={28} stroke={1.5} />
+        <ThemeIcon size={48} radius="md" variant="light" color={color}>
+          <Icon size={24} stroke={1.5} />
+        </ThemeIcon>
       </Group>
     </Card>
   );
@@ -117,10 +120,10 @@ export default function DashboardPage() {
       <Title order={3}>Dashboard</Title>
 
       <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
-        <StatCard title="Users" value={data.stats.total_users} icon={IconUsers} />
-        <StatCard title="Active Sessions" value={data.stats.active_sessions} icon={IconServer} />
-        <StatCard title="Database" value={formatBytes(data.database.size_bytes)} icon={IconDatabase} />
-        <StatCard title="Uptime" value={data.system.uptime} icon={IconClock} />
+        <StatCard title="Users" value={data.stats.total_users} icon={IconUsers} color="blue" />
+        <StatCard title="Active Sessions" value={data.stats.active_sessions} icon={IconServer} color="green" />
+        <StatCard title="Database" value={formatBytes(data.database.size_bytes)} icon={IconDatabase} color="violet" />
+        <StatCard title="Uptime" value={data.system.uptime} icon={IconClock} color="orange" />
       </SimpleGrid>
 
       <Grid>

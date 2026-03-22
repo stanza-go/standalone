@@ -259,8 +259,8 @@ export default function CronPage() {
       ) : entries.length === 0 && !error ? (
         <Text ta="center" c="dimmed" py="xl">No cron jobs registered</Text>
       ) : (
-        /* Job cards */
-        <Stack gap="sm">
+        /* Job cards — 2 columns on desktop */
+        <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="sm">
           {entries.map((entry) => (
             <Paper key={entry.name} withBorder radius="md" p={0}>
               {/* Main row */}
@@ -386,7 +386,7 @@ export default function CronPage() {
               </Collapse>
             </Paper>
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
     </Stack>
   );

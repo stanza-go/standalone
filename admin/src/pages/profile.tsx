@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  Grid,
   Group,
   Loader,
   PasswordInput,
@@ -154,7 +155,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <Stack p="md" gap="md" maw={640}>
+    <Stack gap="md">
       <div>
         <Title order={3}>Profile</Title>
         <Text size="sm" c="dimmed">Manage your account settings and sessions</Text>
@@ -166,101 +167,107 @@ export default function ProfilePage() {
         </Alert>
       )}
 
-      {/* Account Information */}
-      <Card withBorder padding="lg">
-        <Text fw={600} mb="md">Account Information</Text>
-        <Stack gap="sm">
-          <TextInput
-            label="Email"
-            value={profile?.email ?? ""}
-            disabled
-            description="Email cannot be changed"
-          />
-          <TextInput
-            label="Display Name"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="Your name"
-          />
-          <Group grow>
-            <div>
-              <Text size="sm" fw={500} mb={4}>Role</Text>
-              <Text size="sm" tt="capitalize">{profile?.role}</Text>
-            </div>
-            <div>
-              <Text size="sm" fw={500} mb={4}>Member Since</Text>
-              <Text size="sm">
-                {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "\u2014"}
-              </Text>
-            </div>
-          </Group>
-          {profile?.scopes && profile.scopes.length > 0 && (
-            <div>
-              <Text size="sm" fw={500} mb={4}>Scopes</Text>
-              <Group gap="xs">
-                {profile.scopes.map((scope) => (
-                  <Badge key={scope} variant="light" size="sm">{scope}</Badge>
-                ))}
+      <Grid>
+        {/* Left column: Account Information */}
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Card withBorder padding="lg" h="100%">
+            <Text fw={600} mb="md">Account Information</Text>
+            <Stack gap="sm">
+              <TextInput
+                label="Email"
+                value={profile?.email ?? ""}
+                disabled
+                description="Email cannot be changed"
+              />
+              <TextInput
+                label="Display Name"
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+                placeholder="Your name"
+              />
+              <Group grow>
+                <div>
+                  <Text size="sm" fw={500} mb={4}>Role</Text>
+                  <Text size="sm" tt="capitalize">{profile?.role}</Text>
+                </div>
+                <div>
+                  <Text size="sm" fw={500} mb={4}>Member Since</Text>
+                  <Text size="sm">
+                    {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "\u2014"}
+                  </Text>
+                </div>
               </Group>
-            </div>
-          )}
-          <Group justify="flex-end" pt="xs">
-            <Button
-              size="sm"
-              onClick={saveProfile}
-              disabled={savingProfile || name === profile?.name}
-              loading={savingProfile}
-            >
-              Save Changes
-            </Button>
-          </Group>
-        </Stack>
-      </Card>
+              {profile?.scopes && profile.scopes.length > 0 && (
+                <div>
+                  <Text size="sm" fw={500} mb={4}>Scopes</Text>
+                  <Group gap="xs">
+                    {profile.scopes.map((scope) => (
+                      <Badge key={scope} variant="light" size="sm">{scope}</Badge>
+                    ))}
+                  </Group>
+                </div>
+              )}
+              <Group justify="flex-end" pt="xs">
+                <Button
+                  size="sm"
+                  onClick={saveProfile}
+                  disabled={savingProfile || name === profile?.name}
+                  loading={savingProfile}
+                >
+                  Save Changes
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        </Grid.Col>
 
-      {/* Change Password */}
-      <Card withBorder padding="lg">
-        <Text fw={600} mb="md">Change Password</Text>
-        <Stack gap="sm">
-          {passwordError && (
-            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
-              {passwordError}
-            </Alert>
-          )}
-          <PasswordInput
-            label="Current Password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.currentTarget.value)}
-            placeholder="Enter current password"
-          />
-          <PasswordInput
-            label="New Password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.currentTarget.value)}
-            placeholder="At least 8 characters"
-          />
-          <PasswordInput
-            label="Confirm New Password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-            placeholder="Confirm new password"
-          />
-          <Text size="xs" c="dimmed">
-            Changing your password will revoke all other active sessions.
-          </Text>
-          <Group justify="flex-end" pt="xs">
-            <Button
-              size="sm"
-              onClick={changePassword}
-              disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
-              loading={savingPassword}
-            >
-              Change Password
-            </Button>
-          </Group>
-        </Stack>
-      </Card>
+        {/* Right column: Change Password */}
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Card withBorder padding="lg" h="100%">
+            <Text fw={600} mb="md">Change Password</Text>
+            <Stack gap="sm">
+              {passwordError && (
+                <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
+                  {passwordError}
+                </Alert>
+              )}
+              <PasswordInput
+                label="Current Password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.currentTarget.value)}
+                placeholder="Enter current password"
+              />
+              <PasswordInput
+                label="New Password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.currentTarget.value)}
+                placeholder="At least 8 characters"
+              />
+              <PasswordInput
+                label="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.currentTarget.value)}
+                placeholder="Confirm new password"
+              />
+              <Text size="xs" c="dimmed">
+                Changing your password will revoke all other active sessions.
+              </Text>
+              <Group justify="flex-end" pt="xs">
+                <Button
+                  size="sm"
+                  onClick={changePassword}
+                  disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
+                  loading={savingPassword}
+                >
+                  Change Password
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
 
-      {/* Active Sessions */}
+      {/* Active Sessions — full width below */}
       <Card withBorder padding={0}>
         <Group px="lg" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
           <Text fw={600}>Active Sessions</Text>
