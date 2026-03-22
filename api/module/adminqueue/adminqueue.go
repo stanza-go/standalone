@@ -79,19 +79,20 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 		}
 
 		type jobJSON struct {
-			ID          int64  `json:"id"`
-			Queue       string `json:"queue"`
-			Type        string `json:"type"`
-			Payload     string `json:"payload"`
-			Status      string `json:"status"`
-			Attempts    int    `json:"attempts"`
-			MaxAttempts int    `json:"max_attempts"`
-			LastError   string `json:"last_error"`
-			RunAt       string `json:"run_at"`
-			StartedAt   string `json:"started_at"`
-			CompletedAt string `json:"completed_at"`
-			CreatedAt   string `json:"created_at"`
-			UpdatedAt   string `json:"updated_at"`
+			ID             int64  `json:"id"`
+			Queue          string `json:"queue"`
+			Type           string `json:"type"`
+			Payload        string `json:"payload"`
+			Status         string `json:"status"`
+			Attempts       int    `json:"attempts"`
+			MaxAttempts    int    `json:"max_attempts"`
+			TimeoutSeconds int    `json:"timeout_seconds"`
+			LastError      string `json:"last_error"`
+			RunAt          string `json:"run_at"`
+			StartedAt      string `json:"started_at"`
+			CompletedAt    string `json:"completed_at"`
+			CreatedAt      string `json:"created_at"`
+			UpdatedAt      string `json:"updated_at"`
 		}
 
 		result := make([]jobJSON, len(jobs))
@@ -107,19 +108,20 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 				completedAt = j.CompletedAt.Format(time.RFC3339)
 			}
 			result[i] = jobJSON{
-				ID:          j.ID,
-				Queue:       j.Queue,
-				Type:        j.Type,
-				Payload:     string(j.Payload),
-				Status:      j.Status,
-				Attempts:    j.Attempts,
-				MaxAttempts: j.MaxAttempts,
-				LastError:   j.LastError,
-				RunAt:       runAt,
-				StartedAt:   startedAt,
-				CompletedAt: completedAt,
-				CreatedAt:   j.CreatedAt.Format(time.RFC3339),
-				UpdatedAt:   j.UpdatedAt.Format(time.RFC3339),
+				ID:             j.ID,
+				Queue:          j.Queue,
+				Type:           j.Type,
+				Payload:        string(j.Payload),
+				Status:         j.Status,
+				Attempts:       j.Attempts,
+				MaxAttempts:    j.MaxAttempts,
+				TimeoutSeconds: int(j.Timeout.Seconds()),
+				LastError:      j.LastError,
+				RunAt:          runAt,
+				StartedAt:      startedAt,
+				CompletedAt:    completedAt,
+				CreatedAt:      j.CreatedAt.Format(time.RFC3339),
+				UpdatedAt:      j.UpdatedAt.Format(time.RFC3339),
 			}
 		}
 

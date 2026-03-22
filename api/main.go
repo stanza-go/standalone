@@ -242,6 +242,7 @@ func provideWebhookDispatcher(db *sqlite.DB, q *queue.Queue, logger *log.Logger)
 func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *queue.Queue {
 	q := queue.New(db,
 		queue.WithLogger(logger),
+		queue.WithDefaultTimeout(5*time.Minute),
 	)
 
 	lc.Append(lifecycle.Hook{
