@@ -186,7 +186,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 			http.WriteError(w, http.StatusBadRequest, "missing file field")
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		// Generate UUID for this upload.
 		uuidBytes := make([]byte, 16)
@@ -222,7 +222,9 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		}
 
 		written, err := io.Copy(dst, file)
-		dst.Close()
+		if closeErr := dst.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			_ = os.Remove(filePath)
 			http.WriteError(w, http.StatusInternalServerError, "failed to write file")

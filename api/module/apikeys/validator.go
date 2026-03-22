@@ -54,7 +54,7 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 			SetExpr("request_count", "request_count + 1").
 			Where("id = ?", id).
 			Build()
-		db.Exec(usageSQL, usageArgs...)
+		_, _ = db.Exec(usageSQL, usageArgs...)
 
 		// User keys: return the user's ID with "user" scope so the claims
 		// match what JWT auth produces — user endpoints work transparently.

@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - gocritic
+    - misspell
+    - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (net/http.ResponseWriter).Write
+        - (*github.com/stanza-go/framework/pkg/sqlite.Rows).Close
+        - (*os.File).Close
+        - (*github.com/stanza-go/framework/pkg/http.Conn).Close

@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-ui dev-admin build build-ui build-admin build-api docker clean
+.PHONY: dev dev-api dev-ui dev-admin build build-ui build-admin build-api docker clean vet lint check
 
 # Development — run all three services with hot reload
 dev:
@@ -45,6 +45,15 @@ docker:
 		--build-arg BUILD_COMMIT=$$(cd .. && git -C standalone rev-parse --short HEAD 2>/dev/null || echo unknown) \
 		--build-arg BUILD_TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
 		..
+
+# Code quality
+vet:
+	cd api && go vet ./...
+
+lint:
+	cd api && golangci-lint run ./...
+
+check: vet lint
 
 clean:
 	rm -rf api/bin api/ui api/admin ui/dist admin/dist

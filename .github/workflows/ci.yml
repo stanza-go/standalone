@@ -30,6 +30,13 @@ jobs:
         working-directory: standalone/api
         run: go vet ./...
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+          working-directory: standalone/api
+          args: ./...
+
       - name: Build
         working-directory: standalone/api
         run: go build -o /dev/null .
