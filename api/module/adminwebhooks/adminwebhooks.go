@@ -74,10 +74,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		qb := sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks")
-		if search != "" {
-			escaped := sqlite.EscapeLike(search)
-			qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
-		}
+		qb.WhereSearch(search, "url", "description")
 
 		var total int
 		sql, args := sqlite.CountFrom(qb).Build()
@@ -128,10 +125,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		qb := sqlite.Select("id", "url", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks")
-		if search != "" {
-			escaped := sqlite.EscapeLike(search)
-			qb = qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
-		}
+		qb.WhereSearch(search, "url", "description")
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "url", "is_active", "created_at", "updated_at"},

@@ -85,8 +85,7 @@ func buildAuditSelect(r *http.Request) *sqlite.SelectBuilder {
 		q.Where("audit_log.admin_id = ?", adminID)
 	}
 	if search := r.URL.Query().Get("search"); search != "" {
-		like := "%" + sqlite.EscapeLike(search) + "%"
-		q.Where("(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')", like, like)
+		q.WhereSearch(search, "audit_log.details", "audit_log.action")
 	}
 	if from := r.URL.Query().Get("from"); from != "" {
 		q.Where("audit_log.created_at >= ?", from)

@@ -62,10 +62,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys")
-		if search != "" {
-			like := "%" + sqlite.EscapeLike(search) + "%"
-			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
-		}
+		selectQ.WhereSearch(search, "name", "key_prefix")
 
 		var total int
 		sql, args := sqlite.CountFrom(selectQ).Build()
@@ -114,11 +111,8 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"entity_type", "COALESCE(entity_id, '')", "request_count",
 			"COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
-			From("api_keys")
-		if search != "" {
-			like := "%" + sqlite.EscapeLike(search) + "%"
-			q.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
-		}
+			From("api_keys").
+			WhereSearch(search, "name", "key_prefix")
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "name", "created_at", "last_used_at", "request_count"},

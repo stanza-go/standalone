@@ -59,10 +59,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("api_keys").
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID)
-		if search != "" {
-			like := "%" + sqlite.EscapeLike(search) + "%"
-			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
-		}
+		selectQ.WhereSearch(search, "name", "key_prefix")
 
 		var total int
 		sql, args := sqlite.CountFrom(selectQ).Build()

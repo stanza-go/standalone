@@ -60,10 +60,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		selectQ := sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
 			From("admins").
 			Where("deleted_at IS NULL")
-		if search != "" {
-			like := "%" + sqlite.EscapeLike(search) + "%"
-			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
-		}
+		selectQ.WhereSearch(search, "email", "name")
 
 		var total int
 		sql, args := sqlite.CountFrom(selectQ).Build()
@@ -110,11 +107,8 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		q := sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
 			From("admins").
-			Where("deleted_at IS NULL")
-		if search != "" {
-			like := "%" + sqlite.EscapeLike(search) + "%"
-			q.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
-		}
+			Where("deleted_at IS NULL").
+			WhereSearch(search, "email", "name")
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "email", "name", "role", "is_active", "created_at", "updated_at"},
