@@ -27,7 +27,8 @@ import {
   X,
   Search,
 } from "lucide-react";
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { Suspense, useState, useEffect, useCallback, type ReactNode } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -281,7 +282,9 @@ export default function SidebarLayout() {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <Outlet />
+        <Suspense fallback={<div className="flex items-center justify-center h-full"><Spinner /></div>}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
