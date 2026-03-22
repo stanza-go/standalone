@@ -28,7 +28,8 @@ RUN cd standalone/admin && bun install --frozen-lockfile
 COPY standalone/ui/ standalone/ui/
 RUN cd standalone/ui && bun run build
 
-# Build admin
+# Build admin (ARG busts Docker cache when source changes)
+ARG CACHE_BUST_ADMIN=1
 COPY standalone/admin/ standalone/admin/
 RUN cd standalone/admin && bun run build
 
