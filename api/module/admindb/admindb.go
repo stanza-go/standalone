@@ -61,18 +61,11 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 		_ = db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
 
 		// Collect table names first, then close rows before querying counts.
-		var tableNames []string
-		rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-		if err == nil {
-			for rows.Next() {
-				var name string
-				if err := rows.Scan(&name); err == nil {
-					tableNames = append(tableNames, name)
-				}
-			}
-			_ = rows.Err()
-			rows.Close()
-		}
+		tableNames, _ := sqlite.QueryAll(db, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`, nil, func(rows *sqlite.Rows) (string, error) {
+			var name string
+			err := rows.Scan(&name)
+			return name, err
+		})
 
 		type tableInfo struct {
 			Name     string `json:"name"`
@@ -91,18 +84,11 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 			Name      string `json:"name"`
 			AppliedAt string `json:"applied_at"`
 		}
-		migrations := make([]migrationInfo, 0)
-		mrows, err := db.Query("SELECT version, name, applied_at FROM _migrations ORDER BY version ASC")
-		if err == nil {
-			for mrows.Next() {
-				var m migrationInfo
-				if err := mrows.Scan(&m.Version, &m.Name, &m.AppliedAt); err == nil {
-					migrations = append(migrations, m)
-				}
-			}
-			_ = mrows.Err()
-			mrows.Close()
-		}
+		migrations, _ := sqlite.QueryAll(db, "SELECT version, name, applied_at FROM _migrations ORDER BY version ASC", nil, func(rows *sqlite.Rows) (migrationInfo, error) {
+			var m migrationInfo
+			err := rows.Scan(&m.Version, &m.Name, &m.AppliedAt)
+			return m, err
+		})
 
 		// Backups listing from the backups directory.
 		type backupInfo struct {

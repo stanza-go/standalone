@@ -72,34 +72,37 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 	}
 
 	// Collect matching webhooks first, then close rows before doing any
-	// writes. SQLite uses a single connection — holding rows open while
-	// calling Exec would deadlock.
+	// writes. QueryAll handles Close automatically.
 	type target struct {
 		id     int64
 		url    string
 		secret string
 	}
 
-	rows, err := d.db.Query(
-		"SELECT id, url, secret, events FROM webhooks WHERE is_active = 1",
-	)
+	type webhookRow struct {
+		id     int64
+		url    string
+		secret string
+		events string
+	}
+
+	allWebhooks, err := sqlite.QueryAll(d.db,
+		"SELECT id, url, secret, events FROM webhooks WHERE is_active = 1", nil,
+		func(rows *sqlite.Rows) (webhookRow, error) {
+			var w webhookRow
+			err := rows.Scan(&w.id, &w.url, &w.secret, &w.events)
+			return w, err
+		})
 	if err != nil {
 		return err
 	}
 
 	var targets []target
-	for rows.Next() {
-		var id int64
-		var url, secret, eventsJSON string
-		if err := rows.Scan(&id, &url, &secret, &eventsJSON); err != nil {
-			continue
-		}
-		if matchesEvent(eventsJSON, event) {
-			targets = append(targets, target{id: id, url: url, secret: secret})
+	for _, w := range allWebhooks {
+		if matchesEvent(w.events, event) {
+			targets = append(targets, target{id: w.id, url: w.url, secret: w.secret})
 		}
 	}
-	_ = rows.Err()
-	rows.Close()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 

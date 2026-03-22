@@ -283,12 +283,6 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("expires_at > ?", now).
 			OrderBy("created_at", "DESC").
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		defer rows.Close()
 
 		currentTokenHash := ""
 		refreshToken, _ := auth.ReadRefreshToken(r)
@@ -296,23 +290,24 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			currentTokenHash = auth.HashToken(refreshToken)
 		}
 
-		var sessions []ActiveSession
-		for rows.Next() {
-			var s ActiveSession
-			var tokenHash string
-			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt, &tokenHash); err != nil {
-				continue
-			}
-			s.Current = tokenHash == currentTokenHash
-			sessions = append(sessions, s)
+		type sessionRow struct {
+			ActiveSession
+			TokenHash string
 		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+		rows, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (sessionRow, error) {
+			var sr sessionRow
+			err := rows.Scan(&sr.ID, &sr.CreatedAt, &sr.ExpiresAt, &sr.TokenHash)
+			return sr, err
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 
-		if sessions == nil {
-			sessions = []ActiveSession{}
+		sessions := make([]ActiveSession, len(rows))
+		for i, sr := range rows {
+			sr.Current = sr.TokenHash == currentTokenHash
+			sessions[i] = sr.ActiveSession
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{

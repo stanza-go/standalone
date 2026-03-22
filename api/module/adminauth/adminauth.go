@@ -234,24 +234,12 @@ func scopesForRole(db *sqlite.DB, role string) []string {
 		Join("roles r", "r.id = rs.role_id").
 		Where("r.name = ?", role).
 		Build()
-	rows, err := db.Query(sql, args...)
-	if err != nil {
-		return []string{"admin"}
-	}
-	defer rows.Close()
-
-	var scopes []string
-	for rows.Next() {
+	scopes, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (string, error) {
 		var scope string
-		if err := rows.Scan(&scope); err != nil {
-			continue
-		}
-		scopes = append(scopes, scope)
-	}
-	if err := rows.Err(); err != nil {
-		return []string{"admin"}
-	}
-	if len(scopes) == 0 {
+		err := rows.Scan(&scope)
+		return scope, err
+	})
+	if err != nil || len(scopes) == 0 {
 		return []string{"admin"}
 	}
 	return scopes

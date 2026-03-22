@@ -386,24 +386,12 @@ func scopesHandler() func(http.ResponseWriter, *http.Request) {
 // loadScopes returns the scope names for a given role ID.
 func loadScopes(db *sqlite.DB, roleID int64) []string {
 	sql, args := sqlite.Select("scope").From("role_scopes").Where("role_id = ?", roleID).Build()
-	rows, err := db.Query(sql, args...)
-	if err != nil {
-		return []string{}
-	}
-	defer rows.Close()
-
-	var scopes []string
-	for rows.Next() {
+	scopes, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (string, error) {
 		var s string
-		if err := rows.Scan(&s); err != nil {
-			continue
-		}
-		scopes = append(scopes, s)
-	}
-	if err := rows.Err(); err != nil {
-		return []string{}
-	}
-	if scopes == nil {
+		err := rows.Scan(&s)
+		return s, err
+	})
+	if err != nil {
 		return []string{}
 	}
 	return scopes
@@ -459,20 +447,10 @@ func ValidateRoleExists(db *sqlite.DB, role string) bool {
 // RoleNames returns all role names from the database.
 func RoleNames(db *sqlite.DB) []string {
 	sql, args := sqlite.Select("name").From("roles").OrderBy("id", "ASC").Build()
-	rows, err := db.Query(sql, args...)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	var names []string
-	for rows.Next() {
+	names, _ := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (string, error) {
 		var name string
-		if err := rows.Scan(&name); err != nil {
-			continue
-		}
-		names = append(names, name)
-	}
-	_ = rows.Err()
+		err := rows.Scan(&name)
+		return name, err
+	})
 	return names
 }

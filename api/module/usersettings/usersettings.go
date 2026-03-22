@@ -48,24 +48,13 @@ func listSettings(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("user_id = ?", claims.UID).
 			OrderBy("key", "ASC").
 			Build()
-		rows, err := db.Query(sql, args...)
+		settings, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (userSetting, error) {
+			var s userSetting
+			err := rows.Scan(&s.Key, &s.Value, &s.UpdatedAt)
+			return s, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
-			return
-		}
-		defer rows.Close()
-
-		settings := make([]userSetting, 0)
-		for rows.Next() {
-			var s userSetting
-			if err := rows.Scan(&s.Key, &s.Value, &s.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan setting")
-				return
-			}
-			settings = append(settings, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate settings")
 			return
 		}
 
@@ -170,24 +159,13 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("user_id = ?", claims.UID).
 			OrderBy("key", "ASC").
 			Build()
-		rows, err := db.Query(sql, args...)
+		settings, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (userSetting, error) {
+			var s userSetting
+			err := rows.Scan(&s.Key, &s.Value, &s.UpdatedAt)
+			return s, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
-			return
-		}
-		defer rows.Close()
-
-		settings := make([]userSetting, 0)
-		for rows.Next() {
-			var s userSetting
-			if err := rows.Scan(&s.Key, &s.Value, &s.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan setting")
-				return
-			}
-			settings = append(settings, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate settings")
 			return
 		}
 

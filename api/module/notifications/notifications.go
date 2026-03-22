@@ -277,24 +277,11 @@ func activeAdminIDs(db *sqlite.DB) ([]int64, error) {
 		Where("is_active = 1").
 		Where("deleted_at IS NULL").
 		Build()
-	rows, err := db.Query(sq, sa...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []int64
-	for rows.Next() {
+	return sqlite.QueryAll(db, sq, sa, func(rows *sqlite.Rows) (int64, error) {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return ids, nil
+		err := rows.Scan(&id)
+		return id, err
+	})
 }
 
 // publishToAdmin broadcasts a notification event to connected WebSocket

@@ -69,26 +69,15 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Limit(pg.Limit).
 			Offset(pg.Offset).
 			Build()
-		rows, err := db.Query(sql, args...)
+		keys, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (apiKeyJSON, error) {
+			var k apiKeyJSON
+			err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scopes,
+				&k.EntityType, &k.EntityID, &k.CreatedBy,
+				&k.RequestCount, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RevokedAt)
+			return k, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list api keys")
-			return
-		}
-		defer rows.Close()
-
-		keys := make([]apiKeyJSON, 0)
-		for rows.Next() {
-			var k apiKeyJSON
-			if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scopes,
-				&k.EntityType, &k.EntityID, &k.CreatedBy,
-				&k.RequestCount, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RevokedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan api key")
-				return
-			}
-			keys = append(keys, k)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate api keys")
 			return
 		}
 

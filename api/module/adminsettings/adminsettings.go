@@ -37,24 +37,13 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			OrderBy("group_name", "ASC").
 			OrderBy("key", "ASC").
 			Build()
-		rows, err := db.Query(sql, args...)
+		settings, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (setting, error) {
+			var s setting
+			err := rows.Scan(&s.Key, &s.Value, &s.GroupName, &s.UpdatedAt)
+			return s, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
-			return
-		}
-		defer rows.Close()
-
-		settings := make([]setting, 0)
-		for rows.Next() {
-			var s setting
-			if err := rows.Scan(&s.Key, &s.Value, &s.GroupName, &s.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan setting")
-				return
-			}
-			settings = append(settings, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate settings")
 			return
 		}
 

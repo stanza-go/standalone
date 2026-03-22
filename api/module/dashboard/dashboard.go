@@ -252,18 +252,13 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 		GroupBy("day").
 		OrderBy("day", "ASC").
 		Build()
-	rows, err := db.Query(userSQL, userArgs...)
-	if err == nil {
-		for rows.Next() {
-			var day string
-			var cnt int
-			if err := rows.Scan(&day, &cnt); err != nil {
-				break
-			}
-			userCounts[day] = cnt
-		}
-		_ = rows.Err()
-		rows.Close()
+	userRows, _ := sqlite.QueryAll(db, userSQL, userArgs, func(rows *sqlite.Rows) (dayCount, error) {
+		var dc dayCount
+		err := rows.Scan(&dc.Date, &dc.Count)
+		return dc, err
+	})
+	for _, dc := range userRows {
+		userCounts[dc.Date] = dc.Count
 	}
 	for _, d := range dates {
 		result.Users = append(result.Users, dayCount{Date: d, Count: userCounts[d]})
@@ -277,29 +272,20 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 		GroupBy("day").
 		OrderBy("day", "ASC").
 		Build()
-	rows, err = db.Query(activitySQL, activityArgs...)
-	if err == nil {
-		for rows.Next() {
-			var day string
-			var cnt int
-			if err := rows.Scan(&day, &cnt); err != nil {
-				break
-			}
-			activityCounts[day] = cnt
-		}
-		_ = rows.Err()
-		rows.Close()
+	activityRows, _ := sqlite.QueryAll(db, activitySQL, activityArgs, func(rows *sqlite.Rows) (dayCount, error) {
+		var dc dayCount
+		err := rows.Scan(&dc.Date, &dc.Count)
+		return dc, err
+	})
+	for _, dc := range activityRows {
+		activityCounts[dc.Date] = dc.Count
 	}
 	for _, d := range dates {
 		result.Activity = append(result.Activity, dayCount{Date: d, Count: activityCounts[d]})
 	}
 
 	// Queue jobs per day (completed vs failed).
-	type jobDay struct {
-		completed int
-		failed    int
-	}
-	jobCounts := make(map[string]*jobDay, days+1)
+	jobCounts := make(map[string]dayJobCount, days+1)
 	jobSQL, jobArgs := sqlite.Select(
 		"date(created_at) as day",
 		"SUM(CASE WHEN status IN ('completed') THEN 1 ELSE 0 END) as completed",
@@ -310,25 +296,17 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 		GroupBy("day").
 		OrderBy("day", "ASC").
 		Build()
-	rows, err = db.Query(jobSQL, jobArgs...)
-	if err == nil {
-		for rows.Next() {
-			var day string
-			var completed, failed int
-			if err := rows.Scan(&day, &completed, &failed); err != nil {
-				break
-			}
-			jobCounts[day] = &jobDay{completed: completed, failed: failed}
-		}
-		_ = rows.Err()
-		rows.Close()
+	jobRows, _ := sqlite.QueryAll(db, jobSQL, jobArgs, func(rows *sqlite.Rows) (dayJobCount, error) {
+		var djc dayJobCount
+		err := rows.Scan(&djc.Date, &djc.Completed, &djc.Failed)
+		return djc, err
+	})
+	for _, djc := range jobRows {
+		jobCounts[djc.Date] = djc
 	}
 	for _, d := range dates {
 		jd := jobCounts[d]
-		if jd == nil {
-			jd = &jobDay{}
-		}
-		result.Jobs = append(result.Jobs, dayJobCount{Date: d, Completed: jd.completed, Failed: jd.failed})
+		result.Jobs = append(result.Jobs, dayJobCount{Date: d, Completed: jd.Completed, Failed: jd.Failed})
 	}
 
 	return result, nil

@@ -84,14 +84,6 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		total, _ := db.Count(selectQ)
 
-		sql, args := selectQ.OrderBy("started_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "database error")
-			return
-		}
-		defer rows.Close()
-
 		type runJSON struct {
 			ID         int64  `json:"id"`
 			Name       string `json:"name"`
@@ -101,17 +93,14 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Error      string `json:"error"`
 		}
 
-		runs := make([]runJSON, 0)
-		for rows.Next() {
+		sql, args := selectQ.OrderBy("started_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
+		runs, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (runJSON, error) {
 			var run runJSON
-			if err := rows.Scan(&run.ID, &run.Name, &run.StartedAt, &run.DurationMs, &run.Status, &run.Error); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "scan error")
-				return
-			}
-			runs = append(runs, run)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate cron runs")
+			err := rows.Scan(&run.ID, &run.Name, &run.StartedAt, &run.DurationMs, &run.Status, &run.Error)
+			return run, err
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
