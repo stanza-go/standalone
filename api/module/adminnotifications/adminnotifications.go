@@ -12,6 +12,7 @@ import (
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/notifications"
 )
 
@@ -219,15 +220,17 @@ func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Req
 			http.WriteError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		if req.EntityType == "" || req.EntityID <= 0 || req.Title == "" {
-			http.WriteError(w, http.StatusUnprocessableEntity, "entity_type, entity_id, and title are required")
-			return
-		}
 		if req.Type == "" {
 			req.Type = "info"
 		}
-		if req.EntityType != notifications.EntityAdmin && req.EntityType != notifications.EntityUser {
-			http.WriteError(w, http.StatusUnprocessableEntity, "entity_type must be 'admin' or 'user'")
+		v := validate.Fields(
+			validate.Required("entity_type", req.EntityType),
+			validate.OneOf("entity_type", req.EntityType, notifications.EntityAdmin, notifications.EntityUser),
+			validate.Check("entity_id", req.EntityID > 0, "must be a positive number"),
+			validate.Required("title", req.Title),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 

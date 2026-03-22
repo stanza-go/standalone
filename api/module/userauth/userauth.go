@@ -27,13 +27,13 @@ import (
 //	POST /api/auth/login    — authenticate with email + password
 //	GET  /api/auth          — status check, refresh access token
 //	POST /api/auth/logout   — revoke session, clear cookies
-func Register(api *http.Group, a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) {
+func Register(api *http.Group, a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	g := api.Group("/auth")
 
-	g.HandleFunc("POST /register", registerHandler(a, db, logger, wh))
-	g.HandleFunc("POST /login", loginHandler(a, db, logger))
-	g.HandleFunc("GET /", statusHandler(a, db, logger))
-	g.HandleFunc("POST /logout", logoutHandler(a, db, logger))
+	g.HandleFunc("POST /register", registerHandler(a, db, wh))
+	g.HandleFunc("POST /login", loginHandler(a, db))
+	g.HandleFunc("GET /", statusHandler(a, db))
+	g.HandleFunc("POST /logout", logoutHandler(a, db))
 }
 
 // registerRequest is the expected JSON body for POST /register.
@@ -45,7 +45,7 @@ type registerRequest struct {
 
 // registerHandler creates a new user account, issues tokens, and logs
 // them in automatically.
-func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
+func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -131,7 +131,7 @@ type loginRequest struct {
 
 // loginHandler authenticates a user by email and password, issues
 // access and refresh tokens, and sets them as cookies.
-func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -189,7 +189,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 // statusHandler validates the refresh token, checks if the user is
 // still active, and issues a fresh access token with up-to-date
 // scopes. The frontend polls this endpoint every ~1 minute.
-func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -261,7 +261,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 }
 
 // logoutHandler revokes the refresh token and clears all cookies.
-func logoutHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func logoutHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err == nil {

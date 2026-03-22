@@ -28,11 +28,11 @@ import (
 const tokenTTL = 30 * time.Minute
 
 // Register mounts password reset routes on the given router group.
-func Register(api *http.Group, db *sqlite.DB, emailClient *email.Client, logger *log.Logger) {
+func Register(api *http.Group, db *sqlite.DB, emailClient *email.Client) {
 	g := api.Group("/auth")
 
-	g.HandleFunc("POST /forgot-password", forgotPasswordHandler(db, emailClient, logger))
-	g.HandleFunc("POST /reset-password", resetPasswordHandler(db, logger))
+	g.HandleFunc("POST /forgot-password", forgotPasswordHandler(db, emailClient))
+	g.HandleFunc("POST /reset-password", resetPasswordHandler(db))
 }
 
 // forgotPasswordRequest is the expected JSON body for POST /forgot-password.
@@ -43,7 +43,7 @@ type forgotPasswordRequest struct {
 // forgotPasswordHandler generates a reset token, stores its hash, and
 // sends a reset email. Always returns 200 regardless of whether the
 // email exists — prevents email enumeration.
-func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -156,7 +156,7 @@ type resetPasswordRequest struct {
 
 // resetPasswordHandler validates the reset token and updates the user's
 // password. The token is marked as used after a successful reset.
-func resetPasswordHandler(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 

@@ -23,10 +23,10 @@ import (
 //	GET  /profile          — get authenticated admin's profile
 //	PUT  /profile          — update name
 //	PUT  /profile/password — change password
-func Register(admin *http.Group, db *sqlite.DB, logger *log.Logger) {
+func Register(admin *http.Group, db *sqlite.DB) {
 	admin.HandleFunc("GET /profile", getProfile(db))
-	admin.HandleFunc("PUT /profile", updateProfile(db, logger))
-	admin.HandleFunc("PUT /profile/password", changePassword(db, logger))
+	admin.HandleFunc("PUT /profile", updateProfile(db))
+	admin.HandleFunc("PUT /profile/password", changePassword(db))
 	admin.HandleFunc("GET /profile/sessions", getSessions(db))
 	admin.HandleFunc("DELETE /profile/sessions/{id}", revokeSession(db))
 }
@@ -86,7 +86,7 @@ type updateRequest struct {
 }
 
 // updateProfile updates the authenticated admin's name.
-func updateProfile(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func updateProfile(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -168,7 +168,7 @@ type passwordRequest struct {
 }
 
 // changePassword verifies the current password and updates to a new one.
-func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 

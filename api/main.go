@@ -566,9 +566,9 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 		Window:  time.Minute,
 		Message: "too many requests, please try again later",
 	}))
-	adminauth.Register(authRL, a, db, logger)
-	userauth.Register(authRL, ua.Auth, db, logger, whDispatcher)
-	userreset.Register(authRL, db, emailClient, logger)
+	adminauth.Register(authRL, a, db)
+	userauth.Register(authRL, ua.Auth, db, whDispatcher)
+	userreset.Register(authRL, db, emailClient)
 
 	// Protected admin routes — require valid JWT + admin scope.
 	admin := api.Group("/admin")
@@ -577,7 +577,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 
 	// Dashboard and profile: base admin scope only.
 	dashboard.Register(admin, db, q, s, m, whDispatcher, a, emailClient)
-	adminprofile.Register(admin, db, logger)
+	adminprofile.Register(admin, db)
 
 	// Scoped admin sub-groups — each module gets its specific scope.
 	withUsers := admin.Group("")
@@ -633,7 +633,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	user.Use(ua.RequireAuthOrAPIKey(kv))
 	user.Use(auth.RequireScope("user"))
 
-	userprofile.Register(user, db, logger, whDispatcher)
+	userprofile.Register(user, db, whDispatcher)
 	usernotifications.Register(user, db)
 	useruploads.Register(user, db, dir.Uploads)
 	userapikeys.Register(user, db)

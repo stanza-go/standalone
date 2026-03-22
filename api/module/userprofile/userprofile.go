@@ -25,10 +25,10 @@ import (
 //	PUT    /profile/password     — change password
 //	GET    /profile/sessions     — list own active sessions
 //	DELETE /profile/sessions/{id} — revoke a specific session
-func Register(user *http.Group, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) {
+func Register(user *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	user.HandleFunc("GET /profile", getProfile(db))
-	user.HandleFunc("PUT /profile", updateProfile(db, logger, wh))
-	user.HandleFunc("PUT /profile/password", changePassword(db, logger))
+	user.HandleFunc("PUT /profile", updateProfile(db, wh))
+	user.HandleFunc("PUT /profile/password", changePassword(db))
 	user.HandleFunc("GET /profile/sessions", getSessions(db))
 	user.HandleFunc("DELETE /profile/sessions/{id}", revokeSession(db))
 }
@@ -75,7 +75,7 @@ type updateRequest struct {
 }
 
 // updateProfile updates the authenticated user's name and/or email.
-func updateProfile(db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
+func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -172,7 +172,7 @@ type passwordRequest struct {
 }
 
 // changePassword verifies the current password and updates to a new one.
-func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
+func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
