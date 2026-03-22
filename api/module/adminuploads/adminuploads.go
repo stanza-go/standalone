@@ -5,7 +5,6 @@ package adminuploads
 
 import (
 	"crypto/rand"
-	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"image"
@@ -157,25 +156,22 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=uploads-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "UUID", "Original Name", "Content Type", "Size (bytes)", "Has Thumbnail", "Uploaded By", "Entity Type", "Entity ID", "Created At", "Deleted At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "uploads", []string{"ID", "UUID", "Original Name", "Content Type", "Size (bytes)", "Has Thumbnail", "Uploaded By", "Entity Type", "Entity ID", "Created At", "Deleted At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id, sizeBytes int64
 			var uuid, originalName, ct, uploadedBy, et, entityID, createdAt, deletedAt string
 			var hasThumbnail int
 			if err := rows.Scan(&id, &uuid, &originalName, &ct, &sizeBytes, &hasThumbnail, &uploadedBy, &et, &entityID, &createdAt, &deletedAt); err != nil {
-				break
+				return nil
 			}
 			thumb := "No"
 			if hasThumbnail == 1 {
 				thumb = "Yes"
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), uuid, originalName, ct, strconv.FormatInt(sizeBytes, 10), thumb, uploadedBy, et, entityID, createdAt, deletedAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), uuid, originalName, ct, strconv.FormatInt(sizeBytes, 10), thumb, uploadedBy, et, entityID, createdAt, deletedAt}
+		})
 	}
 }
 

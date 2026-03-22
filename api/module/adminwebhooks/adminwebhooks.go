@@ -4,9 +4,7 @@
 package adminwebhooks
 
 import (
-	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -139,25 +137,22 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=webhooks-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "URL", "Description", "Events", "Active", "Created By", "Created At", "Updated At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "webhooks", []string{"ID", "URL", "Description", "Events", "Active", "Created By", "Created At", "Updated At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id, createdBy int64
 			var url, description, eventsStr, createdAt, updatedAt string
 			var active int
 			if err := rows.Scan(&id, &url, &description, &eventsStr, &active, &createdBy, &createdAt, &updatedAt); err != nil {
-				break
+				return nil
 			}
 			isActive := "No"
 			if active == 1 {
 				isActive = "Yes"
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), url, description, eventsStr, isActive, strconv.FormatInt(createdBy, 10), createdAt, updatedAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), url, description, eventsStr, isActive, strconv.FormatInt(createdBy, 10), createdAt, updatedAt}
+		})
 	}
 }
 

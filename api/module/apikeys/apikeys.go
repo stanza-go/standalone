@@ -4,8 +4,6 @@
 package apikeys
 
 import (
-	"encoding/csv"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -123,20 +121,17 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=api-keys-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "Name", "Key Prefix", "Scopes", "Entity Type", "Entity ID", "Request Count", "Last Used At", "Expires At", "Created At", "Revoked At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "api-keys", []string{"ID", "Name", "Key Prefix", "Scopes", "Entity Type", "Entity ID", "Request Count", "Last Used At", "Expires At", "Created At", "Revoked At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id, requestCount int64
 			var name, keyPrefix, scopes, entityType, entityID, lastUsedAt, expiresAt, createdAt, revokedAt string
 			if err := rows.Scan(&id, &name, &keyPrefix, &scopes, &entityType, &entityID, &requestCount, &lastUsedAt, &expiresAt, &createdAt, &revokedAt); err != nil {
-				break
+				return nil
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), name, keyPrefix, scopes, entityType, entityID, strconv.FormatInt(requestCount, 10), lastUsedAt, expiresAt, createdAt, revokedAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), name, keyPrefix, scopes, entityType, entityID, strconv.FormatInt(requestCount, 10), lastUsedAt, expiresAt, createdAt, revokedAt}
+		})
 	}
 }
 

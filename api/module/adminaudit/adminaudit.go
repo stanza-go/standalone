@@ -4,8 +4,6 @@
 package adminaudit
 
 import (
-	"encoding/csv"
-	"fmt"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -152,20 +150,17 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=audit-log-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "Admin ID", "Admin Email", "Admin Name", "Action", "Entity Type", "Entity ID", "Details", "IP Address", "Created At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "audit-log", []string{"ID", "Admin ID", "Admin Email", "Admin Name", "Action", "Entity Type", "Entity ID", "Details", "IP Address", "Created At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id int64
 			var adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt string
 			if err := rows.Scan(&id, &adminIDVal, &adminEmail, &adminName, &actionVal, &entityType, &entityID, &details, &ipAddress, &createdAt); err != nil {
-				break
+				return nil
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt}
+		})
 	}
 }
 

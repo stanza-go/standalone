@@ -5,9 +5,7 @@
 package adminnotifications
 
 import (
-	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -129,20 +127,17 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=notifications-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "Type", "Title", "Message", "Read At", "Created At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "notifications", []string{"ID", "Type", "Title", "Message", "Read At", "Created At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id int64
 			var typ, title, message, readAt, createdAt string
 			if err := rows.Scan(&id, &typ, &title, &message, &readAt, &createdAt); err != nil {
-				break
+				return nil
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), typ, title, message, readAt, createdAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), typ, title, message, readAt, createdAt}
+		})
 	}
 }
 

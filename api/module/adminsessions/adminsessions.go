@@ -4,8 +4,6 @@
 package adminsessions
 
 import (
-	"encoding/csv"
-	"fmt"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -103,19 +101,16 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=sessions-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "Entity Type", "Entity ID", "Email", "Name", "Created At", "Expires At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "sessions", []string{"ID", "Entity Type", "Entity ID", "Email", "Name", "Created At", "Expires At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id, entityType, entityID, email, name, createdAt, expiresAt string
 			if err := rows.Scan(&id, &entityType, &entityID, &createdAt, &expiresAt, &email, &name); err != nil {
-				break
+				return nil
 			}
-			_ = cw.Write([]string{id, entityType, entityID, email, name, createdAt, expiresAt})
-		}
-		cw.Flush()
+			return []string{id, entityType, entityID, email, name, createdAt, expiresAt}
+		})
 	}
 }
 

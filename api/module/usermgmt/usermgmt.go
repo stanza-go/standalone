@@ -5,8 +5,6 @@
 package usermgmt
 
 import (
-	"encoding/csv"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -120,25 +118,22 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=users-%s.csv", time.Now().UTC().Format("20060102")))
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"ID", "Email", "Name", "Active", "Created At", "Updated At"})
-
-		for rows.Next() {
+		http.WriteCSV(w, "users", []string{"ID", "Email", "Name", "Active", "Created At", "Updated At"}, func() []string {
+			if !rows.Next() {
+				return nil
+			}
 			var id int64
 			var email, name, createdAt, updatedAt string
 			var isActive int
 			if err := rows.Scan(&id, &email, &name, &isActive, &createdAt, &updatedAt); err != nil {
-				break
+				return nil
 			}
 			active := "No"
 			if isActive == 1 {
 				active = "Yes"
 			}
-			_ = cw.Write([]string{strconv.FormatInt(id, 10), email, name, active, createdAt, updatedAt})
-		}
-		cw.Flush()
+			return []string{strconv.FormatInt(id, 10), email, name, active, createdAt, updatedAt}
+		})
 	}
 }
 
