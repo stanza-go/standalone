@@ -86,7 +86,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhoo
 
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already registered")
 				return
 			}

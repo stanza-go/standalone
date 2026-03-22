@@ -163,7 +163,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "role name already exists")
 				return
 			}
@@ -267,7 +267,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 		sql, args = q.Where("id = ?", id).Build()
 		if _, err := db.Exec(sql, args...); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "role name already exists")
 				return
 			}

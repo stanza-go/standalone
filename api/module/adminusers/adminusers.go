@@ -7,7 +7,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -195,7 +194,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already exists")
 				return
 			}

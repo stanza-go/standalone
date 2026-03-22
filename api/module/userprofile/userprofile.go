@@ -118,7 +118,7 @@ func updateProfile(db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) f
 		sql, args := b.Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already in use")
 				return
 			}
