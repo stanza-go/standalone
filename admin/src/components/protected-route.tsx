@@ -14,7 +14,7 @@ function AuthLoadingSkeleton() {
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={{ width: 260, breakpoint: "sm" }}
+      navbar={{ width: 260, breakpoint: "md" }}
       padding="md"
     >
       <AppShell.Header>

@@ -146,7 +146,7 @@ export default function Shell() {
       header={{ height: 60 }}
       navbar={{
         width: 260,
-        breakpoint: "sm",
+        breakpoint: "md",
         collapsed: { mobile: !opened },
       }}
       padding="md"
@@ -154,7 +154,7 @@ export default function Shell() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group>
-            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+            <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
             <Text fw={700} size="lg">
               Stanza Admin
             </Text>
