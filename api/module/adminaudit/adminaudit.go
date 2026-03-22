@@ -129,6 +129,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			entries = append(entries, e)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate audit entries")
+			return
+		}
 
 		http.PaginatedResponse(w, "entries", entries, total)
 	}
@@ -206,6 +210,10 @@ func recentHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				return
 			}
 			entries = append(entries, e)
+		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate recent entries")
+			return
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{

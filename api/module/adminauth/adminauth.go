@@ -248,6 +248,9 @@ func scopesForRole(db *sqlite.DB, role string) []string {
 		}
 		scopes = append(scopes, scope)
 	}
+	if err := rows.Err(); err != nil {
+		return []string{"admin"}
+	}
 	if len(scopes) == 0 {
 		return []string{"admin"}
 	}

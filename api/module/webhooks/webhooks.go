@@ -93,6 +93,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 			targets = append(targets, target{id: id, url: url, secret: secret})
 		}
 	}
+	_ = rows.Err()
 	rows.Close()
 
 	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")

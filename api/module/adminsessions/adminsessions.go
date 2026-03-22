@@ -69,6 +69,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			sessions = append(sessions, s)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			return
+		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"sessions": sessions,

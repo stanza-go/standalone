@@ -241,6 +241,7 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 			}
 			userCounts[day] = cnt
 		}
+		_ = rows.Err()
 		rows.Close()
 	}
 	for _, d := range dates {
@@ -265,6 +266,7 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 			}
 			activityCounts[day] = cnt
 		}
+		_ = rows.Err()
 		rows.Close()
 	}
 	for _, d := range dates {
@@ -297,6 +299,7 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 			}
 			jobCounts[day] = &jobDay{completed: completed, failed: failed}
 		}
+		_ = rows.Err()
 		rows.Close()
 	}
 	for _, d := range dates {

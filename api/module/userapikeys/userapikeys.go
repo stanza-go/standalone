@@ -91,6 +91,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			keys = append(keys, k)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate api keys")
+			return
+		}
 
 		http.PaginatedResponse(w, "api_keys", keys, total)
 	}

@@ -53,6 +53,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			settings = append(settings, s)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate settings")
+			return
+		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"settings": settings,

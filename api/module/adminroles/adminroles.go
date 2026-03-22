@@ -90,6 +90,11 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			role.IsSystem = isSystem == 1
 			roles = append(roles, role)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate roles")
+			return
+		}
 		rows.Close() // Close before issuing more queries (SQLite single-mutex).
 
 		if roles == nil {
@@ -412,6 +417,9 @@ func loadScopes(db *sqlite.DB, roleID int64) []string {
 		}
 		scopes = append(scopes, s)
 	}
+	if err := rows.Err(); err != nil {
+		return []string{}
+	}
 	if scopes == nil {
 		return []string{}
 	}
@@ -482,5 +490,6 @@ func RoleNames(db *sqlite.DB) []string {
 		}
 		names = append(names, name)
 	}
+	_ = rows.Err()
 	return names
 }

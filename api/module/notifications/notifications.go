@@ -133,6 +133,10 @@ func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...O
 		}
 		ids = append(ids, id)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 
 	for _, id := range ids {
@@ -317,6 +321,10 @@ func NotifyAllAdmins(db *sqlite.DB, notifType, title, message string) error {
 			return err
 		}
 		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
 	}
 	rows.Close()
 

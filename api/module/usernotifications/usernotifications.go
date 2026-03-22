@@ -70,6 +70,11 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			n.EntityID = userID
 			items = append(items, n)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate notifications")
+			return
+		}
 		rows.Close()
 
 		if items == nil {

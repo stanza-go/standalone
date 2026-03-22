@@ -110,6 +110,10 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			runs = append(runs, run)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate cron runs")
+			return
+		}
 
 		http.PaginatedResponse(w, "runs", runs, total)
 	}

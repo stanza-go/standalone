@@ -70,6 +70,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 					tableNames = append(tableNames, name)
 				}
 			}
+			_ = rows.Err()
 			rows.Close()
 		}
 
@@ -99,6 +100,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 					migrations = append(migrations, m)
 				}
 			}
+			_ = mrows.Err()
 			mrows.Close()
 		}
 

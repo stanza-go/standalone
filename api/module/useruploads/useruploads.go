@@ -103,6 +103,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			u.HasThumbnail = hasThumbnail == 1
 			uploads = append(uploads, u)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate uploads")
+			return
+		}
 
 		http.PaginatedResponse(w, "uploads", uploads, total)
 	}

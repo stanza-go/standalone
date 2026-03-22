@@ -304,6 +304,10 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			s.Current = tokenHash == currentTokenHash
 			sessions = append(sessions, s)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			return
+		}
 
 		if sessions == nil {
 			sessions = []ActiveSession{}

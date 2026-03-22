@@ -113,6 +113,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			items = append(items, wh)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate webhooks")
+			return
+		}
 
 		http.PaginatedResponse(w, "webhooks", items, total)
 	}
@@ -465,6 +469,10 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				return
 			}
 			items = append(items, d)
+		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate deliveries")
+			return
 		}
 
 		http.PaginatedResponse(w, "deliveries", items, total)

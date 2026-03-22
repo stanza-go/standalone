@@ -95,6 +95,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			a.IsActive = isActive == 1
 			admins = append(admins, a)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate admins")
+			return
+		}
 
 		http.PaginatedResponse(w, "admins", admins, total)
 	}
@@ -484,6 +488,10 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			entries = append(entries, e)
 		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate activity")
+			return
+		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"entries": entries,
@@ -531,6 +539,10 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				return
 			}
 			sessions = append(sessions, s)
+		}
+		if err := rows.Err(); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			return
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
