@@ -465,7 +465,7 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	// CORS: allow cross-origin requests from admin and UI dev servers.
 	// Configure via STANZA_CORS_ORIGINS (comma-separated) or cors.origins
 	// in config.yaml. Defaults to the admin and UI Vite dev servers.
-	originsStr := cfg.GetStringOr("cors.origins", "http://localhost:23705,http://localhost:23700")
+	originsStr := cfg.GetStringOr("cors.origins", "http://localhost:23706,http://localhost:23700")
 	if originsStr != "" {
 		var origins []string
 		for _, o := range strings.Split(originsStr, ",") {
