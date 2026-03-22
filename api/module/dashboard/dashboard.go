@@ -49,7 +49,7 @@ func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Schedule
 		cache.WithTTL[*chartsData](5 * time.Minute),
 		cache.WithMaxSize[*chartsData](3),
 	)
-	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, statsCache))
+	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, statsCache, chartsCache))
 	admin.HandleFunc("GET /dashboard/charts", chartsHandler(db, chartsCache))
 }
 
@@ -84,7 +84,7 @@ func queryDBStats(db *sqlite.DB) (*dbStats, error) {
 	return st, nil
 }
 
-func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *cache.Cache[*dbStats]) func(http.ResponseWriter, *http.Request) {
+func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *cache.Cache[*dbStats], chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
@@ -135,6 +135,10 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 			cronNextRun = earliest.UTC().Format(time.RFC3339)
 		}
 
+		// Cache stats — aggregate across all caches.
+		sc := statsCache.Stats()
+		cc := chartsCache.Stats()
+
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"system": map[string]any{
 				"uptime_seconds":  int(time.Since(startTime).Seconds()),
@@ -156,6 +160,12 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 				"enabled":  cronEnabled,
 				"running":  cronRunning,
 				"next_run": cronNextRun,
+			},
+			"cache": map[string]any{
+				"entries":   sc.Size + cc.Size,
+				"hits":      sc.Hits + cc.Hits,
+				"misses":    sc.Misses + cc.Misses,
+				"evictions": sc.Evictions + cc.Evictions,
 			},
 			"stats": map[string]any{
 				"total_admins":    st.TotalAdmins,
