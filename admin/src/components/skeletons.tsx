@@ -21,11 +21,27 @@ export function DashboardSkeleton() {
                 <Skeleton height={12} width={80} mb={8} />
                 <Skeleton height={24} width={60} />
               </div>
-              <Skeleton height={28} width={28} radius="sm" />
+              <Skeleton height={48} width={48} radius="md" />
             </Group>
           </Card>
         ))}
       </SimpleGrid>
+
+      <Group justify="space-between">
+        <Skeleton height={16} width={60} />
+        <Skeleton height={28} width={200} radius="md" />
+      </Group>
+
+      <Grid>
+        {Array.from({ length: 3 }, (_, i) => (
+          <Grid.Col span={{ base: 12, md: 4 }} key={i}>
+            <Card withBorder padding="lg" radius="md">
+              <Skeleton height={14} width={100} mb="sm" />
+              <Skeleton height={180} radius="sm" />
+            </Card>
+          </Grid.Col>
+        ))}
+      </Grid>
 
       <Grid>
         {Array.from({ length: 4 }, (_, i) => (
@@ -44,6 +60,18 @@ export function DashboardSkeleton() {
           </Grid.Col>
         ))}
       </Grid>
+
+      <Card withBorder padding="lg" radius="md">
+        <Skeleton height={16} width={130} mb="md" />
+        <Stack gap="md">
+          {Array.from({ length: 5 }, (_, i) => (
+            <Group gap="xs" key={i}>
+              <Skeleton height={24} circle />
+              <Skeleton height={14} width={200} />
+            </Group>
+          ))}
+        </Stack>
+      </Card>
     </Stack>
   );
 }
