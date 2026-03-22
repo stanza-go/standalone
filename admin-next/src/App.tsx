@@ -21,21 +21,10 @@ const WebhooksPage = lazy(() => import("@/pages/webhooks"));
 const WebhookDetailPage = lazy(() => import("@/pages/webhook-detail"));
 const DatabasePage = lazy(() => import("@/pages/database"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
+const CronPage = lazy(() => import("@/pages/cron"));
+const QueuePage = lazy(() => import("@/pages/queue"));
+const LogsPage = lazy(() => import("@/pages/logs"));
 const ProfilePage = lazy(() => import("@/pages/profile"));
-
-// Placeholder for pages not yet ported — shows page name
-function Placeholder({ name }: { name: string }) {
-  return (
-    <Center pt="xl">
-      <div style={{ textAlign: "center" }}>
-        <h2>{name}</h2>
-        <p style={{ color: "var(--mantine-color-dimmed)" }}>
-          This page will be ported from the shadcn/ui admin panel.
-        </p>
-      </div>
-    </Center>
-  );
-}
 
 const L = <Center pt="xl"><Loader /></Center>;
 
@@ -60,9 +49,9 @@ export default function App() {
             <Route path="admins" element={<Suspense fallback={L}><AdminsPage /></Suspense>} />
             <Route path="admins/:id" element={<Suspense fallback={L}><AdminDetailPage /></Suspense>} />
             <Route path="sessions" element={<Suspense fallback={L}><SessionsPage /></Suspense>} />
-            <Route path="cron" element={<Placeholder name="Cron Jobs" />} />
-            <Route path="queue" element={<Placeholder name="Job Queue" />} />
-            <Route path="logs" element={<Placeholder name="Logs" />} />
+            <Route path="cron" element={<Suspense fallback={L}><CronPage /></Suspense>} />
+            <Route path="queue" element={<Suspense fallback={L}><QueuePage /></Suspense>} />
+            <Route path="logs" element={<Suspense fallback={L}><LogsPage /></Suspense>} />
             <Route path="database" element={<Suspense fallback={L}><DatabasePage /></Suspense>} />
             <Route path="api-keys" element={<Suspense fallback={L}><ApiKeysPage /></Suspense>} />
             <Route path="audit" element={<Suspense fallback={L}><AuditPage /></Suspense>} />
