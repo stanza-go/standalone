@@ -20,6 +20,7 @@ api/ui/
 api/admin/
 ui/dist/
 admin/dist/
+admin-next/dist/
 
 # Data directory
 .stanza/
