@@ -21,8 +21,8 @@ COPY standalone/ui/package.json standalone/ui/bun.lock standalone/ui/
 RUN cd standalone/ui && bun install --frozen-lockfile
 
 # Install admin dependencies
-COPY standalone/admin-next/package.json standalone/admin-next/bun.lock standalone/admin-next/
-RUN cd standalone/admin-next && bun install --frozen-lockfile
+COPY standalone/admin/package.json standalone/admin/bun.lock standalone/admin/
+RUN cd standalone/admin && bun install --frozen-lockfile
 
 # Build UI
 COPY standalone/ui/ standalone/ui/
@@ -30,8 +30,8 @@ RUN cd standalone/ui && bun run build
 
 # Build admin (ARG busts Docker cache when source changes)
 ARG CACHE_BUST_ADMIN=1
-COPY standalone/admin-next/ standalone/admin-next/
-RUN cd standalone/admin-next && bun run build
+COPY standalone/admin/ standalone/admin/
+RUN cd standalone/admin && bun run build
 
 # ---------------------------------------------------------------------------
 # Stage 2: Build Go binary with embedded frontend assets (Alpine for musl)
@@ -54,7 +54,7 @@ COPY standalone/api/ standalone/api/
 
 # Copy built frontend assets into embed directories
 COPY --from=frontend /build/standalone/ui/dist standalone/api/ui/dist
-COPY --from=frontend /build/standalone/admin-next/dist standalone/api/admin/dist
+COPY --from=frontend /build/standalone/admin/dist standalone/api/admin/dist
 
 # Build binary with CGO for SQLite
 RUN cd standalone/api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /standalone .

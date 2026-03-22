@@ -1,15 +1,16 @@
 import { Navigate } from "react-router";
+import { Center, Loader } from "@mantine/core";
 import { useAuth } from "@/lib/auth";
-import { Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { admin, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <Center h="100vh">
+        <Loader size="lg" />
+      </Center>
     );
   }
 
@@ -17,5 +18,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 }

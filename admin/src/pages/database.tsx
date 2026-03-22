@@ -1,19 +1,28 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, post } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
-  Database,
-  Download,
-  FileArchive,
-  HardDrive,
-  Layers,
-  Loader2,
-  RefreshCw,
-} from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
-import { ErrorAlert } from "@/components/ui/error-alert";
+  Alert,
+  Button,
+  Card,
+  Group,
+  Loader,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArchive,
+  IconCheck,
+  IconDatabase,
+  IconDownload,
+  IconLayersSubtract,
+  IconRefresh,
+  IconServer,
+} from "@tabler/icons-react";
+import { get, post } from "@/lib/api";
 
 interface DatabaseInfo {
   files: {
@@ -54,7 +63,6 @@ export default function DatabasePage() {
   const [info, setInfo] = useState<DatabaseInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState(false);
-  const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   async function load() {
@@ -73,16 +81,20 @@ export default function DatabasePage() {
 
   async function triggerBackup() {
     setBackingUp(true);
-    setBackupMsg(null);
     try {
       const result = await post<BackupResult>("/admin/database/backup");
-      setBackupMsg(`Backup created: ${result.name} (${formatBytes(result.size_bytes)})`);
-      toast.success("Backup created successfully");
+      notifications.show({
+        message: `Backup created: ${result.name} (${formatBytes(result.size_bytes)})`,
+        color: "green",
+        icon: <IconCheck size={16} />,
+      });
       load();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Backup failed";
-      setBackupMsg(msg);
-      toast.error(msg);
+      notifications.show({
+        message: err instanceof Error ? err.message : "Backup failed",
+        color: "red",
+        icon: <IconAlertCircle size={16} />,
+      });
     } finally {
       setBackingUp(false);
     }
@@ -108,253 +120,197 @@ export default function DatabasePage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Download failed");
+      notifications.show({
+        message: err instanceof Error ? err.message : "Download failed",
+        color: "red",
+        icon: <IconAlertCircle size={16} />,
+      });
     } finally {
       setDownloading(false);
     }
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <Stack p="md" gap="md">
+      <Group justify="space-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Database</h1>
-          <p className="text-sm text-muted-foreground">
-            SQLite statistics, migrations, and backups
-          </p>
+          <Title order={3}>Database</Title>
+          <Text size="sm" c="dimmed">SQLite statistics, migrations, and backups</Text>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+        <Group>
+          <Button variant="default" size="sm" leftSection={<IconRefresh size={16} />} onClick={load}>
             Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={downloadDB} disabled={downloading}>
-            {downloading ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="mr-2 h-3.5 w-3.5" />
-            )}
+          <Button variant="default" size="sm" leftSection={<IconDownload size={16} />} onClick={downloadDB} loading={downloading}>
             Download
           </Button>
-          <Button size="sm" onClick={triggerBackup} disabled={backingUp}>
-            {backingUp ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FileArchive className="mr-2 h-3.5 w-3.5" />
-            )}
+          <Button size="sm" leftSection={<IconArchive size={16} />} onClick={triggerBackup} loading={backingUp}>
             Backup Now
           </Button>
-        </div>
-      </div>
+        </Group>
+      </Group>
 
       {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
 
-      {backupMsg && (
-        <div className="mb-6 rounded-md border border-border bg-muted/50 p-3 text-sm">
-          {backupMsg}
-        </div>
-      )}
-
-      {!info && !error && <Spinner />}
+      {!info && !error && <Stack align="center" pt="xl"><Loader /></Stack>}
 
       {info && (
-        <div className="space-y-6">
-          {/* Stats Cards */}
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              Storage
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                title="Database Size"
-                value={formatBytes(info.files.db_size_bytes)}
-                icon={<HardDrive className="h-4 w-4" />}
-              />
-              <StatCard
-                title="WAL Size"
-                value={formatBytes(info.files.wal_size_bytes)}
-                icon={<Database className="h-4 w-4" />}
-              />
-              <StatCard
-                title="Journal Mode"
-                value={info.pragmas.journal_mode.toUpperCase()}
-                icon={<Layers className="h-4 w-4" />}
-              />
+        <>
+          {/* Storage Stats */}
+          <div>
+            <Text size="sm" fw={500} c="dimmed" tt="uppercase" mb="sm">Storage</Text>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+              <StatCard title="Database Size" value={formatBytes(info.files.db_size_bytes)} icon={<IconServer size={18} />} />
+              <StatCard title="WAL Size" value={formatBytes(info.files.wal_size_bytes)} icon={<IconDatabase size={18} />} />
+              <StatCard title="Journal Mode" value={info.pragmas.journal_mode.toUpperCase()} icon={<IconLayersSubtract size={18} />} />
               <StatCard
                 title="Page Count"
                 value={String(info.pragmas.page_count)}
-                description={`${formatBytes(info.pragmas.page_size)} per page · ${info.pragmas.freelist_count} free`}
-                icon={<Database className="h-4 w-4" />}
+                description={`${formatBytes(info.pragmas.page_size)} per page \u00b7 ${info.pragmas.freelist_count} free`}
+                icon={<IconDatabase size={18} />}
               />
-            </div>
-          </section>
+            </SimpleGrid>
+          </div>
 
           {/* Tables */}
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <div>
+            <Text size="sm" fw={500} c="dimmed" tt="uppercase" mb="sm">
               Tables ({info.tables.length})
-            </h2>
-            <div className="rounded-md border border-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="px-4 py-2 text-left font-medium">Name</th>
-                    <th className="px-4 py-2 text-right font-medium">Rows</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {info.tables.map((t) => (
-                    <tr
-                      key={t.name}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-4 py-2 font-mono text-xs">{t.name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {t.row_count.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                  {info.tables.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={2}
-                        className="px-4 py-4 text-center text-muted-foreground"
-                      >
-                        No tables
-                      </td>
-                    </tr>
+            </Text>
+            <Table.ScrollContainer minWidth={300}>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Name</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Rows</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {info.tables.length === 0 ? (
+                    <Table.Tr>
+                      <Table.Td colSpan={2}>
+                        <Text ta="center" c="dimmed" py="md">No tables</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : (
+                    info.tables.map((t) => (
+                      <Table.Tr key={t.name}>
+                        <Table.Td><Text size="xs" ff="monospace">{t.name}</Text></Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text size="sm">{t.row_count.toLocaleString()}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
                   )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </div>
 
           {/* Migrations */}
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <div>
+            <Text size="sm" fw={500} c="dimmed" tt="uppercase" mb="sm">
               Migrations ({info.migrations.length})
-            </h2>
-            <div className="rounded-md border border-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="px-4 py-2 text-left font-medium">Version</th>
-                    <th className="px-4 py-2 text-left font-medium">Name</th>
-                    <th className="px-4 py-2 text-right font-medium">Applied</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {info.migrations.map((m) => (
-                    <tr
-                      key={m.version}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-4 py-2 font-mono text-xs">
-                        {m.version}
-                      </td>
-                      <td className="px-4 py-2">{m.name}</td>
-                      <td className="px-4 py-2 text-right text-muted-foreground text-xs">
-                        {formatDate(m.applied_at)}
-                      </td>
-                    </tr>
-                  ))}
-                  {info.migrations.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={3}
-                        className="px-4 py-4 text-center text-muted-foreground"
-                      >
-                        No migrations applied
-                      </td>
-                    </tr>
+            </Text>
+            <Table.ScrollContainer minWidth={400}>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Version</Table.Th>
+                    <Table.Th>Name</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Applied</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {info.migrations.length === 0 ? (
+                    <Table.Tr>
+                      <Table.Td colSpan={3}>
+                        <Text ta="center" c="dimmed" py="md">No migrations applied</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : (
+                    info.migrations.map((m) => (
+                      <Table.Tr key={m.version}>
+                        <Table.Td><Text size="xs" ff="monospace">{m.version}</Text></Table.Td>
+                        <Table.Td><Text size="sm">{m.name}</Text></Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text size="xs" c="dimmed">{formatDate(m.applied_at)}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
                   )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </div>
 
           {/* Backups */}
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <div>
+            <Text size="sm" fw={500} c="dimmed" tt="uppercase" mb="sm">
               Backups ({info.backups.length})
-            </h2>
-            <div className="rounded-md border border-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="px-4 py-2 text-left font-medium">
-                      <FileArchive className="mr-1.5 inline h-3.5 w-3.5" />
-                      File
-                    </th>
-                    <th className="px-4 py-2 text-right font-medium">Size</th>
-                    <th className="px-4 py-2 text-right font-medium">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {info.backups.map((b) => (
-                    <tr
-                      key={b.name}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-4 py-2 font-mono text-xs">{b.name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {formatBytes(b.size_bytes)}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground text-xs">
-                        {formatDate(b.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                  {info.backups.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={3}
-                        className="px-4 py-4 text-center text-muted-foreground"
-                      >
-                        No backups yet
-                      </td>
-                    </tr>
+            </Text>
+            <Table.ScrollContainer minWidth={400}>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>File</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Size</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Created</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {info.backups.length === 0 ? (
+                    <Table.Tr>
+                      <Table.Td colSpan={3}>
+                        <Text ta="center" c="dimmed" py="md">No backups yet</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : (
+                    info.backups.map((b) => (
+                      <Table.Tr key={b.name}>
+                        <Table.Td><Text size="xs" ff="monospace">{b.name}</Text></Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text size="sm">{formatBytes(b.size_bytes)}</Text>
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text size="xs" c="dimmed">{formatDate(b.created_at)}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
                   )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </div>
 
           {/* DB Path */}
-          <div className="text-xs text-muted-foreground">
-            Path: <span className="font-mono">{info.files.path}</span>
-          </div>
-        </div>
+          <Text size="xs" c="dimmed">
+            Path: <Text span ff="monospace">{info.files.path}</Text>
+          </Text>
+        </>
       )}
-    </div>
+    </Stack>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  description,
-  icon,
-}: {
+function StatCard({ title, value, description, icon }: {
   title: string;
   value: string;
   description?: string;
   icon: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <span className="text-muted-foreground">{icon}</span>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
-      </CardContent>
+    <Card withBorder padding="md">
+      <Group justify="space-between" mb="xs">
+        <Text size="sm" fw={500}>{title}</Text>
+        <Text c="dimmed">{icon}</Text>
+      </Group>
+      <Text size="xl" fw={700}>{value}</Text>
+      {description && <Text size="xs" c="dimmed" mt={4}>{description}</Text>}
     </Card>
   );
 }

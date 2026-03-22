@@ -1,25 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, del, post, downloadCSV } from "@/lib/api";
-import { useSelection } from "@/lib/use-selection";
-import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-import { Download, Trash2 } from "lucide-react";
-
-const SESSION_COLUMNS = [
-  { key: "token_id", label: "Token ID" },
-  { key: "type", label: "Type" },
-  { key: "admin", label: "Admin" },
-  { key: "created_at", label: "Created" },
-  { key: "expires_at", label: "Expires" },
-];
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Group,
+  Loader,
+  Modal,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconCheck,
+  IconDownload,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
+import { del, downloadCSV, get, post } from "@/lib/api";
+import { useSort } from "@/hooks/use-sort";
 
 interface Session {
   id: string;
@@ -31,276 +39,263 @@ interface Session {
   expires_at: string;
 }
 
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-
-  // Sort.
   const [sort, toggleSort] = useSort("created_at", "desc");
-
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("sessions", SESSION_COLUMNS);
-
-  // Selection.
-  const selection = useSelection<string>();
-  const [bulkRevoking, setBulkRevoking] = useState(false);
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
-
-  // Revoke confirmation.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelected((prev) => {
+      const ids = sessions.map((s) => s.id);
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id));
+      return allSelected ? new Set() : new Set(ids);
+    });
+  }, [sessions]);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const data = await get<{ sessions: Session[] }>(`/admin/sessions?sort=${sort.column}&order=${sort.direction}`);
-      setSessions(data.sessions);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load sessions");
+      const params = new URLSearchParams({
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      const data = await get<{ sessions: Session[] }>(`/admin/sessions?${params}`);
+      setSessions(data.sessions ?? []);
+    } catch {
+      setError("Failed to load sessions");
     } finally {
       setLoading(false);
     }
-  }, [sort.column, sort.direction]);
+  }, [sort]);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
   }, [load]);
 
-  // Clear selection when sort changes.
   useEffect(() => {
-    selection.clear();
-  }, [sort.column, sort.direction]);
-
-  async function handleExport() {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-      await downloadCSV(`/admin/sessions/export?${params}`);
-    } catch {
-      toast.error("Failed to export sessions");
-    } finally {
-      setExporting(false);
-    }
-  }
+    setSelected(new Set());
+  }, [sort]);
 
   async function handleRevoke() {
     if (!revokeTarget) return;
-    const id = revokeTarget.id;
-    setActing(id);
+    setActionLoading(true);
     try {
-      await del(`/admin/sessions/${id}`);
+      await del(`/admin/sessions/${revokeTarget.id}`);
+      notifications.show({ message: "Session revoked", color: "green", icon: <IconCheck size={16} /> });
       setRevokeTarget(null);
-      toast.success("Session revoked");
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to revoke session");
+      load();
+    } catch {
+      notifications.show({ message: "Failed to revoke session", color: "red" });
     } finally {
-      setActing(null);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkRevoke() {
-    setBulkRevoking(true);
+    setActionLoading(true);
     try {
-      const data = await post<{ affected: number }>("/admin/sessions/bulk-revoke", { ids: selection.ids });
-      setBulkConfirmOpen(false);
-      selection.clear();
-      toast.success(`${data.affected} session${data.affected !== 1 ? "s" : ""} revoked`);
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to bulk revoke sessions");
+      const data = await post<{ affected: number }>("/admin/sessions/bulk-revoke", { ids: Array.from(selected) });
+      notifications.show({ message: `${data.affected} session(s) revoked`, color: "green", icon: <IconCheck size={16} /> });
+      setBulkRevokeOpen(false);
+      setSelected(new Set());
+      load();
+    } catch {
+      notifications.show({ message: "Failed to revoke sessions", color: "red" });
     } finally {
-      setBulkRevoking(false);
+      setActionLoading(false);
     }
   }
 
-  function formatTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
-  }
-
-  function relativeTime(iso: string): string {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const now = new Date();
-    const diff = d.getTime() - now.getTime();
-    const absDiff = Math.abs(diff);
-    const minutes = Math.floor(absDiff / 60000);
-    const hours = Math.floor(minutes / 60);
-
-    if (diff > 0) {
-      if (hours > 0) return `in ${hours}h ${minutes % 60}m`;
-      return `in ${minutes}m`;
+  async function handleExport() {
+    try {
+      const params = new URLSearchParams({ sort: sort.column, order: sort.direction.toUpperCase() });
+      await downloadCSV(`/admin/sessions/export?${params}`);
+    } catch {
+      notifications.show({ message: "Failed to export", color: "red" });
     }
-    if (hours > 0) return `${hours}h ${minutes % 60}m ago`;
-    return `${minutes}m ago`;
   }
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Active Sessions</h1>
-        <TableSkeleton columns={[
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-16" },
-          { width: "w-24" },
-          { width: "w-24", hidden: "hidden md:table-cell" },
-          { width: "w-20" },
-          { width: "w-16" },
-        ]} />
-      </div>
-    );
-  }
+  const sessionIds = sessions.map((s) => s.id);
+  const allSelected = sessionIds.length > 0 && sessionIds.every((id) => selected.has(id));
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Active Sessions</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {sessions.length} active session{sessions.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
-          </Button>
-        </div>
-      </div>
+    <Stack>
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Active Sessions</Title>
+          {!loading && <Badge variant="light" size="lg">{sessions.length}</Badge>}
+        </Group>
+        <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>
+          Export CSV
+        </Button>
+      </Group>
 
       {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
       )}
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected(sessions.map((s) => s.id))}
-                  onChange={() => selection.toggleAll(sessions.map((s) => s.id))}
-                  className="rounded border-input"
-                />
-              </th>
-              {isVisible("token_id") && <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>}
-              {isVisible("type") && <SortableHeader label="Type" column="entity_type" sort={sort} onSort={toggleSort} />}
-              {isVisible("admin") && <th className="text-left p-3 font-medium">Admin</th>}
-              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              {isVisible("expires_at") && <SortableHeader label="Expires" column="expires_at" sort={sort} onSort={toggleSort} />}
-              <th className="text-right p-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.length === 0 ? (
-              <TableEmptyRow colSpan={visibleCount + 2} message="No active sessions" />
-            ) : (
-              sessions.map((session) => (
-                <tr
-                  key={session.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 ${selection.isSelected(session.id) ? "bg-muted/40" : ""}`}
-                >
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={selection.isSelected(session.id)}
-                      onChange={() => selection.toggle(session.id)}
-                      className="rounded border-input"
-                    />
-                  </td>
-                  {isVisible("token_id") && (
-                    <td className="p-3 font-mono text-xs hidden md:table-cell">
-                      {session.id.substring(0, 12)}...
-                    </td>
-                  )}
-                  {isVisible("type") && (
-                    <td className="p-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
+      {loading ? (
+        <Group justify="center" pt="xl"><Loader /></Group>
+      ) : (
+        <Table.ScrollContainer minWidth={600}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={40}>
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={selected.size > 0 && !allSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </Table.Th>
+                <Table.Th>Token ID</Table.Th>
+                <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("entity_type")}>
+                  <Group gap={4} wrap="nowrap">Type <SortIcon column="entity_type" sort={sort} /></Group>
+                </Table.Th>
+                <Table.Th>Account</Table.Th>
+                <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                  <Group gap={4} wrap="nowrap">Created <SortIcon column="created_at" sort={sort} /></Group>
+                </Table.Th>
+                <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("expires_at")}>
+                  <Group gap={4} wrap="nowrap">Expires <SortIcon column="expires_at" sort={sort} /></Group>
+                </Table.Th>
+                <Table.Th ta="right">Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {sessions.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={7}>
+                    <Text ta="center" c="dimmed" py="lg">No active sessions</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                sessions.map((session) => (
+                  <Table.Tr
+                    key={session.id}
+                    bg={selected.has(session.id) ? "var(--mantine-primary-color-light)" : undefined}
+                  >
+                    <Table.Td>
+                      <Checkbox
+                        checked={selected.has(session.id)}
+                        onChange={() => toggleSelect(session.id)}
+                        aria-label={`Select session ${session.id.slice(0, 8)}`}
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label={session.id}>
+                        <Text size="sm" ff="monospace">{session.id.slice(0, 8)}...</Text>
+                      </Tooltip>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge variant="light" color={session.entity_type === "admin" ? "violet" : "blue"} size="sm">
                         {session.entity_type}
-                      </span>
-                    </td>
-                  )}
-                  {isVisible("admin") && (
-                    <td className="p-3">
-                      <div>{session.name || "\u2014"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {session.email}
-                      </div>
-                    </td>
-                  )}
-                  {isVisible("created_at") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      <div>{formatTime(session.created_at)}</div>
-                      <div>{relativeTime(session.created_at)}</div>
-                    </td>
-                  )}
-                  {isVisible("expires_at") && (
-                    <td className="p-3 text-muted-foreground text-xs">
-                      <div>{formatTime(session.expires_at)}</div>
-                      <div>{relativeTime(session.expires_at)}</div>
-                    </td>
-                  )}
-                  <td className="p-3 text-right">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setRevokeTarget(session)}
-                    >
-                      Revoke
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{session.email || session.name || `#${session.entity_id}`}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label={new Date(session.created_at).toLocaleString()}>
+                        <Text size="sm" c="dimmed">{timeAgo(session.created_at)}</Text>
+                      </Tooltip>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">{new Date(session.expires_at).toLocaleString()}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group justify="flex-end">
+                        <Tooltip label="Revoke">
+                          <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setRevokeTarget(session)}>
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
 
-      {/* Revoke Confirmation */}
-      <ConfirmDialog
-        open={!!revokeTarget}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={handleRevoke}
-        title="Revoke Session"
-        message="Are you sure you want to revoke this session? The user will be logged out immediately."
-        confirmLabel="Revoke Session"
-        loading={acting === revokeTarget?.id}
-        details={revokeTarget && (
-          <>
-            <div><span className="font-medium">User:</span> {revokeTarget.name || revokeTarget.email}</div>
-            <div><span className="font-medium">Type:</span> {revokeTarget.entity_type}</div>
-            <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
-          </>
-        )}
-      />
+      {selected.size > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group
+            gap="sm" px="md" py="xs"
+            style={(theme) => ({
+              background: "var(--mantine-color-body)",
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: theme.radius.md,
+              boxShadow: theme.shadows.lg,
+            })}
+          >
+            <Text size="sm" fw={500}>{selected.size} selected</Text>
+            <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => setBulkRevokeOpen(true)}>
+              Revoke
+            </Button>
+            <ActionIcon variant="subtle" size="sm" onClick={() => setSelected(new Set())}><IconX size={14} /></ActionIcon>
+          </Group>
+        </Box>
+      )}
 
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Revoke
-        </Button>
-      </BulkActionBar>
+      {/* Revoke confirmation */}
+      <Modal opened={!!revokeTarget} onClose={() => setRevokeTarget(null)} title="Revoke Session" size="sm">
+        <Stack>
+          <Text size="sm">Revoke session <strong>{revokeTarget?.id.slice(0, 8)}...</strong> for {revokeTarget?.email || revokeTarget?.name}?</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setRevokeTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleRevoke} loading={actionLoading}>Revoke</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-      <ConfirmDialog
-        open={bulkConfirmOpen}
-        onClose={() => setBulkConfirmOpen(false)}
-        onConfirm={handleBulkRevoke}
-        title="Revoke Sessions"
-        message={`Are you sure you want to revoke ${selection.count} session${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
-        confirmLabel="Revoke"
-        loading={bulkRevoking}
-      />
-    </div>
+      {/* Bulk revoke confirmation */}
+      <Modal opened={bulkRevokeOpen} onClose={() => setBulkRevokeOpen(false)} title="Revoke Sessions" size="sm">
+        <Stack>
+          <Text size="sm">Revoke <strong>{selected.size}</strong> session(s)? Users will be logged out.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkRevokeOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkRevoke} loading={actionLoading}>Revoke {selected.size} session(s)</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

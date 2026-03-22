@@ -1,23 +1,36 @@
-import { useEffect, useState, useCallback } from "react";
-import { toast } from "sonner";
-import { get, post } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Clock,
-  Play,
-  Pause,
-  RotateCw,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  History,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { EmptyState } from "@/components/ui/empty-state";
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Collapse,
+  Group,
+  Loader,
+  Pagination,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconClock,
+  IconHistory,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-react";
+import { get, post } from "@/lib/api";
 
 interface CronEntry {
   name: string;
@@ -29,10 +42,6 @@ interface CronEntry {
   last_err: string;
 }
 
-interface CronResponse {
-  entries: CronEntry[];
-}
-
 interface CronRun {
   id: number;
   name: string;
@@ -42,22 +51,9 @@ interface CronRun {
   error: string;
 }
 
-interface RunsResponse {
-  runs: CronRun[];
-  total: number;
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString();
-}
-
 function relativeTime(iso: string): string {
   if (!iso) return "";
-  const now = Date.now();
-  const t = new Date(iso).getTime();
-  const diff = t - now;
+  const diff = new Date(iso).getTime() - Date.now();
   const abs = Math.abs(diff);
   if (abs < 60_000) return diff > 0 ? "in <1m" : "<1m ago";
   const mins = Math.round(abs / 60_000);
@@ -75,29 +71,31 @@ function formatDuration(ms: number): string {
   return `${mins}m ${remSecs}s`;
 }
 
+const RUNS_PAGE_SIZE = 20;
+
 function RunHistory({ name }: { name: string }) {
   const [runs, setRuns] = useState<CronRun[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [limit] = useState(20);
-  const [offset, setOffset] = useState(0);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await get<RunsResponse>(
-        `/admin/cron/${encodeURIComponent(name)}/runs?limit=${limit}&offset=${offset}`
+      const offset = (page - 1) * RUNS_PAGE_SIZE;
+      const data = await get<{ runs: CronRun[]; total: number }>(
+        `/admin/cron/${encodeURIComponent(name)}/runs?limit=${RUNS_PAGE_SIZE}&offset=${offset}`,
       );
       setRuns(data.runs);
       setTotal(data.total);
-      setError(null);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load run history");
     } finally {
       setLoading(false);
     }
-  }, [name, limit, offset]);
+  }, [name, page]);
 
   useEffect(() => {
     load();
@@ -105,114 +103,96 @@ function RunHistory({ name }: { name: string }) {
 
   if (loading) {
     return (
-      <div className="py-4 flex justify-center">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-      </div>
+      <Group justify="center" py="md">
+        <Loader size="sm" />
+      </Group>
     );
   }
 
   if (error) {
     return (
-      <div className="py-2 px-4">
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} />
-      </div>
+      <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" mx="md" my="xs">
+        {error}
+        <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+      </Alert>
     );
   }
 
   if (runs.length === 0) {
     return (
-      <div className="py-4 text-center text-sm text-muted-foreground">
+      <Text ta="center" c="dimmed" size="sm" py="md">
         No execution history yet
-      </div>
+      </Text>
     );
   }
 
-  const hasMore = offset + limit < total;
-  const hasPrev = offset > 0;
+  const totalPages = Math.ceil(total / RUNS_PAGE_SIZE);
 
   return (
-    <div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-border text-left text-muted-foreground">
-            <th className="px-4 py-2 font-medium">Started</th>
-            <th className="px-4 py-2 font-medium">Duration</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-            <th className="px-4 py-2 font-medium hidden md:table-cell">Error</th>
-          </tr>
-        </thead>
-        <tbody>
+    <Stack gap="xs" px="md" pb="sm">
+      <Table fz="xs">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Started</Table.Th>
+            <Table.Th>Duration</Table.Th>
+            <Table.Th>Status</Table.Th>
+            <Table.Th visibleFrom="md">Error</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
           {runs.map((run) => (
-            <tr key={run.id} className="border-b border-border/50 last:border-0">
-              <td className="px-4 py-2 text-muted-foreground">
-                <span title={formatTime(run.started_at)}>
-                  {relativeTime(run.started_at)}
-                </span>
-              </td>
-              <td className="px-4 py-2 font-mono">
-                {formatDuration(run.duration_ms)}
-              </td>
-              <td className="px-4 py-2">
-                {run.status === "success" ? (
-                  <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-500">
-                    <CheckCircle className="h-3 w-3" />
-                    Success
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-destructive">
-                    <XCircle className="h-3 w-3" />
-                    Error
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-2 max-w-[300px] truncate text-destructive hidden md:table-cell">
-                {run.error || "—"}
-              </td>
-            </tr>
+            <Table.Tr key={run.id}>
+              <Table.Td>
+                <Tooltip label={new Date(run.started_at).toLocaleString()}>
+                  <Text size="xs" c="dimmed">{relativeTime(run.started_at)}</Text>
+                </Tooltip>
+              </Table.Td>
+              <Table.Td>
+                <Text size="xs" ff="monospace">{formatDuration(run.duration_ms)}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Badge
+                  variant="light"
+                  color={run.status === "success" ? "green" : "red"}
+                  size="xs"
+                  leftSection={run.status === "success" ? <IconCheck size={10} /> : <IconX size={10} />}
+                >
+                  {run.status === "success" ? "Success" : "Error"}
+                </Badge>
+              </Table.Td>
+              <Table.Td visibleFrom="md">
+                <Text size="xs" c="red" truncate maw={300}>
+                  {run.error || "\u2014"}
+                </Text>
+              </Table.Td>
+            </Table.Tr>
           ))}
-        </tbody>
-      </table>
-      {(hasPrev || hasMore) && (
-        <div className="flex items-center justify-between px-4 py-2 border-t border-border/50">
-          <span className="text-xs text-muted-foreground">
-            {offset + 1}–{Math.min(offset + limit, total)} of {total}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setOffset(Math.max(0, offset - limit))}
-              disabled={!hasPrev}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setOffset(offset + limit)}
-              disabled={!hasMore}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        </Table.Tbody>
+      </Table>
+      {totalPages > 1 && (
+        <Group justify="space-between">
+          <Text size="xs" c="dimmed">
+            {(page - 1) * RUNS_PAGE_SIZE + 1}–{Math.min(page * RUNS_PAGE_SIZE, total)} of {total}
+          </Text>
+          <Pagination value={page} onChange={setPage} total={totalPages} size="xs" />
+        </Group>
       )}
-    </div>
+    </Stack>
   );
 }
 
 export default function CronPage() {
   const [entries, setEntries] = useState<CronEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [acting, setActing] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const data = await get<CronResponse>("/admin/cron");
+      const data = await get<{ entries: CronEntry[] }>("/admin/cron");
       setEntries(data.entries);
-      setError(null);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load cron jobs");
     } finally {
@@ -231,10 +211,10 @@ export default function CronPage() {
     try {
       await post(`/admin/cron/${encodeURIComponent(name)}/${act}`);
       const labels: Record<string, string> = { trigger: "triggered", enable: "enabled", disable: "disabled" };
-      toast.success(`Cron job ${labels[act] || act}`);
+      notifications.show({ message: `Cron job ${labels[act] || act}`, color: "green", icon: <IconCheck size={16} /> });
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to ${act} job`);
+      notifications.show({ message: err instanceof Error ? err.message : `Failed to ${act} job`, color: "red" });
     } finally {
       setActing(null);
     }
@@ -245,170 +225,169 @@ export default function CronPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Cron Jobs</h1>
-          <p className="text-sm text-muted-foreground">
-            Scheduled tasks and their execution history
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Cron Jobs</Title>
+          {!loading && <Badge variant="light" size="lg">{entries.length}</Badge>}
+        </Group>
+        <Button
+          variant="subtle"
+          size="xs"
+          leftSection={<IconRefresh size={16} />}
+          onClick={load}
+          loading={loading}
+        >
           Refresh
         </Button>
-      </div>
+      </Group>
 
+      {/* Error */}
       {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
       )}
 
-      {loading && entries.length === 0 && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div key={i} className="rounded-lg border p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-8 w-20 rounded-md" />
-              </div>
-              <div className="flex gap-4">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-28" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!loading && entries.length === 0 && !error && (
-        <EmptyState message="No cron jobs registered" />
-      )}
-
-      {entries.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Registered Jobs</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-4 py-3 font-medium w-8"></th>
-                    <th className="px-4 py-3 font-medium">Name</th>
-                    <th className="px-4 py-3 font-medium hidden md:table-cell">Schedule</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Last Run</th>
-                    <th className="px-4 py-3 font-medium hidden md:table-cell">Next Run</th>
-                    <th className="px-4 py-3 font-medium hidden lg:table-cell">Last Error</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <>
-                      <tr
-                        key={entry.name}
-                        className={`border-b border-border cursor-pointer hover:bg-muted/50 ${
-                          expanded === entry.name ? "bg-muted/30" : ""
-                        }`}
-                        onClick={() => toggleExpand(entry.name)}
+      {/* Loading */}
+      {loading && entries.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : entries.length === 0 && !error ? (
+        <Text ta="center" c="dimmed" py="xl">No cron jobs registered</Text>
+      ) : (
+        /* Job cards */
+        <Stack gap="sm">
+          {entries.map((entry) => (
+            <Paper key={entry.name} withBorder radius="md" p={0}>
+              {/* Main row */}
+              <Box
+                px="md"
+                py="sm"
+                style={{ cursor: "pointer" }}
+                onClick={() => toggleExpand(entry.name)}
+              >
+                <Group justify="space-between" wrap="nowrap">
+                  <Group gap="sm" wrap="nowrap">
+                    {expanded === entry.name ? (
+                      <IconChevronDown size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
+                    ) : (
+                      <IconChevronRight size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
+                    )}
+                    <div>
+                      <Text size="sm" fw={500} ff="monospace">{entry.name}</Text>
+                      <Text size="xs" c="dimmed" ff="monospace" hiddenFrom="sm" mt={2}>{entry.schedule}</Text>
+                    </div>
+                  </Group>
+                  <Group gap="xs" wrap="nowrap" onClick={(e) => e.stopPropagation()}>
+                    <Tooltip label="Trigger now">
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => action(entry.name, "trigger")}
+                        loading={acting === `${entry.name}:trigger`}
+                        disabled={acting !== null}
                       >
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {expanded === entry.name ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs">{entry.name}</td>
-                        <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{entry.schedule}</td>
-                        <td className="px-4 py-3">
-                          {entry.running ? (
-                            <span className="inline-flex items-center gap-1 text-blue-600">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Running
-                            </span>
-                          ) : entry.enabled ? (
-                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-500">
-                              <CheckCircle className="h-3 w-3" />
-                              Enabled
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground">
-                              <XCircle className="h-3 w-3" />
-                              Disabled
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          <span title={formatTime(entry.last_run)}>
-                            {entry.last_run ? relativeTime(entry.last_run) : "—"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                          <span title={formatTime(entry.next_run)}>
-                            {entry.next_run ? relativeTime(entry.next_run) : "—"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
-                          {entry.last_err || "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => action(entry.name, "trigger")}
-                              disabled={acting !== null}
-                              title="Trigger now"
-                            >
-                              <Play className="h-3 w-3" />
-                            </Button>
-                            {entry.enabled ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => action(entry.name, "disable")}
-                                disabled={acting !== null}
-                                title="Disable"
-                              >
-                                <Pause className="h-3 w-3" />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => action(entry.name, "enable")}
-                                disabled={acting !== null}
-                                title="Enable"
-                              >
-                                <Clock className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                      {expanded === entry.name && (
-                        <tr key={`${entry.name}-history`} className="border-b border-border">
-                          <td colSpan={8} className="bg-muted/20 p-0">
-                            <div className="px-4 py-2 flex items-center gap-2 border-b border-border/50">
-                              <History className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm font-medium">Execution History</span>
-                            </div>
-                            <RunHistory name={entry.name} />
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                        <IconPlayerPlay size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    {entry.enabled ? (
+                      <Tooltip label="Disable">
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => action(entry.name, "disable")}
+                          loading={acting === `${entry.name}:disable`}
+                          disabled={acting !== null}
+                        >
+                          <IconPlayerPause size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip label="Enable">
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => action(entry.name, "enable")}
+                          loading={acting === `${entry.name}:enable`}
+                          disabled={acting !== null}
+                        >
+                          <IconClock size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                  </Group>
+                </Group>
+
+                {/* Details row */}
+                <SimpleGrid cols={{ base: 2, sm: 4 }} mt="xs" spacing="xs">
+                  <div>
+                    <Text size="xs" c="dimmed">Schedule</Text>
+                    <Text size="xs" ff="monospace" visibleFrom="sm">{entry.schedule}</Text>
+                    <Text size="xs" ff="monospace" hiddenFrom="sm">{entry.schedule}</Text>
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">Status</Text>
+                    {entry.running ? (
+                      <Badge variant="light" color="blue" size="xs" leftSection={<Loader size={8} />}>
+                        Running
+                      </Badge>
+                    ) : entry.enabled ? (
+                      <Badge variant="light" color="green" size="xs">Enabled</Badge>
+                    ) : (
+                      <Badge variant="light" color="gray" size="xs">Disabled</Badge>
+                    )}
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">Last Run</Text>
+                    {entry.last_run ? (
+                      <Tooltip label={new Date(entry.last_run).toLocaleString()}>
+                        <Text size="xs">{relativeTime(entry.last_run)}</Text>
+                      </Tooltip>
+                    ) : (
+                      <Text size="xs" c="dimmed">{"\u2014"}</Text>
+                    )}
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">Next Run</Text>
+                    {entry.next_run ? (
+                      <Tooltip label={new Date(entry.next_run).toLocaleString()}>
+                        <Text size="xs">{relativeTime(entry.next_run)}</Text>
+                      </Tooltip>
+                    ) : (
+                      <Text size="xs" c="dimmed">{"\u2014"}</Text>
+                    )}
+                  </div>
+                </SimpleGrid>
+
+                {/* Last error */}
+                {entry.last_err && (
+                  <Text size="xs" c="red" truncate mt="xs">
+                    {entry.last_err}
+                  </Text>
+                )}
+              </Box>
+
+              {/* Expandable execution history */}
+              <Collapse in={expanded === entry.name}>
+                <Box
+                  style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
+                  bg="var(--mantine-color-gray-light)"
+                >
+                  <Group gap="xs" px="md" py="xs">
+                    <IconHistory size={14} style={{ opacity: 0.6 }} />
+                    <Text size="xs" fw={500}>Execution History</Text>
+                  </Group>
+                  <RunHistory name={entry.name} />
+                </Box>
+              </Collapse>
+            </Paper>
+          ))}
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }

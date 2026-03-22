@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, post, put, del, ApiError } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogCloseButton,
-  DialogBody,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { TableEmptyRow } from "@/components/ui/empty-state";
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Group,
+  Loader,
+  Modal,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
+import { del, get, post, put, ApiError } from "@/lib/api";
 
 interface Role {
   id: number;
@@ -39,363 +48,266 @@ const SCOPE_LABELS: Record<string, string> = {
   "admin:uploads": "Uploads",
   "admin:database": "Database",
   "admin:roles": "Role Management",
+  "admin:notifications": "Notifications",
 };
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [knownScopes, setKnownScopes] = useState<string[]>([]);
-  const [error, setError] = useState("");
+  const [allScopes, setAllScopes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Role | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editRole, setEditRole] = useState<Role | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [formError, setFormError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const createForm = useForm({
+    initialValues: { name: "", description: "", scopes: [] as string[] },
+    validate: {
+      name: (v) => (!v ? "Name is required" : v.length < 2 ? "Minimum 2 characters" : null),
+    },
+  });
+
+  const editForm = useForm({
+    initialValues: { name: "", description: "", scopes: [] as string[] },
+  });
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
       const [rolesData, scopesData] = await Promise.all([
         get<{ roles: Role[] }>("/admin/roles/"),
         get<{ scopes: string[] }>("/admin/roles/scopes"),
       ]);
-      setRoles(rolesData.roles);
-      setKnownScopes(scopesData.scopes);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load roles");
+      setRoles(rolesData.roles ?? []);
+      setAllScopes(scopesData.scopes ?? []);
+    } catch {
+      setError("Failed to load roles");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  function openCreate() {
-    setEditing(null);
-    setName("");
-    setDescription("");
-    setSelectedScopes(["admin"]);
-    setFormError("");
-    setDialogOpen(true);
+  async function handleCreate(values: typeof createForm.values) {
+    setActionLoading(true);
+    try {
+      await post("/admin/roles/", values);
+      notifications.show({ message: "Role created", color: "green", icon: <IconCheck size={16} /> });
+      setCreateOpen(false);
+      createForm.reset();
+      load();
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields).length > 0) {
+        createForm.setErrors(e.fields);
+      } else {
+        notifications.show({ message: e instanceof ApiError ? e.message : "Failed to create role", color: "red" });
+      }
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   function openEdit(role: Role) {
-    setEditing(role);
-    setName(role.name);
-    setDescription(role.description);
-    setSelectedScopes([...role.scopes]);
-    setFormError("");
-    setDialogOpen(true);
+    setEditRole(role);
+    editForm.setValues({ name: role.name, description: role.description, scopes: [...role.scopes] });
   }
 
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditing(null);
-  }
-
-  function toggleScope(scope: string) {
-    if (scope === "admin") return; // Base scope always required.
-    setSelectedScopes((prev) =>
-      prev.includes(scope)
-        ? prev.filter((s) => s !== scope)
-        : [...prev, scope]
-    );
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError("");
-    setSubmitting(true);
-
+  async function handleEdit(values: typeof editForm.values) {
+    if (!editRole) return;
+    setActionLoading(true);
     try {
-      if (editing) {
-        const body: Record<string, unknown> = {
-          description,
-          scopes: selectedScopes,
-        };
-        if (!editing.is_system) body.name = name;
-        await put(`/admin/roles/${editing.id}`, body);
-        toast.success("Role updated");
+      await put(`/admin/roles/${editRole.id}`, values);
+      notifications.show({ message: "Role updated", color: "green", icon: <IconCheck size={16} /> });
+      setEditRole(null);
+      load();
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields).length > 0) {
+        editForm.setErrors(e.fields);
       } else {
-        await post("/admin/roles/", { name, description, scopes: selectedScopes });
-        toast.success("Role created");
-      }
-      closeDialog();
-      await load();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setFormError(err.message);
-      } else {
-        setFormError("Operation failed");
+        notifications.show({ message: e instanceof ApiError ? e.message : "Failed to update role", color: "red" });
       }
     } finally {
-      setSubmitting(false);
+      setActionLoading(false);
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    setActing(id);
+    setActionLoading(true);
     try {
-      await del(`/admin/roles/${id}`);
+      await del(`/admin/roles/${deleteTarget.id}`);
+      notifications.show({ message: "Role deleted", color: "green", icon: <IconCheck size={16} /> });
       setDeleteTarget(null);
-      toast.success("Role deleted");
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to delete role");
+      load();
+    } catch (e) {
+      notifications.show({ message: e instanceof ApiError ? e.message : "Failed to delete role", color: "red" });
     } finally {
-      setActing(null);
+      setActionLoading(false);
     }
   }
 
-  if (loading) {
+  function ScopeCheckboxes({ form, field }: { form: ReturnType<typeof useForm<{ name: string; description: string; scopes: string[] }>>; field: string }) {
+    const values = form.getValues().scopes;
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Roles & Permissions</h1>
-        <TableSkeleton columns={[
-          { width: "w-24" },
-          { width: "w-32", hidden: "hidden md:table-cell" },
-          { width: "w-40" },
-          { width: "w-14", hidden: "hidden md:table-cell" },
-          { width: "w-20" },
-        ]} rows={3} />
-      </div>
+      <Stack gap="xs">
+        <Text size="sm" fw={500}>Scopes</Text>
+        {allScopes.map((scope) => (
+          <Checkbox
+            key={scope}
+            label={SCOPE_LABELS[scope] ?? scope}
+            checked={values.includes(scope)}
+            disabled={scope === "admin"}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              const current = form.getValues().scopes;
+              form.setFieldValue(
+                field as "scopes",
+                checked ? [...current, scope] : current.filter((s) => s !== scope),
+              );
+            }}
+          />
+        ))}
+      </Stack>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Roles & Permissions</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage admin roles and their associated scopes
-          </p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
+    <Stack>
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Roles</Title>
+          {!loading && <Badge variant="light" size="lg">{roles.length}</Badge>}
+        </Group>
+        <Button leftSection={<IconPlus size={16} />} onClick={() => { createForm.reset(); createForm.setFieldValue("scopes", ["admin"]); setCreateOpen(true); }}>
           Create Role
         </Button>
-      </div>
+      </Group>
 
       {error && (
-        <ErrorAlert
-          message={error}
-          onRetry={load}
-          onDismiss={() => setError("")}
-          className="mb-4"
-        />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
       )}
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">Role</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">
-                Description
-              </th>
-              <th className="text-left p-3 font-medium">Scopes</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">
-                Admins
-              </th>
-              <th className="text-right p-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.length === 0 ? (
-              <TableEmptyRow colSpan={5} message="No roles found" />
-            ) : (
-              roles.map((role) => (
-                <tr
-                  key={role.id}
-                  className="border-b last:border-0 hover:bg-muted/30"
-                >
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{role.name}</span>
-                      {role.is_system && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                          system
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-3 text-muted-foreground hidden md:table-cell">
-                    {role.description || "\u2014"}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-1">
-                      {role.scopes.map((scope) => (
-                        <ScopeBadge key={scope} scope={scope} />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="p-3 hidden md:table-cell">
-                    <span className="text-muted-foreground">
-                      {role.admin_count}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right">
-                    <span className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(role)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      {!role.is_system && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteTarget(role)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      )}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onClose={closeDialog}>
-        <DialogHeader>
-          <DialogTitle>
-            {editing ? "Edit Role" : "Create Role"}
-          </DialogTitle>
-          <DialogCloseButton onClick={closeDialog} />
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-4">
-            {formError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
-                {formError}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={editing?.is_system}
-                placeholder="e.g. editor, moderator"
-              />
-              {editing?.is_system && (
-                <p className="text-xs text-muted-foreground">
-                  System role names cannot be changed
-                </p>
+      {loading ? (
+        <Group justify="center" pt="xl"><Loader /></Group>
+      ) : (
+        <Table.ScrollContainer minWidth={600}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Description</Table.Th>
+                <Table.Th>Scopes</Table.Th>
+                <Table.Th>Admins</Table.Th>
+                <Table.Th ta="right">Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {roles.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={5}>
+                    <Text ta="center" c="dimmed" py="lg">No roles yet</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                roles.map((role) => (
+                  <Table.Tr key={role.id}>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <Text size="sm" fw={500}>{role.name}</Text>
+                        {role.is_system && <Badge variant="light" color="gray" size="xs">system</Badge>}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">{role.description || "—"}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={4}>
+                        {role.scopes.map((scope) => (
+                          <Tooltip key={scope} label={scope}>
+                            <Badge variant="light" size="xs">{SCOPE_LABELS[scope] ?? scope}</Badge>
+                          </Tooltip>
+                        ))}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{role.admin_count}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={4} justify="flex-end" wrap="nowrap">
+                        <Tooltip label="Edit">
+                          <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(role)}>
+                            <IconPencil size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                        {!role.is_system && (
+                          <Tooltip label="Delete">
+                            <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setDeleteTarget(role)}>
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))
               )}
-            </div>
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of this role"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Permissions</Label>
-              <div className="border rounded-md divide-y">
-                {knownScopes.map((scope) => (
-                  <label
-                    key={scope}
-                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes(scope)}
-                      onChange={() => toggleScope(scope)}
-                      disabled={scope === "admin"}
-                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-600"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {SCOPE_LABELS[scope] || scope}
-                      </div>
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {scope}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </DialogBody>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting
-                ? "Saving..."
-                : editing
-                  ? "Save Changes"
-                  : "Create Role"}
-            </Button>
-          </DialogFooter>
+      {/* Create modal */}
+      <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Create Role">
+        <form onSubmit={createForm.onSubmit(handleCreate)}>
+          <Stack>
+            <TextInput label="Name" placeholder="e.g. editor" required {...createForm.getInputProps("name")} />
+            <Textarea label="Description" placeholder="What this role is for" {...createForm.getInputProps("description")} />
+            <ScopeCheckboxes form={createForm} field="scopes" />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Create</Button>
+            </Group>
+          </Stack>
         </form>
-      </Dialog>
+      </Modal>
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Role"
-        message="Are you sure you want to delete this role? Admins assigned to this role will lose their permissions."
-        confirmLabel="Delete"
-        loading={acting === deleteTarget?.id}
-        details={deleteTarget && (
-          <>
-            <div><span className="font-medium">Role:</span> {deleteTarget.name}</div>
-            <div><span className="font-medium">Admins using this role:</span> {deleteTarget.admin_count}</div>
-          </>
-        )}
-      />
-    </div>
-  );
-}
+      {/* Edit modal */}
+      <Modal opened={!!editRole} onClose={() => setEditRole(null)} title="Edit Role">
+        <form onSubmit={editForm.onSubmit(handleEdit)}>
+          <Stack>
+            <TextInput label="Name" disabled={editRole?.is_system} {...editForm.getInputProps("name")} />
+            <Textarea label="Description" {...editForm.getInputProps("description")} />
+            <ScopeCheckboxes form={editForm} field="scopes" />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setEditRole(null)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Save</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
 
-function ScopeBadge({ scope }: { scope: string }) {
-  const colors: Record<string, string> = {
-    admin: "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400",
-    "admin:users": "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-    "admin:settings": "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-    "admin:jobs": "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
-    "admin:logs": "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
-    "admin:audit": "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
-    "admin:uploads": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
-    "admin:database": "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-    "admin:roles": "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  };
-  return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${colors[scope] || "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"}`}
-    >
-      {SCOPE_LABELS[scope] || scope}
-    </span>
+      {/* Delete confirmation */}
+      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Role" size="sm">
+        <Stack>
+          <Text size="sm">
+            Delete role <strong>{deleteTarget?.name}</strong>?
+            {deleteTarget && deleteTarget.admin_count > 0 && (
+              <Text c="red" size="sm" mt={4}>This role is assigned to {deleteTarget.admin_count} admin(s).</Text>
+            )}
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleDelete} loading={actionLoading}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

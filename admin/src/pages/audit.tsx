@@ -1,34 +1,39 @@
 import { useCallback, useEffect, useState } from "react";
-import { get, downloadCSV } from "@/lib/api";
-import { toast } from "sonner";
-import { useDebounce } from "@/lib/use-debounce";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Search,
-  ChevronDown,
-  ChevronUp,
-  Filter,
-  Calendar,
-  X,
-  Download,
-} from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { Pagination } from "@/components/ui/pagination";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-
-const AUDIT_COLUMNS = [
-  { key: "time", label: "Time" },
-  { key: "admin", label: "Admin" },
-  { key: "action", label: "Action" },
-  { key: "target", label: "Target" },
-  { key: "details", label: "Details" },
-  { key: "ip", label: "IP" },
-];
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Group,
+  Loader,
+  NativeSelect,
+  Pagination,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { DateInput } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconChevronDown,
+  IconChevronUp,
+  IconDownload,
+  IconFilter,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
+import { get, downloadCSV } from "@/lib/api";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useSort } from "@/hooks/use-sort";
 
 interface AuditEntry {
   id: number;
@@ -42,6 +47,8 @@ interface AuditEntry {
   ip_address: string;
   created_at: string;
 }
+
+const PAGE_SIZE = 30;
 
 const ACTION_LABELS: Record<string, string> = {
   "admin.create": "Created admin",
@@ -64,99 +71,90 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ACTION_COLORS: Record<string, string> = {
-  create: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-  update: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  delete: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-  revoke: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
-  impersonate: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  trigger: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
-  enable: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-  disable: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-  retry: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  cancel: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+  create: "green",
+  update: "blue",
+  delete: "red",
+  revoke: "orange",
+  impersonate: "yellow",
+  trigger: "violet",
+  enable: "green",
+  disable: "red",
+  retry: "blue",
+  cancel: "orange",
 };
 
 function actionColor(action: string): string {
   const verb = action.split(".")[1] ?? "";
-  return ACTION_COLORS[verb] ?? "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400";
+  return ACTION_COLORS[verb] ?? "gray";
 }
 
-function formatTime(iso: string): string {
-  if (!iso) return "\u2014";
-  const d = new Date(iso);
-  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
 }
 
-function formatRelativeTime(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-  return `${Math.round(diff / 86400)}d ago`;
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }
 
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 30;
-
-  // Filters.
+  // Filters
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounce(searchInput, 300);
   const [actionFilter, setActionFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo, setDateTo] = useState<Date | null>(null);
 
-  // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
-
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("audit", AUDIT_COLUMNS);
-
-  // Export.
-  const [exporting, setExporting] = useState(false);
-
-  // Expanded rows.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
       if (search) params.set("search", search);
       if (actionFilter) params.set("action", actionFilter);
-      if (dateFrom) params.set("from", dateFrom + "T00:00:00Z");
-      if (dateTo) params.set("to", dateTo + "T23:59:59Z");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
+      if (dateFrom) params.set("from", dateFrom.toISOString().split("T")[0] + "T00:00:00Z");
+      if (dateTo) params.set("to", dateTo.toISOString().split("T")[0] + "T23:59:59Z");
 
-      const data = await get<{ entries: AuditEntry[]; total: number }>(
-        `/admin/audit?${params}`
-      );
-      setEntries(data.entries);
+      const data = await get<{ entries: AuditEntry[]; total: number }>(`/admin/audit?${params}`);
+      setEntries(data.entries ?? []);
       setTotal(data.total);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load audit log");
+    } catch {
+      setError("Failed to load audit log");
     } finally {
       setLoading(false);
     }
-  }, [page, search, actionFilter, dateFrom, dateTo, sort.column, sort.direction]);
+  }, [page, search, actionFilter, dateFrom, dateTo, sort]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Reset to first page when search changes.
   useEffect(() => {
-    setPage(0);
-  }, [search]);
+    setPage(1);
+  }, [search, actionFilter, dateFrom, dateTo]);
 
   function toggleExpand(id: number) {
     setExpanded((prev) => {
@@ -168,306 +166,237 @@ export default function AuditPage() {
   }
 
   async function handleExport() {
-    setExporting(true);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
       if (search) params.set("search", search);
       if (actionFilter) params.set("action", actionFilter);
-      if (dateFrom) params.set("from", dateFrom + "T00:00:00Z");
-      if (dateTo) params.set("to", dateTo + "T23:59:59Z");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
+      if (dateFrom) params.set("from", dateFrom.toISOString().split("T")[0] + "T00:00:00Z");
+      if (dateTo) params.set("to", dateTo.toISOString().split("T")[0] + "T23:59:59Z");
       await downloadCSV(`/admin/audit/export?${params}`);
     } catch {
-      toast.error("Failed to export audit log");
-    } finally {
-      setExporting(false);
+      notifications.show({ message: "Failed to export", color: "red" });
     }
   }
 
-  // Collect unique actions for filter dropdown.
-  const uniqueActions = Object.keys(ACTION_LABELS);
-
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Audit Log</h1>
-        <TableSkeleton columns={[
-          { width: "w-6" },
-          { width: "w-24" },
-          { width: "w-20" },
-          { width: "w-24" },
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-24", hidden: "hidden lg:table-cell" },
-          { width: "w-20", hidden: "hidden lg:table-cell" },
-        ]} rows={8} />
-      </div>
-    );
-  }
+  const hasFilters = !!search || !!actionFilter || dateFrom !== null || dateTo !== null;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
-          <p className="text-sm text-muted-foreground">
-            {total} event{total !== 1 ? "s" : ""} recorded
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <ErrorAlert
-          message={error}
-          onRetry={load}
-          onDismiss={() => setError("")}
-          className="mb-4"
-        />
-      )}
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Audit Log</Title>
+          {!loading && <Badge variant="light" size="lg">{total}</Badge>}
+        </Group>
+        <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>
+          Export CSV
+        </Button>
+      </Group>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search actions or details..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {searchInput && (
-            <button
-              onClick={() => setSearchInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <select
-            value={actionFilter}
-            onChange={(e) => {
-              setActionFilter(e.target.value);
-              setPage(0);
-            }}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option value="">All actions</option>
-            {uniqueActions.map((a) => (
-              <option key={a} value={a}>
-                {ACTION_LABELS[a] || a}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => {
-              setDateFrom(e.target.value);
-              setPage(0);
-            }}
-            className="h-9 w-[140px] text-sm"
-            title="From date"
-          />
-          <span className="text-xs text-muted-foreground">&ndash;</span>
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => {
-              setDateTo(e.target.value);
-              setPage(0);
-            }}
-            className="h-9 w-[140px] text-sm"
-            title="To date"
-          />
-        </div>
-
-        {(search || actionFilter || dateFrom || dateTo) && (
+      <Group gap="sm" wrap="wrap">
+        <TextInput
+          placeholder="Search actions or details..."
+          leftSection={<IconSearch size={16} />}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.currentTarget.value)}
+          rightSection={
+            searchInput ? (
+              <ActionIcon variant="subtle" size="sm" onClick={() => setSearchInput("")}>
+                <IconX size={14} />
+              </ActionIcon>
+            ) : null
+          }
+          style={{ flex: 1, minWidth: 200, maxWidth: 350 }}
+        />
+        <NativeSelect
+          leftSection={<IconFilter size={16} />}
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.currentTarget.value)}
+          data={[
+            { value: "", label: "All actions" },
+            ...Object.entries(ACTION_LABELS).map(([key, label]) => ({ value: key, label })),
+          ]}
+          w={200}
+        />
+        <DateInput
+          placeholder="From"
+          value={dateFrom}
+          onChange={setDateFrom}
+          clearable
+          w={150}
+          size="sm"
+        />
+        <DateInput
+          placeholder="To"
+          value={dateTo}
+          onChange={setDateTo}
+          clearable
+          w={150}
+          size="sm"
+        />
+        {hasFilters && (
           <Button
-            variant="ghost"
-            size="sm"
+            variant="subtle"
+            size="xs"
+            leftSection={<IconX size={14} />}
             onClick={() => {
               setSearchInput("");
               setActionFilter("");
-              setDateFrom("");
-              setDateTo("");
-              setPage(0);
+              setDateFrom(null);
+              setDateTo(null);
             }}
           >
-            <X className="h-4 w-4 mr-1" />
-            Clear filters
+            Clear
           </Button>
         )}
-      </div>
+      </Group>
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <SortableHeader label="#" column="id" sort={sort} onSort={toggleSort} className="w-8" />
-              {isVisible("time") && <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} />}
-              {isVisible("admin") && <th className="text-left p-3 font-medium">Admin</th>}
-              {isVisible("action") && <SortableHeader label="Action" column="action" sort={sort} onSort={toggleSort} />}
-              {isVisible("target") && <SortableHeader label="Target" column="entity_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              {isVisible("details") && <th className="text-left p-3 font-medium hidden lg:table-cell">Details</th>}
-              {isVisible("ip") && <th className="text-left p-3 font-medium hidden lg:table-cell">IP</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length === 0 ? (
-              <TableEmptyRow
-                colSpan={visibleCount + 1}
-                message={
-                  search || actionFilter || dateFrom || dateTo
-                    ? "No events match your filters"
-                    : "No audit events recorded yet"
-                }
-              />
-            ) : (
-              entries.map((entry) => {
-                const isExpanded = expanded.has(entry.id);
-                return (
-                  <tr
-                    key={entry.id}
-                    className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
-                    onClick={() => toggleExpand(entry.id)}
-                  >
-                    <td className="p-3">
-                      {isExpanded ? (
-                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </td>
-                    {isVisible("time") && (
-                      <td className="p-3">
-                        <div className="text-xs text-muted-foreground" title={formatTime(entry.created_at)}>
-                          {formatRelativeTime(entry.created_at)}
-                        </div>
-                      </td>
-                    )}
-                    {isVisible("admin") && (
-                      <td className="p-3">
-                        <div className="font-medium text-xs">
-                          {entry.admin_name || entry.admin_email || `Admin #${entry.admin_id}`}
-                        </div>
-                        {entry.admin_name && entry.admin_email && (
-                          <div className="text-xs text-muted-foreground">{entry.admin_email}</div>
-                        )}
-                      </td>
-                    )}
-                    {isVisible("action") && (
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${actionColor(entry.action)}`}
-                        >
-                          {ACTION_LABELS[entry.action] || entry.action}
-                        </span>
-                      </td>
-                    )}
-                    {isVisible("target") && (
-                      <td className="p-3 hidden md:table-cell">
-                        {entry.entity_type && (
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {entry.entity_type}
-                            {entry.entity_id ? `#${entry.entity_id}` : ""}
-                          </span>
-                        )}
-                      </td>
-                    )}
-                    {isVisible("details") && (
-                      <td className="p-3 hidden lg:table-cell">
-                        <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
-                          {entry.details || "\u2014"}
-                        </span>
-                      </td>
-                    )}
-                    {isVisible("ip") && (
-                      <td className="p-3 hidden lg:table-cell">
-                        <span className="text-xs font-mono text-muted-foreground">
-                          {entry.ip_address}
-                        </span>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      {/* Error */}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
+      )}
 
-        {/* Expanded detail panels rendered outside the table for proper layout */}
-        {entries
-          .filter((e) => expanded.has(e.id))
-          .map((entry) => (
-            <div
-              key={`detail-${entry.id}`}
-              className="border-t bg-muted/20 px-6 py-3 text-xs space-y-1"
-            >
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
+      {/* Table */}
+      {loading && entries.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={600}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}></Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                    <Group gap={4} wrap="nowrap">Time <SortIcon column="created_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Admin</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("action")}>
+                    <Group gap={4} wrap="nowrap">Action <SortIcon column="action" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("entity_type")}>
+                    <Group gap={4} wrap="nowrap">Target <SortIcon column="entity_type" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Details</Table.Th>
+                  <Table.Th>IP</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {entries.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Text ta="center" c="dimmed" py="lg">
+                        {hasFilters ? "No events match your filters" : "No audit events recorded yet"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  entries.map((entry) => {
+                    const isExpanded = expanded.has(entry.id);
+                    return (
+                      <Table.Tr
+                        key={entry.id}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => toggleExpand(entry.id)}
+                      >
+                        <Table.Td>
+                          {isExpanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                        </Table.Td>
+                        <Table.Td>
+                          <Tooltip label={new Date(entry.created_at).toLocaleString()}>
+                            <Text size="sm" c="dimmed">{timeAgo(entry.created_at)}</Text>
+                          </Tooltip>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" fw={500}>{entry.admin_name || entry.admin_email || `Admin #${entry.admin_id}`}</Text>
+                          {entry.admin_name && entry.admin_email && (
+                            <Text size="xs" c="dimmed">{entry.admin_email}</Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" color={actionColor(entry.action)} size="sm">
+                            {ACTION_LABELS[entry.action] || entry.action}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {entry.entity_type && (
+                            <Text size="xs" ff="monospace" c="dimmed">
+                              {entry.entity_type}{entry.entity_id ? `#${entry.entity_id}` : ""}
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" c="dimmed" truncate maw={200}>{entry.details || "\u2014"}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" ff="monospace" c="dimmed">{entry.ip_address}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+
+          {/* Expanded detail panels */}
+          {entries.filter((e) => expanded.has(e.id)).map((entry) => (
+            <Box key={`detail-${entry.id}`} px="md" py="xs" bg="var(--mantine-color-default-hover)">
+              <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
                 <div>
-                  <span className="text-muted-foreground">Event ID:</span>{" "}
-                  <span className="font-mono">{entry.id}</span>
+                  <Text size="xs" c="dimmed">Event ID</Text>
+                  <Text size="xs" ff="monospace">{entry.id}</Text>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Admin ID:</span>{" "}
-                  <span className="font-mono">{entry.admin_id}</span>
+                  <Text size="xs" c="dimmed">Admin ID</Text>
+                  <Text size="xs" ff="monospace">{entry.admin_id}</Text>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Action:</span>{" "}
-                  <span className="font-mono">{entry.action}</span>
+                  <Text size="xs" c="dimmed">Action</Text>
+                  <Text size="xs" ff="monospace">{entry.action}</Text>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Time:</span>{" "}
-                  {formatTime(entry.created_at)}
+                  <Text size="xs" c="dimmed">Time</Text>
+                  <Text size="xs">{new Date(entry.created_at).toLocaleString()}</Text>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Target:</span>{" "}
-                  <span className="font-mono">
-                    {entry.entity_type}
-                    {entry.entity_id ? `#${entry.entity_id}` : ""}
-                  </span>
+                  <Text size="xs" c="dimmed">Target</Text>
+                  <Text size="xs" ff="monospace">{entry.entity_type}{entry.entity_id ? `#${entry.entity_id}` : ""}</Text>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">IP Address:</span>{" "}
-                  <span className="font-mono">{entry.ip_address}</span>
+                  <Text size="xs" c="dimmed">IP Address</Text>
+                  <Text size="xs" ff="monospace">{entry.ip_address}</Text>
                 </div>
                 {entry.details && (
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Details:</span>{" "}
-                    {entry.details}
+                  <div style={{ gridColumn: "span 2" }}>
+                    <Text size="xs" c="dimmed">Details</Text>
+                    <Text size="xs">{entry.details}</Text>
                   </div>
                 )}
-              </div>
-            </div>
+              </SimpleGrid>
+            </Box>
           ))}
-      </div>
 
-      {/* Pagination */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
-    </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </Text>
+              <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+            </Group>
+          )}
+        </>
+      )}
+    </Stack>
   );
 }

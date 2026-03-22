@@ -15,7 +15,7 @@ dev-ui:
 
 dev-admin:
 	@echo "Admin on :23706"
-	cd admin-next && bun run dev
+	cd admin && bun run dev
 
 # Build — produce a single binary with embedded frontends
 build: build-ui build-admin build-api
@@ -25,12 +25,12 @@ build-ui:
 	cd ui && bun run build
 
 build-admin:
-	cd admin-next && bun run build
+	cd admin && bun run build
 
 build-api:
 	mkdir -p api/ui api/admin
 	cp -r ui/dist api/ui/dist
-	cp -r admin-next/dist api/admin/dist
+	cp -r admin/dist api/admin/dist
 	cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o bin/standalone .
 
 # Docker — build production image from workspace root
@@ -38,4 +38,4 @@ docker:
 	docker build -t stanza -f Dockerfile ..
 
 clean:
-	rm -rf api/bin api/ui api/admin ui/dist admin-next/dist
+	rm -rf api/bin api/ui api/admin ui/dist admin/dist

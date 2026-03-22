@@ -1,20 +1,34 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { get } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  RotateCw,
-  ChevronDown,
-  ChevronRight,
-  Pause,
-  Play,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { EmptyState } from "@/components/ui/empty-state";
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Group,
+  Loader,
+  NativeSelect,
+  Paper,
+  SegmentedControl,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import {
+  IconAlertCircle,
+  IconChevronDown,
+  IconChevronRight,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconRefresh,
+  IconSearch,
+  IconWifi,
+  IconWifiOff,
+  IconX,
+} from "@tabler/icons-react";
+import { get } from "@/lib/api";
 
 interface LogEntry {
   time: string;
@@ -23,26 +37,23 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
-interface LogsResponse {
-  entries: LogEntry[];
-  file: string;
-  total: number;
-}
-
 interface LogFile {
   name: string;
   size: number;
 }
 
-interface FilesResponse {
-  files: LogFile[];
-}
+const LEVELS = [
+  { value: "", label: "All" },
+  { value: "debug", label: "Debug" },
+  { value: "info", label: "Info" },
+  { value: "warn", label: "Warn" },
+  { value: "error", label: "Error" },
+];
 
-const LEVELS = ["", "debug", "info", "warn", "error"] as const;
 const MAX_ENTRIES = 500;
 
 function formatTime(iso: string): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
@@ -61,42 +72,31 @@ function formatSize(bytes: number): string {
 function wsUrl(path: string): string {
   const loc = window.location;
   const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-  // In dev mode, Vite proxies /api/* to the Go server.
-  // The WebSocket connection also needs to go through the proxy.
   return `${proto}//${loc.host}/api${path}`;
 }
 
-function LevelBadge({ level }: { level: string }) {
-  const styles: Record<string, string> = {
-    debug: "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400",
-    info: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-    warn: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
-    error: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-  };
-  return (
-    <span
-      className={`inline-block w-14 rounded-full px-2 py-0.5 text-center text-xs font-medium ${styles[level] || "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400"}`}
-    >
-      {level}
-    </span>
-  );
-}
+const levelColors: Record<string, string> = {
+  debug: "gray",
+  info: "blue",
+  warn: "yellow",
+  error: "red",
+};
 
 function ExtraFields({ entry }: { entry: LogEntry }) {
   const reserved = new Set(["time", "level", "msg"]);
   const extra = Object.entries(entry).filter(([k]) => !reserved.has(k));
-  if (extra.length === 0) return <span className="text-muted-foreground">No extra fields</span>;
+  if (extra.length === 0) return <Text size="xs" c="dimmed">No extra fields</Text>;
   return (
-    <div className="space-y-1">
+    <Stack gap={4}>
       {extra.map(([k, v]) => (
-        <div key={k} className="flex gap-2">
-          <span className="font-medium text-muted-foreground">{k}:</span>
-          <span className="break-all">
+        <Group key={k} gap="sm" wrap="nowrap">
+          <Text size="xs" fw={500} c="dimmed">{k}:</Text>
+          <Text size="xs" style={{ wordBreak: "break-all" }}>
             {typeof v === "string" ? v : JSON.stringify(v)}
-          </span>
-        </div>
+          </Text>
+        </Group>
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -109,7 +109,7 @@ export default function LogsPage() {
   const [level, setLevel] = useState("");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -122,10 +122,10 @@ export default function LogsPage() {
 
   const loadFiles = useCallback(async () => {
     try {
-      const data = await get<FilesResponse>("/admin/logs/files");
+      const data = await get<{ files: LogFile[] }>("/admin/logs/files");
       setFiles(data.files);
     } catch {
-      // Files list is optional — don't block main view.
+      // Files list is optional.
     }
   }, []);
 
@@ -134,10 +134,10 @@ export default function LogsPage() {
       const params = new URLSearchParams({ limit: "200", file: selectedFile });
       if (level) params.set("level", level);
       if (search) params.set("search", search);
-      const data = await get<LogsResponse>(`/admin/logs?${params}`);
+      const data = await get<{ entries: LogEntry[]; file: string; total: number }>(`/admin/logs?${params}`);
       setEntries(data.entries);
       setTotal(data.total);
-      setError(null);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load logs");
     }
@@ -149,7 +149,6 @@ export default function LogsPage() {
     setLoading(false);
   }, [loadEntries, loadFiles]);
 
-  // Close WebSocket connection.
   const closeWs = useCallback(() => {
     if (reconnectRef.current) {
       clearTimeout(reconnectRef.current);
@@ -162,7 +161,6 @@ export default function LogsPage() {
     setWsState("disconnected");
   }, []);
 
-  // Open WebSocket connection for real-time streaming.
   const connectWs = useCallback(() => {
     closeWs();
     setWsState("connecting");
@@ -179,7 +177,7 @@ export default function LogsPage() {
 
     ws.onopen = () => {
       setWsState("connected");
-      setError(null);
+      setError("");
     };
 
     ws.onmessage = (event) => {
@@ -199,18 +197,16 @@ export default function LogsPage() {
     ws.onclose = () => {
       setWsState("disconnected");
       wsRef.current = null;
-      // Auto-reconnect after 3 seconds if still in live mode.
       reconnectRef.current = setTimeout(() => {
         reconnectRef.current = null;
       }, 3000);
     };
 
     ws.onerror = () => {
-      // onclose will fire after this — reconnect happens there.
+      // onclose will fire after this.
     };
   }, [level, search, closeWs]);
 
-  // Send updated filters to an active WebSocket connection.
   const sendFilters = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ level, search }));
@@ -222,9 +218,8 @@ export default function LogsPage() {
     loadAll();
   }, [loadAll]);
 
-  // Manage live mode: use WebSocket for stanza.log, fall back to polling for rotated files.
+  // Manage live mode.
   useEffect(() => {
-    // Clear any existing polling interval.
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -235,7 +230,6 @@ export default function LogsPage() {
       return;
     }
 
-    // WebSocket streaming only works on the current log file.
     if (selectedFile === "stanza.log") {
       connectWs();
     } else {
@@ -249,7 +243,7 @@ export default function LogsPage() {
     };
   }, [autoRefresh, selectedFile, connectWs, closeWs, loadEntries]);
 
-  // When filters change while WebSocket is connected, send new filters.
+  // Send filter updates to active WebSocket.
   useEffect(() => {
     if (wsState === "connected") {
       sendFilters();
@@ -270,204 +264,215 @@ export default function LogsPage() {
     setSearch(searchInput);
   }
 
-  // Group entries by date for visual separation.
+  // File selector options.
+  const fileOptions = files.length > 0
+    ? files.map((f) => ({ value: f.name, label: `${f.name} (${formatSize(f.size)})` }))
+    : [{ value: "stanza.log", label: "stanza.log" }];
+
+  // Group entries by date.
   let lastDate = "";
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Logs</h1>
-          <p className="text-sm text-muted-foreground">
-            {total} entries in {selectedFile}
+          <Title order={3}>Logs</Title>
+          <Group gap="xs" mt={2}>
+            <Text size="sm" c="dimmed">{total} entries in {selectedFile}</Text>
             {wsState === "connected" && streamCount > 0 && (
-              <span className="ml-2 text-green-600 dark:text-green-500">+{streamCount} streamed</span>
+              <Text size="sm" c="green">+{streamCount} streamed</Text>
             )}
-          </p>
+          </Group>
         </div>
-        <div className="flex items-center gap-2">
+        <Group gap="xs">
+          {/* WebSocket status */}
           {wsState === "connected" && (
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-500">
-              <Wifi className="h-3.5 w-3.5" />
+            <Badge variant="light" color="green" size="sm" leftSection={<IconWifi size={10} />}>
               Streaming
-            </span>
+            </Badge>
           )}
           {wsState === "connecting" && (
-            <span className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-500">
-              <Wifi className="h-3.5 w-3.5 animate-pulse" />
+            <Badge variant="light" color="yellow" size="sm" leftSection={<IconWifi size={10} />}>
               Connecting
-            </span>
+            </Badge>
           )}
           {autoRefresh && selectedFile === "stanza.log" && wsState === "disconnected" && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <WifiOff className="h-3.5 w-3.5" />
+            <Badge variant="light" color="gray" size="sm" leftSection={<IconWifiOff size={10} />}>
               Disconnected
-            </span>
+            </Badge>
           )}
           <Button
-            variant={autoRefresh ? "default" : "outline"}
-            size="sm"
+            variant={autoRefresh ? "filled" : "default"}
+            size="xs"
+            leftSection={autoRefresh ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
             onClick={() => setAutoRefresh(!autoRefresh)}
-            title={autoRefresh ? "Pause live streaming" : "Resume live streaming"}
           >
-            {autoRefresh ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {autoRefresh ? "Live" : "Paused"}
           </Button>
-          <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
-            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <Button
+            variant="subtle"
+            size="xs"
+            leftSection={<IconRefresh size={16} />}
+            onClick={loadAll}
+            loading={loading}
+          >
             Refresh
           </Button>
-        </div>
-      </div>
+        </Group>
+      </Group>
 
+      {/* Error */}
       {error && (
-        <ErrorAlert message={error} onRetry={loadAll} onDismiss={() => setError(null)} className="mb-6" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={loadAll}>Retry</Button>
+        </Alert>
       )}
 
-      <Card className="mb-4">
-        <CardContent className="flex flex-wrap items-center gap-3 py-3">
+      {/* Filters */}
+      <Paper withBorder p="sm" radius="md">
+        <Group gap="md" wrap="wrap">
           {/* Level filter */}
-          <div className="flex flex-wrap items-center gap-1">
-            {LEVELS.map((l) => (
-              <Button
-                key={l || "all"}
-                variant={level === l ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setLevel(l)}
-              >
-                {l || "All"}
-              </Button>
-            ))}
-          </div>
-
-          <div className="hidden h-6 w-px bg-border sm:block" />
+          <SegmentedControl
+            value={level}
+            onChange={setLevel}
+            data={LEVELS}
+            size="xs"
+          />
 
           {/* Search */}
-          <form onSubmit={handleSearch} className="flex w-full items-center gap-2 sm:w-auto">
-            <Input
+          <form onSubmit={handleSearch} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <TextInput
               placeholder="Search messages..."
+              size="xs"
+              leftSection={<IconSearch size={14} />}
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="h-8 min-w-0 flex-1 sm:w-48 sm:flex-none"
+              onChange={(e) => setSearchInput(e.currentTarget.value)}
+              w={180}
             />
-            <Button type="submit" variant="outline" size="sm">
-              Search
-            </Button>
+            <Button type="submit" variant="default" size="xs">Search</Button>
             {search && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  setSearchInput("");
-                }}
-              >
-                Clear
-              </Button>
+              <ActionIcon variant="subtle" size="sm" onClick={() => { setSearch(""); setSearchInput(""); }}>
+                <IconX size={14} />
+              </ActionIcon>
             )}
           </form>
 
-          <div className="hidden h-6 w-px bg-border sm:block" />
-
           {/* File selector */}
-          <select
+          <NativeSelect
             value={selectedFile}
-            onChange={(e) => setSelectedFile(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-          >
-            {files.map((f) => (
-              <option key={f.name} value={f.name}>
-                {f.name} ({formatSize(f.size)})
-              </option>
-            ))}
-            {files.length === 0 && <option value="stanza.log">stanza.log</option>}
-          </select>
-        </CardContent>
-      </Card>
+            onChange={(e) => setSelectedFile(e.currentTarget.value)}
+            data={fileOptions}
+            size="xs"
+            w={200}
+          />
+        </Group>
+      </Paper>
 
-      <Card>
-        <CardHeader className="pb-0">
-          <CardTitle className="text-base">
+      {/* Log entries */}
+      <Paper withBorder radius="md" p={0}>
+        <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+          <Text size="sm" fw={500}>
             Log Entries
             {entries.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
+              <Text span size="sm" c="dimmed" ml="xs">
                 showing {entries.length} of {total}
-              </span>
+              </Text>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading && entries.length === 0 ? (
-            <div className="p-4"><Spinner /></div>
-          ) : entries.length === 0 ? (
-            <EmptyState message="No log entries found" className="py-6" />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="w-8 px-2 py-3"></th>
-                    <th className="px-4 py-3 font-medium">Time</th>
-                    <th className="px-4 py-3 font-medium">Level</th>
-                    <th className="px-4 py-3 font-medium">Message</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry, idx) => {
-                    const date = formatDate(entry.time);
-                    const showDateSep = date !== lastDate;
-                    lastDate = date;
-                    const isExpanded = expanded.has(idx);
+          </Text>
+        </Group>
 
-                    return (
-                      <>
-                        {showDateSep && (
-                          <tr key={`date-${date}`}>
-                            <td
-                              colSpan={4}
-                              className="border-b border-border bg-muted/40 px-4 py-1.5 text-xs font-medium text-muted-foreground"
-                            >
-                              {date}
-                            </td>
-                          </tr>
-                        )}
-                        <tr
-                          key={idx}
-                          className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/30"
-                          onClick={() => toggleExpanded(idx)}
-                        >
-                          <td className="px-2 py-2.5 text-muted-foreground">
-                            {isExpanded ? (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            )}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-muted-foreground">
+        {loading && entries.length === 0 ? (
+          <Group justify="center" py="xl">
+            <Loader />
+          </Group>
+        ) : entries.length === 0 ? (
+          <Text ta="center" c="dimmed" py="xl">No log entries found</Text>
+        ) : (
+          <Table.ScrollContainer minWidth={500}>
+            <Table fz="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={32}></Table.Th>
+                  <Table.Th>Time</Table.Th>
+                  <Table.Th>Level</Table.Th>
+                  <Table.Th>Message</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {entries.map((entry, idx) => {
+                  const date = formatDate(entry.time);
+                  const showDateSep = date !== lastDate;
+                  lastDate = date;
+                  const isExpanded = expanded.has(idx);
+
+                  return (
+                    <Box key={idx} component="tbody">
+                      {/* Date separator */}
+                      {showDateSep && (
+                        <Table.Tr>
+                          <Table.Td
+                            colSpan={4}
+                            bg="var(--mantine-color-gray-light)"
+                            py={6}
+                            px="md"
+                          >
+                            <Text size="xs" fw={500} c="dimmed">{date}</Text>
+                          </Table.Td>
+                        </Table.Tr>
+                      )}
+
+                      {/* Log entry row */}
+                      <Table.Tr
+                        style={{ cursor: "pointer" }}
+                        onClick={() => toggleExpanded(idx)}
+                      >
+                        <Table.Td>
+                          {isExpanded ? (
+                            <IconChevronDown size={14} style={{ opacity: 0.5 }} />
+                          ) : (
+                            <IconChevronRight size={14} style={{ opacity: 0.5 }} />
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" ff="monospace" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                             {formatTime(entry.time)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <LevelBadge level={entry.level} />
-                          </td>
-                          <td className="max-w-[600px] truncate px-4 py-2.5">{entry.msg}</td>
-                        </tr>
-                        {isExpanded && (
-                          <tr key={`detail-${idx}`} className="border-b border-border bg-muted/20">
-                            <td></td>
-                            <td colSpan={3} className="px-4 py-3 text-xs">
-                              <ExtraFields entry={entry} />
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            variant="light"
+                            color={levelColors[entry.level] || "gray"}
+                            size="xs"
+                            w={50}
+                            style={{ textAlign: "center" }}
+                          >
+                            {entry.level}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" truncate maw={600}>{entry.msg}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+
+                      {/* Expanded detail row */}
+                      {isExpanded && (
+                        <Table.Tr bg="var(--mantine-color-gray-light)">
+                          <Table.Td></Table.Td>
+                          <Table.Td colSpan={3} py="sm">
+                            <ExtraFields entry={entry} />
+                          </Table.Td>
+                        </Table.Tr>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
+      </Paper>
+    </Stack>
   );
 }

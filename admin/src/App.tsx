@@ -1,76 +1,82 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { AuthProvider } from "@/lib/auth";
-import { ThemeProvider } from "@/lib/theme";
-import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ProtectedRoute } from "@/components/protected-route";
-import { Toaster } from "@/components/ui/sonner";
-import SidebarLayout from "@/components/layout/sidebar";
+import {
+  CardPageSkeleton,
+  DashboardSkeleton,
+  DetailPageSkeleton,
+  ListPageSkeleton,
+} from "@/components/skeletons";
+import Shell from "@/components/layout/shell";
 import LoginPage from "@/pages/login";
 
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
-const CronPage = lazy(() => import("@/pages/cron"));
-const QueuePage = lazy(() => import("@/pages/queue"));
-const AdminsPage = lazy(() => import("@/pages/admins"));
-const SessionsPage = lazy(() => import("@/pages/sessions"));
-const LogsPage = lazy(() => import("@/pages/logs"));
-const DatabasePage = lazy(() => import("@/pages/database"));
-const SettingsPage = lazy(() => import("@/pages/settings"));
 const UsersPage = lazy(() => import("@/pages/users"));
-const APIKeysPage = lazy(() => import("@/pages/api-keys"));
+const UserDetailPage = lazy(() => import("@/pages/user-detail"));
+const AdminsPage = lazy(() => import("@/pages/admins"));
+const AdminDetailPage = lazy(() => import("@/pages/admin-detail"));
+const SessionsPage = lazy(() => import("@/pages/sessions"));
+const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
+const RolesPage = lazy(() => import("@/pages/roles"));
 const AuditPage = lazy(() => import("@/pages/audit"));
 const NotificationsPage = lazy(() => import("@/pages/notifications"));
-const RolesPage = lazy(() => import("@/pages/roles"));
 const UploadsPage = lazy(() => import("@/pages/uploads"));
-const ProfilePage = lazy(() => import("@/pages/profile"));
-const UserDetailPage = lazy(() => import("@/pages/user-detail"));
-const AdminDetailPage = lazy(() => import("@/pages/admin-detail"));
 const WebhooksPage = lazy(() => import("@/pages/webhooks"));
 const WebhookDetailPage = lazy(() => import("@/pages/webhook-detail"));
+const DatabasePage = lazy(() => import("@/pages/database"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const CronPage = lazy(() => import("@/pages/cron"));
+const QueuePage = lazy(() => import("@/pages/queue"));
+const LogsPage = lazy(() => import("@/pages/logs"));
+const ProfilePage = lazy(() => import("@/pages/profile"));
+
+const D = <DashboardSkeleton />;
+const Li = <ListPageSkeleton />;
+const De = <DetailPageSkeleton />;
+const C = <CardPageSkeleton />;
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
 
   return (
-    <ThemeProvider>
-    <ErrorBoundary>
     <BrowserRouter basename={basename}>
-      <Toaster position="top-right" duration={3000} closeButton richColors />
       <AuthProvider>
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
             element={
               <ProtectedRoute>
-                <SidebarLayout />
+                <Shell />
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardPage />} />
-            <Route path="users" element={<UsersPage />} />
-            <Route path="users/:id" element={<UserDetailPage />} />
-            <Route path="admins" element={<AdminsPage />} />
-            <Route path="admins/:id" element={<AdminDetailPage />} />
-            <Route path="sessions" element={<SessionsPage />} />
-            <Route path="cron" element={<CronPage />} />
-            <Route path="queue" element={<QueuePage />} />
-            <Route path="logs" element={<LogsPage />} />
-            <Route path="database" element={<DatabasePage />} />
-            <Route path="api-keys" element={<APIKeysPage />} />
-            <Route path="audit" element={<AuditPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="roles" element={<RolesPage />} />
-            <Route path="uploads" element={<UploadsPage />} />
-            <Route path="webhooks" element={<WebhooksPage />} />
-            <Route path="webhooks/:id" element={<WebhookDetailPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+            <Route index element={<Suspense fallback={D}><DashboardPage /></Suspense>} />
+            <Route path="users" element={<Suspense fallback={Li}><UsersPage /></Suspense>} />
+            <Route path="users/:id" element={<Suspense fallback={De}><UserDetailPage /></Suspense>} />
+            <Route path="admins" element={<Suspense fallback={Li}><AdminsPage /></Suspense>} />
+            <Route path="admins/:id" element={<Suspense fallback={De}><AdminDetailPage /></Suspense>} />
+            <Route path="sessions" element={<Suspense fallback={Li}><SessionsPage /></Suspense>} />
+            <Route path="cron" element={<Suspense fallback={C}><CronPage /></Suspense>} />
+            <Route path="queue" element={<Suspense fallback={C}><QueuePage /></Suspense>} />
+            <Route path="logs" element={<Suspense fallback={C}><LogsPage /></Suspense>} />
+            <Route path="database" element={<Suspense fallback={C}><DatabasePage /></Suspense>} />
+            <Route path="api-keys" element={<Suspense fallback={Li}><ApiKeysPage /></Suspense>} />
+            <Route path="audit" element={<Suspense fallback={Li}><AuditPage /></Suspense>} />
+            <Route path="notifications" element={<Suspense fallback={Li}><NotificationsPage /></Suspense>} />
+            <Route path="roles" element={<Suspense fallback={Li}><RolesPage /></Suspense>} />
+            <Route path="uploads" element={<Suspense fallback={Li}><UploadsPage /></Suspense>} />
+            <Route path="webhooks" element={<Suspense fallback={Li}><WebhooksPage /></Suspense>} />
+            <Route path="webhooks/:id" element={<Suspense fallback={De}><WebhookDetailPage /></Suspense>} />
+            <Route path="settings" element={<Suspense fallback={C}><SettingsPage /></Suspense>} />
+            <Route path="profile" element={<Suspense fallback={C}><ProfilePage /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
-    </ErrorBoundary>
-    </ThemeProvider>
   );
 }

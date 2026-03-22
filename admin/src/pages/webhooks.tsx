@@ -1,37 +1,47 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
-import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
-import { useSelection } from "@/lib/use-selection";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogCloseButton,
-  DialogBody,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import { Plus, Pencil, Trash2, Copy, Check, Search, X, ExternalLink, Download } from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { Pagination } from "@/components/ui/pagination";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-
-const WEBHOOK_COLUMNS = [
-  { key: "url", label: "URL" },
-  { key: "description", label: "Description" },
-  { key: "events", label: "Events" },
-  { key: "status", label: "Status" },
-  { key: "created_at", label: "Created" },
-];
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Code,
+  CopyButton,
+  Group,
+  Loader,
+  Modal,
+  Pagination,
+  Stack,
+  Switch,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconCheck,
+  IconCopy,
+  IconDownload,
+  IconExternalLink,
+  IconPencil,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
+import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useSort } from "@/hooks/use-sort";
+import { useSelection } from "@/hooks/use-selection";
 
 interface Webhook {
   id: number;
@@ -45,71 +55,80 @@ interface Webhook {
   updated_at: string;
 }
 
+const PAGE_SIZE = 20;
+
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export default function WebhooksPage() {
   const navigate = useNavigate();
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<number | null>(null);
-
-  // Pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
-
-  // Search.
+  const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
-
-  // Sort.
+  const search = useDebounce(searchInput, 300);
   const [sort, toggleSort] = useSort("created_at", "desc");
+  const selection = useSelection();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("webhooks", WEBHOOK_COLUMNS);
-
-  // Dialog state.
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Webhook | null>(null);
+  // Modal states
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editWebhook, setEditWebhook] = useState<Webhook | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null);
-
-  // Selection.
-  const selection = useSelection<number>();
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
-
-  // Form state.
-  const [url, setUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [events, setEvents] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [formError, setFormError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [exporting, setExporting] = useState(false);
-
-  // Created webhook secret reveal.
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createdWebhook, setCreatedWebhook] = useState<Webhook | null>(null);
-  const [copied, setCopied] = useState(false);
+
+  const createForm = useForm({
+    initialValues: { url: "", description: "", events: "*" },
+    validate: {
+      url: (v) => (!v ? "URL is required" : null),
+    },
+  });
+
+  const editForm = useForm({
+    initialValues: { url: "", description: "", events: "", is_active: true },
+    validate: {
+      url: (v) => (!v ? "URL is required" : null),
+    },
+  });
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
-      if (searchInput) params.set("search", searchInput);
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-
-      const data = await get<{ webhooks: Webhook[]; total: number }>(
-        `/admin/webhooks?${params}`
-      );
-      setWebhooks(data.webhooks);
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      if (search) params.set("search", search);
+      const data = await get<{ webhooks: Webhook[]; total: number }>(`/admin/webhooks?${params}`);
+      setWebhooks(data.webhooks ?? []);
       setTotal(data.total);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load webhooks");
+    } catch {
+      setError("Failed to load webhooks");
     } finally {
       setLoading(false);
     }
-  }, [page, searchInput, sort.column, sort.direction]);
+  }, [page, search, sort]);
 
   useEffect(() => {
     load();
@@ -118,474 +137,405 @@ export default function WebhooksPage() {
   }, [load]);
 
   useEffect(() => {
-    setPage(0);
-  }, [searchInput]);
+    setPage(1);
+    selection.clear();
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clear selection when page, search, or sort changes.
   useEffect(() => {
     selection.clear();
-  }, [page, searchInput, sort.column, sort.direction]);
-
-  function openCreate() {
-    setEditing(null);
-    setUrl("");
-    setDescription("");
-    setEvents("*");
-    setIsActive(true);
-    setFormError("");
-    setDialogOpen(true);
-  }
+  }, [page, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openEdit(wh: Webhook) {
-    setEditing(wh);
-    setUrl(wh.url);
-    setDescription(wh.description);
-    setEvents(wh.events.join(", "));
-    setIsActive(wh.is_active);
-    setFormError("");
-    setDialogOpen(true);
+    setEditWebhook(wh);
+    editForm.setValues({
+      url: wh.url,
+      description: wh.description,
+      events: wh.events.join(", "),
+      is_active: wh.is_active,
+    });
   }
 
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditing(null);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError("");
-    setSubmitting(true);
-
-    const eventsList = events
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
+  async function handleCreate(values: typeof createForm.values) {
+    setActionLoading(true);
     try {
-      if (editing) {
-        await put(`/admin/webhooks/${editing.id}`, {
-          url,
-          description,
-          events: eventsList,
-          is_active: isActive,
-        });
-        toast.success("Webhook updated");
+      const eventsList = values.events.split(",").map((s) => s.trim()).filter(Boolean);
+      const data = await post<Webhook>("/admin/webhooks", {
+        url: values.url,
+        description: values.description,
+        events: eventsList,
+      });
+      notifications.show({ message: "Webhook created", color: "green", icon: <IconCheck size={16} /> });
+      setCreateOpen(false);
+      createForm.reset();
+      setCreatedWebhook(data);
+      load();
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields).length > 0) {
+        createForm.setErrors(e.fields);
       } else {
-        const data = await post<Webhook>("/admin/webhooks", {
-          url,
-          description,
-          events: eventsList,
-        });
-        setCreatedWebhook(data);
-        setCopied(false);
-        toast.success("Webhook created");
-      }
-      closeDialog();
-      await load();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setFormError(err.message);
-      } else {
-        setFormError("Operation failed");
+        notifications.show({ message: e instanceof ApiError ? e.message : "Failed to create webhook", color: "red" });
       }
     } finally {
-      setSubmitting(false);
+      setActionLoading(false);
+    }
+  }
+
+  async function handleEdit(values: typeof editForm.values) {
+    if (!editWebhook) return;
+    setActionLoading(true);
+    try {
+      const eventsList = values.events.split(",").map((s) => s.trim()).filter(Boolean);
+      await put(`/admin/webhooks/${editWebhook.id}`, {
+        url: values.url,
+        description: values.description,
+        events: eventsList,
+        is_active: values.is_active,
+      });
+      notifications.show({ message: "Webhook updated", color: "green", icon: <IconCheck size={16} /> });
+      setEditWebhook(null);
+      load();
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields).length > 0) {
+        editForm.setErrors(e.fields);
+      } else {
+        notifications.show({ message: e instanceof ApiError ? e.message : "Failed to update webhook", color: "red" });
+      }
+    } finally {
+      setActionLoading(false);
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    setActing(id);
+    setActionLoading(true);
     try {
-      await del(`/admin/webhooks/${id}`);
+      await del(`/admin/webhooks/${deleteTarget.id}`);
+      notifications.show({ message: "Webhook deleted", color: "green", icon: <IconCheck size={16} /> });
       setDeleteTarget(null);
-      toast.success("Webhook deleted");
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to delete webhook");
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function copySecret(secret: string) {
-    await navigator.clipboard.writeText(secret);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function handleExport() {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (searchInput) params.set("search", searchInput);
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-      await downloadCSV(`/admin/webhooks/export?${params}`);
+      load();
     } catch {
-      toast.error("Failed to export webhooks");
+      notifications.show({ message: "Failed to delete webhook", color: "red" });
     } finally {
-      setExporting(false);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkDelete() {
-    setBulkDeleting(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/webhooks/bulk-delete", { ids: selection.ids });
-      setBulkConfirmOpen(false);
+      notifications.show({ message: `${data.affected} webhook(s) deleted`, color: "green", icon: <IconCheck size={16} /> });
+      setBulkDeleteOpen(false);
       selection.clear();
-      toast.success(`${data.affected} webhook${data.affected !== 1 ? "s" : ""} deleted`);
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to bulk delete webhooks");
+      load();
+    } catch {
+      notifications.show({ message: "Failed to delete webhooks", color: "red" });
     } finally {
-      setBulkDeleting(false);
+      setActionLoading(false);
     }
   }
 
-  function formatTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+  async function handleExport() {
+    try {
+      const params = new URLSearchParams({
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      if (search) params.set("search", search);
+      await downloadCSV(`/admin/webhooks/export?${params}`);
+    } catch {
+      notifications.show({ message: "Failed to export", color: "red" });
+    }
   }
 
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Webhooks</h1>
-        <TableSkeleton columns={[
-          { width: "w-40" },
-          { width: "w-32", hidden: "hidden md:table-cell" },
-          { width: "w-24", hidden: "hidden lg:table-cell" },
-          { width: "w-16" },
-          { width: "w-24", hidden: "hidden md:table-cell" },
-          { width: "w-20" },
-        ]} />
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const webhookIds = webhooks.map((w) => w.id);
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Webhooks</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {total} webhook{total !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Webhooks</Title>
+          {!loading && <Badge variant="light" size="lg">{total}</Badge>}
+        </Group>
+        <Group gap="xs">
+          <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>
+            Export CSV
           </Button>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>
             Add Webhook
           </Button>
-        </div>
-      </div>
+        </Group>
+      </Group>
 
-      {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
-      )}
-
-      {/* Search bar */}
-      <div className="mb-4 flex gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by URL or description..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {searchInput && (
-            <button
-              onClick={() => setSearchInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Search */}
+      <TextInput
+        placeholder="Search by URL or description..."
+        leftSection={<IconSearch size={16} />}
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.currentTarget.value)}
+        rightSection={
+          searchInput ? (
+            <ActionIcon variant="subtle" size="sm" onClick={() => setSearchInput("")}>
+              <IconX size={14} />
+            </ActionIcon>
+          ) : null
+        }
+      />
 
       {/* Secret reveal after creation */}
       {createdWebhook && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 rounded-md">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-green-800 dark:text-green-400">
-              Webhook created — signing secret:
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCreatedWebhook(null)}
-            >
-              <span className="sr-only">Dismiss</span>
-              &times;
-            </Button>
-          </div>
-          <p className="text-xs text-green-700 dark:text-green-400 mb-2">
-            Copy this secret now. Use it to verify webhook signatures.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 bg-background border rounded px-3 py-2 text-sm font-mono break-all">
-              {createdWebhook.secret}
-            </code>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copySecret(createdWebhook.secret)}
-            >
-              {copied ? (
-                <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
+        <Alert
+          color="green"
+          variant="light"
+          title="Webhook created — signing secret"
+          withCloseButton
+          onClose={() => setCreatedWebhook(null)}
+        >
+          <Text size="xs" mb="xs">Copy this secret now. Use it to verify webhook signatures.</Text>
+          <Group gap="xs">
+            <Code block style={{ flex: 1, wordBreak: "break-all" }}>{createdWebhook.secret}</Code>
+            <CopyButton value={createdWebhook.secret}>
+              {({ copied, copy }) => (
+                <ActionIcon
+                  variant={copied ? "light" : "default"}
+                  color={copied ? "green" : undefined}
+                  onClick={copy}
+                  size="lg"
+                >
+                  {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                </ActionIcon>
               )}
-            </Button>
-          </div>
-        </div>
+            </CopyButton>
+          </Group>
+        </Alert>
       )}
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected(webhooks.map((w) => w.id))}
-                  onChange={() => selection.toggleAll(webhooks.map((w) => w.id))}
-                  className="rounded border-input"
-                />
-              </th>
-              {isVisible("url") && <SortableHeader label="URL" column="url" sort={sort} onSort={toggleSort} />}
-              {isVisible("description") && <th className="text-left p-3 font-medium hidden md:table-cell">Description</th>}
-              {isVisible("events") && <th className="text-left p-3 font-medium hidden lg:table-cell">Events</th>}
-              {isVisible("status") && <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />}
-              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              <th className="text-right p-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {webhooks.length === 0 ? (
-              <TableEmptyRow colSpan={visibleCount + 2} message={searchInput ? "No webhooks match your search" : "No webhooks configured"} />
-            ) : (
-              webhooks.map((wh) => (
-                <tr
-                  key={wh.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 cursor-pointer ${selection.isSelected(wh.id) ? "bg-muted/40" : ""}`}
-                  onClick={() => navigate(`/webhooks/${wh.id}`)}
-                >
-                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selection.isSelected(wh.id)}
-                      onChange={() => selection.toggle(wh.id)}
-                      className="rounded border-input"
+      {/* Error */}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
+      )}
+
+      {/* Table */}
+      {loading && webhooks.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={600}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      checked={selection.isAllSelected(webhookIds)}
+                      indeterminate={selection.count > 0 && !selection.isAllSelected(webhookIds)}
+                      onChange={() => selection.toggleAll(webhookIds)}
+                      aria-label="Select all"
                     />
-                  </td>
-                  {isVisible("url") && (
-                    <td className="p-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs truncate max-w-[280px]">{wh.url}</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
-                      </div>
-                    </td>
-                  )}
-                  {isVisible("description") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {wh.description || "\u2014"}
-                    </td>
-                  )}
-                  {isVisible("events") && (
-                    <td className="p-3 hidden lg:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {wh.events.map((ev) => (
-                          <EventBadge key={ev} event={ev} />
-                        ))}
-                      </div>
-                    </td>
-                  )}
-                  {isVisible("status") && <td className="p-3"><StatusBadge active={wh.is_active} /></td>}
-                  {isVisible("created_at") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {formatTime(wh.created_at)}
-                    </td>
-                  )}
-                  <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <span className="inline-flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(wh)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(wh)}>
-                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                      </Button>
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("url")}>
+                    <Group gap={4} wrap="nowrap">URL <SortIcon column="url" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Description</Table.Th>
+                  <Table.Th>Events</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("is_active")}>
+                    <Group gap={4} wrap="nowrap">Status <SortIcon column="is_active" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                    <Group gap={4} wrap="nowrap">Created <SortIcon column="created_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th ta="right">Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {webhooks.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Text ta="center" c="dimmed" py="lg">
+                        {search ? "No webhooks match your search" : "No webhooks configured"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  webhooks.map((wh) => (
+                    <Table.Tr
+                      key={wh.id}
+                      bg={selection.isSelected(wh.id) ? "var(--mantine-primary-color-light)" : undefined}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => navigate(`/webhooks/${wh.id}`)}
+                    >
+                      <Table.Td onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selection.isSelected(wh.id)}
+                          onChange={() => selection.toggle(wh.id)}
+                          aria-label={`Select ${wh.url}`}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4} wrap="nowrap">
+                          <Text size="xs" ff="monospace" truncate maw={280}>{wh.url}</Text>
+                          <IconExternalLink size={12} style={{ opacity: 0.5 }} />
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">{wh.description || "\u2014"}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4} wrap="wrap">
+                          {wh.events.map((ev) => (
+                            <Badge
+                              key={ev}
+                              variant="light"
+                              color={ev === "*" ? "violet" : "blue"}
+                              size="xs"
+                            >
+                              {ev === "*" ? "all events" : ev}
+                            </Badge>
+                          ))}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color={wh.is_active ? "green" : "yellow"} size="sm">
+                          {wh.is_active ? "Active" : "Paused"}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Tooltip label={new Date(wh.created_at).toLocaleString()}>
+                          <Text size="sm" c="dimmed">{timeAgo(wh.created_at)}</Text>
+                        </Tooltip>
+                      </Table.Td>
+                      <Table.Td onClick={(e) => e.stopPropagation()}>
+                        <Group gap={4} justify="flex-end" wrap="nowrap">
+                          <Tooltip label="Edit">
+                            <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(wh)}>
+                              <IconPencil size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Delete">
+                            <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setDeleteTarget(wh)}>
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </Text>
+              <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+            </Group>
+          )}
+        </>
+      )}
 
-      {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onClose={closeDialog}>
-        <DialogHeader>
-          <DialogTitle>{editing ? "Edit Webhook" : "Add Webhook"}</DialogTitle>
-          <DialogCloseButton onClick={closeDialog} />
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-4">
-            {formError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
-                {formError}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="url">Endpoint URL</Label>
-              <Input
-                id="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/webhook"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">
-                Description{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Slack notification for new users"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="events">
-                Events{" "}
-                <span className="text-muted-foreground font-normal">
-                  (comma-separated, * = all)
-                </span>
-              </Label>
-              <Input
-                id="events"
-                value={events}
-                onChange={(e) => setEvents(e.target.value)}
-                placeholder="e.g. user.created, user.updated"
-              />
-            </div>
-
-            {editing && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="h-4 w-4 rounded border-input"
-                />
-                <Label htmlFor="is_active">Active</Label>
-              </div>
-            )}
-          </DialogBody>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDialog}>
-              Cancel
+      {/* Bulk action bar */}
+      {selection.count > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group
+            gap="sm"
+            px="md"
+            py="xs"
+            style={(theme) => ({
+              background: "var(--mantine-color-body)",
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: theme.radius.md,
+              boxShadow: theme.shadows.lg,
+            })}
+          >
+            <Text size="sm" fw={500}>{selection.count} selected</Text>
+            <Button
+              variant="light"
+              color="red"
+              size="xs"
+              leftSection={<IconTrash size={14} />}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              Delete
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : editing ? "Save Changes" : "Add Webhook"}
-            </Button>
-          </DialogFooter>
+            <ActionIcon variant="subtle" size="sm" onClick={selection.clear}>
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+        </Box>
+      )}
+
+      {/* Create modal */}
+      <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Add Webhook">
+        <form onSubmit={createForm.onSubmit(handleCreate)}>
+          <Stack>
+            <TextInput label="Endpoint URL" placeholder="https://example.com/webhook" required {...createForm.getInputProps("url")} />
+            <TextInput label="Description" description="Optional" placeholder="e.g. Slack notification for new users" {...createForm.getInputProps("description")} />
+            <TextInput label="Events" description="Comma-separated, * = all" placeholder="e.g. user.created, user.updated" {...createForm.getInputProps("events")} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Add Webhook</Button>
+            </Group>
+          </Stack>
         </form>
-      </Dialog>
+      </Modal>
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Webhook"
-        message="Are you sure you want to delete this webhook? All delivery history will also be removed."
-        confirmLabel="Delete"
-        loading={acting === deleteTarget?.id}
-        details={deleteTarget && (
-          <>
-            <div><span className="font-medium">URL:</span> <span className="font-mono text-xs">{deleteTarget.url}</span></div>
-            {deleteTarget.description && <div><span className="font-medium">Description:</span> {deleteTarget.description}</div>}
-          </>
-        )}
-      />
+      {/* Edit modal */}
+      <Modal opened={!!editWebhook} onClose={() => setEditWebhook(null)} title="Edit Webhook">
+        <form onSubmit={editForm.onSubmit(handleEdit)}>
+          <Stack>
+            <TextInput label="Endpoint URL" placeholder="https://example.com/webhook" required {...editForm.getInputProps("url")} />
+            <TextInput label="Description" description="Optional" placeholder="e.g. Slack notification for new users" {...editForm.getInputProps("description")} />
+            <TextInput label="Events" description="Comma-separated, * = all" placeholder="e.g. user.created, user.updated" {...editForm.getInputProps("events")} />
+            <Switch label="Active" {...editForm.getInputProps("is_active", { type: "checkbox" })} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setEditWebhook(null)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Save Changes</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
 
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Delete
-        </Button>
-      </BulkActionBar>
+      {/* Delete confirmation */}
+      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Webhook">
+        <Stack>
+          <Text size="sm">Are you sure you want to delete this webhook? All delivery history will also be removed.</Text>
+          {deleteTarget && (
+            <Box>
+              <Text size="sm"><strong>URL:</strong> <Text span size="xs" ff="monospace">{deleteTarget.url}</Text></Text>
+              {deleteTarget.description && <Text size="sm"><strong>Description:</strong> {deleteTarget.description}</Text>}
+            </Box>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleDelete} loading={actionLoading}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-      <ConfirmDialog
-        open={bulkConfirmOpen}
-        onClose={() => setBulkConfirmOpen(false)}
-        onConfirm={handleBulkDelete}
-        title="Delete Webhooks"
-        message={`Are you sure you want to delete ${selection.count} webhook${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        loading={bulkDeleting}
-      />
-    </div>
-  );
-}
-
-function EventBadge({ event }: { event: string }) {
-  const isWildcard = event === "*";
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-      isWildcard
-        ? "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400"
-        : "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
-    }`}>
-      {isWildcard ? "all events" : event}
-    </span>
-  );
-}
-
-function StatusBadge({ active }: { active: boolean }) {
-  if (active) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400">
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400">
-      Paused
-    </span>
+      {/* Bulk delete confirmation */}
+      <Modal opened={bulkDeleteOpen} onClose={() => setBulkDeleteOpen(false)} title="Delete Webhooks">
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to delete <strong>{selection.count}</strong> webhook(s)? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkDelete} loading={actionLoading}>
+              Delete {selection.count} webhook(s)
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

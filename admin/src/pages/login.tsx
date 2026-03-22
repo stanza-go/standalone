@@ -1,40 +1,50 @@
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Alert,
+  Button,
+  Center,
+  Container,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { IconAlertCircle } from "@tabler/icons-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
-import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  const form = useForm({
+    initialValues: {
+      email: "",
+      password: "",
+    },
+    validate: {
+      email: (v) => (!v ? "Email is required" : null),
+      password: (v) => (!v ? "Password is required" : null),
+    },
+  });
+
+  async function handleSubmit(values: typeof form.values) {
     setError("");
-    setFieldErrors({});
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(values.email, values.password);
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
-        setFieldErrors(err.fields);
+        if (err.fields.email) form.setFieldError("email", err.fields.email);
+        if (err.fields.password) form.setFieldError("password", err.fields.password);
       } else {
         setError("Login failed");
       }
@@ -44,58 +54,52 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Stanza Admin</CardTitle>
-          <CardDescription>Sign in to continue</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && !Object.keys(fieldErrors).length && (
-              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
+    <Center h="100vh">
+      <Container size={420} w="100%">
+        <Title ta="center" order={2}>
+          Stanza Admin
+        </Title>
+        <Text c="dimmed" size="sm" ta="center" mt={5}>
+          Sign in to continue
+        </Text>
+
+        <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+          <form onSubmit={form.onSubmit(handleSubmit)}>
+            <Stack>
+              {error && !form.errors.email && !form.errors.password && (
+                <Alert
+                  icon={<IconAlertCircle size={16} />}
+                  color="red"
+                  variant="light"
+                >
+                  {error}
+                </Alert>
+              )}
+
+              <TextInput
+                label="Email"
                 placeholder="admin@stanza.dev"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
                 autoComplete="email"
                 autoFocus
-                className={fieldErrors.email ? "border-destructive" : ""}
-              />
-              {fieldErrors.email && (
-                <p className="text-sm text-destructive">{fieldErrors.email}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
-                className={fieldErrors.password ? "border-destructive" : ""}
+                {...form.getInputProps("email")}
               />
-              {fieldErrors.password && (
-                <p className="text-sm text-destructive">{fieldErrors.password}</p>
-              )}
-            </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting && <Loader2 className="animate-spin" />}
-              Sign in
-            </Button>
+
+              <PasswordInput
+                label="Password"
+                placeholder="Your password"
+                autoComplete="current-password"
+                required
+                {...form.getInputProps("password")}
+              />
+
+              <Button type="submit" fullWidth loading={submitting}>
+                Sign in
+              </Button>
+            </Stack>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        </Paper>
+      </Container>
+    </Center>
   );
 }

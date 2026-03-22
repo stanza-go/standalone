@@ -1,43 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, del, post, upload, downloadCSV } from "@/lib/api";
-import { useSelection } from "@/lib/use-selection";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogCloseButton,
-  DialogBody,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import {
-  Trash2,
-  Download,
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Group,
   Image,
-  FileText,
-  Film,
-  File,
-  Eye,
-  Upload,
-} from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { Pagination } from "@/components/ui/pagination";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-
-const UPLOAD_COLUMNS = [
-  { key: "name", label: "Name" },
-  { key: "content_type", label: "Type" },
-  { key: "size", label: "Size" },
-  { key: "owner", label: "Owner" },
-  { key: "created_at", label: "Uploaded" },
-];
+  Loader,
+  Modal,
+  Pagination,
+  SegmentedControl,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { Dropzone } from "@mantine/dropzone";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconCheck,
+  IconDownload,
+  IconEye,
+  IconFile,
+  IconFileText,
+  IconMovie,
+  IconPhoto,
+  IconTrash,
+  IconUpload,
+  IconX,
+} from "@tabler/icons-react";
+import { get, del, post, upload as uploadFile, downloadCSV } from "@/lib/api";
+import { useSort } from "@/hooks/use-sort";
+import { useSelection } from "@/hooks/use-selection";
 
 interface UploadItem {
   id: number;
@@ -53,18 +55,20 @@ interface UploadItem {
   deleted_at: string;
 }
 
+const PAGE_SIZE = 20;
+
 const TYPE_FILTERS = [
-  { label: "All", value: "" },
-  { label: "Images", value: "image/" },
-  { label: "Videos", value: "video/" },
-  { label: "PDFs", value: "application/pdf" },
+  { value: "", label: "All" },
+  { value: "image/", label: "Images" },
+  { value: "video/", label: "Videos" },
+  { value: "application/pdf", label: "PDFs" },
 ];
 
 function fileIcon(contentType: string) {
-  if (contentType.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
-  if (contentType.startsWith("video/")) return <Film className="h-4 w-4 text-purple-500" />;
-  if (contentType === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
-  return <File className="h-4 w-4 text-gray-500" />;
+  if (contentType.startsWith("image/")) return <IconPhoto size={18} color="var(--mantine-color-blue-5)" />;
+  if (contentType.startsWith("video/")) return <IconMovie size={18} color="var(--mantine-color-violet-5)" />;
+  if (contentType === "application/pdf") return <IconFileText size={18} color="var(--mantine-color-red-5)" />;
+  return <IconFile size={18} color="var(--mantine-color-gray-5)" />;
 }
 
 function formatBytes(bytes: number): string {
@@ -77,8 +81,7 @@ function formatBytes(bytes: number): string {
 
 function formatTime(iso: string): string {
   if (!iso) return "\u2014";
-  const d = new Date(iso);
-  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+  return new Date(iso).toLocaleString();
 }
 
 function thumbUrl(id: number): string {
@@ -89,565 +92,527 @@ function fileUrl(id: number): string {
   return `/api/admin/uploads/${id}/file`;
 }
 
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
+}
+
 export default function UploadsPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
-
-  // Filters.
+  // Filters
   const [typeFilter, setTypeFilter] = useState("");
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
-  // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+  const selection = useSelection();
 
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("uploads", UPLOAD_COLUMNS);
-
-  // Preview dialog.
+  // Dialogs
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [preview, setPreview] = useState<UploadItem | null>(null);
-
-  // Delete confirmation.
   const [deleteTarget, setDeleteTarget] = useState<UploadItem | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  // Selection.
-  const selection = useSelection<number>();
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
-
-  // Upload dialog.
-  const [showUpload, setShowUpload] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  // Upload state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [uploadError, setUploadError] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
       if (typeFilter) params.set("content_type", typeFilter);
       if (includeDeleted) params.set("include_deleted", "true");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
 
-      const data = await get<{ uploads: UploadItem[]; total: number }>(
-        `/admin/uploads?${params}`
-      );
+      const data = await get<{ uploads: UploadItem[]; total: number }>(`/admin/uploads?${params}`);
       setUploads(data.uploads ?? []);
       setTotal(data.total);
-      setError("");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to load uploads";
-      setError(msg);
+    } catch {
+      setError("Failed to load uploads");
     } finally {
       setLoading(false);
     }
-  }, [page, typeFilter, includeDeleted, sort.column, sort.direction]);
+  }, [page, typeFilter, includeDeleted, sort]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Clear selection when page, filters, or sort changes.
+  useEffect(() => {
+    setPage(1);
+    selection.clear();
+  }, [typeFilter, includeDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     selection.clear();
-  }, [page, typeFilter, includeDeleted, sort.column, sort.direction]);
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    setActing(id);
-    try {
-      await del(`/admin/uploads/${id}`);
-      setDeleteTarget(null);
-      toast.success("Upload deleted");
-      await load();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to delete upload";
-      toast.error(msg);
-    } finally {
-      setActing(null);
-    }
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) setSelectedFiles(files);
-  }
-
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) setSelectedFiles(files);
-  }
+  }, [page, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleUpload() {
     if (selectedFiles.length === 0) return;
     setUploading(true);
-    setUploadError("");
     try {
       for (const file of selectedFiles) {
-        await upload("/admin/uploads", file);
+        await uploadFile("/admin/uploads", file);
       }
       const count = selectedFiles.length;
-      setShowUpload(false);
+      notifications.show({ message: `${count} file(s) uploaded`, color: "green", icon: <IconCheck size={16} /> });
+      setUploadOpen(false);
       setSelectedFiles([]);
-      setPage(0);
-      toast.success(`${count} file${count !== 1 ? "s" : ""} uploaded`);
-      await load();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      setUploadError(msg);
+      setPage(1);
+      load();
+    } catch {
+      notifications.show({ message: "Upload failed", color: "red" });
     } finally {
       setUploading(false);
     }
   }
 
-  function closeUploadDialog() {
-    setShowUpload(false);
-    setSelectedFiles([]);
-    setUploadError("");
-  }
-
-  function handleFilterChange(value: string) {
-    setTypeFilter(value);
-    setPage(0);
-  }
-
-  async function handleExport() {
-    setExporting(true);
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setActionLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (typeFilter) params.set("content_type", typeFilter);
-      if (includeDeleted) params.set("include_deleted", "true");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-      await downloadCSV(`/admin/uploads/export?${params}`);
+      await del(`/admin/uploads/${deleteTarget.id}`);
+      notifications.show({ message: "Upload deleted", color: "green", icon: <IconCheck size={16} /> });
+      setDeleteTarget(null);
+      load();
     } catch {
-      toast.error("Failed to export uploads");
+      notifications.show({ message: "Failed to delete upload", color: "red" });
     } finally {
-      setExporting(false);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkDelete() {
-    setBulkDeleting(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/uploads/bulk-delete", { ids: selection.ids });
-      setBulkConfirmOpen(false);
+      notifications.show({ message: `${data.affected} upload(s) deleted`, color: "green", icon: <IconCheck size={16} /> });
+      setBulkDeleteOpen(false);
       selection.clear();
-      toast.success(`${data.affected} upload${data.affected !== 1 ? "s" : ""} deleted`);
-      await load();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to bulk delete uploads";
-      toast.error(msg);
+      load();
+    } catch {
+      notifications.show({ message: "Failed to delete uploads", color: "red" });
     } finally {
-      setBulkDeleting(false);
+      setActionLoading(false);
     }
   }
 
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Uploads</h1>
-        <TableSkeleton columns={[
-          { width: "w-10" },
-          { width: "w-32" },
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-16", hidden: "hidden md:table-cell" },
-          { width: "w-20", hidden: "hidden lg:table-cell" },
-          { width: "w-24", hidden: "hidden lg:table-cell" },
-          { width: "w-20" },
-        ]} />
-      </div>
-    );
+  async function handleExport() {
+    try {
+      const params = new URLSearchParams({
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      if (typeFilter) params.set("content_type", typeFilter);
+      if (includeDeleted) params.set("include_deleted", "true");
+      await downloadCSV(`/admin/uploads/export?${params}`);
+    } catch {
+      notifications.show({ message: "Failed to export", color: "red" });
+    }
   }
 
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const uploadIds = uploads.map((u) => u.id);
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Uploads</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {total} file{total !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Uploads</Title>
+          {!loading && <Badge variant="light" size="lg">{total}</Badge>}
+        </Group>
+        <Group gap="xs">
+          <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>
+            Export CSV
           </Button>
-          <Button onClick={() => setShowUpload(true)}>
-            <Upload className="h-4 w-4 mr-2" />
+          <Button leftSection={<IconUpload size={16} />} onClick={() => setUploadOpen(true)}>
             Upload File
           </Button>
-        </div>
-      </div>
-
-      {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
-      )}
+        </Group>
+      </Group>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {TYPE_FILTERS.map((f) => (
-          <Button
-            key={f.value}
-            variant={typeFilter === f.value ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleFilterChange(f.value)}
-          >
-            {f.label}
-          </Button>
-        ))}
-        <span className="mx-2 h-4 w-px bg-border" />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeDeleted}
-            onChange={(e) => {
-              setIncludeDeleted(e.target.checked);
-              setPage(0);
-            }}
-            className="rounded border-border"
-          />
-          Show deleted
-        </label>
-      </div>
+      <Group gap="sm">
+        <SegmentedControl
+          value={typeFilter}
+          onChange={setTypeFilter}
+          data={TYPE_FILTERS}
+          size="sm"
+        />
+        <Checkbox
+          label="Show deleted"
+          checked={includeDeleted}
+          onChange={(e) => setIncludeDeleted(e.currentTarget.checked)}
+        />
+      </Group>
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected(uploads.map((u) => u.id))}
-                  onChange={() => selection.toggleAll(uploads.map((u) => u.id))}
-                  className="rounded border-input"
-                />
-              </th>
-              <th className="text-left p-3 font-medium w-12"></th>
-              {isVisible("name") && <SortableHeader label="Name" column="original_name" sort={sort} onSort={toggleSort} />}
-              {isVisible("content_type") && <SortableHeader label="Type" column="content_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              {isVisible("size") && <SortableHeader label="Size" column="size_bytes" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              {isVisible("owner") && <th className="text-left p-3 font-medium hidden lg:table-cell">Owner</th>}
-              {isVisible("created_at") && <SortableHeader label="Uploaded" column="created_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />}
-              <th className="text-right p-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {uploads.length === 0 ? (
-              <TableEmptyRow colSpan={visibleCount + 3} message={typeFilter ? "No uploads match this filter" : "No uploads found"} />
-            ) : (
-              uploads.map((upload) => (
-                <tr
-                  key={upload.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 ${upload.deleted_at ? "opacity-50" : ""} ${selection.isSelected(upload.id) ? "bg-muted/40" : ""}`}
-                >
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={selection.isSelected(upload.id)}
-                      onChange={() => selection.toggle(upload.id)}
-                      className="rounded border-input"
-                    />
-                  </td>
-                  {/* Thumbnail / icon */}
-                  <td className="p-3">
-                    {upload.has_thumbnail ? (
-                      <img
-                        src={thumbUrl(upload.id)}
-                        alt=""
-                        className="h-8 w-8 rounded object-cover bg-muted"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
-                        {fileIcon(upload.content_type)}
-                      </div>
-                    )}
-                  </td>
-                  {isVisible("name") && (
-                    <td className="p-3">
-                      <button
-                        className="text-left hover:underline cursor-pointer font-medium truncate max-w-[200px] block"
-                        onClick={() => setPreview(upload)}
-                        title={upload.original_name}
-                      >
-                        {upload.original_name}
-                      </button>
-                      {upload.deleted_at && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 mt-0.5">
-                          Deleted
-                        </span>
-                      )}
-                    </td>
-                  )}
-                  {isVisible("content_type") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {upload.content_type}
-                    </td>
-                  )}
-                  {isVisible("size") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {formatBytes(upload.size_bytes)}
-                    </td>
-                  )}
-                  {isVisible("owner") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                      {upload.entity_type && upload.entity_id
-                        ? `${upload.entity_type}:${upload.entity_id}`
-                        : "\u2014"}
-                    </td>
-                  )}
-                  {isVisible("created_at") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                      {formatTime(upload.created_at)}
-                    </td>
-                  )}
-                  <td className="p-3 text-right">
-                    <span className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Preview"
-                        onClick={() => setPreview(upload)}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <a href={fileUrl(upload.id)} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="sm" title="Download">
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                      </a>
-                      {!upload.deleted_at && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Delete"
-                          onClick={() => setDeleteTarget(upload)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      )}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
-
-      {/* Upload Dialog */}
-      {showUpload && (
-        <Dialog open={showUpload} onClose={closeUploadDialog}>
-          <DialogHeader>
-            <DialogTitle>Upload File</DialogTitle>
-            <DialogCloseButton onClick={closeUploadDialog} />
-          </DialogHeader>
-          <DialogBody className="space-y-4">
-            {uploadError && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
-                {uploadError}
-              </div>
-            )}
-
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragOver
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-muted-foreground/50"
-              }`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mb-2">
-                Drag and drop files here, or
-              </p>
-              <label className="inline-flex">
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-                <span className="text-sm font-medium text-primary hover:underline cursor-pointer">
-                  browse files
-                </span>
-              </label>
-              <p className="text-xs text-muted-foreground mt-2">Max 50 MB per file</p>
-            </div>
-
-            {selectedFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">
-                  {selectedFiles.length} file{selectedFiles.length !== 1 ? "s" : ""} selected
-                </p>
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {selectedFiles.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
-                      <span className="truncate mr-2">{f.name}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">{formatBytes(f.size)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeUploadDialog} disabled={uploading}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpload} disabled={uploading || selectedFiles.length === 0}>
-              {uploading ? "Uploading..." : `Upload ${selectedFiles.length > 0 ? selectedFiles.length : ""} file${selectedFiles.length !== 1 ? "s" : ""}`}
-            </Button>
-          </DialogFooter>
-        </Dialog>
+      {/* Error */}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
       )}
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Upload"
-        message="Are you sure you want to delete this file? This action cannot be undone."
-        confirmLabel="Delete"
-        loading={acting === deleteTarget?.id}
-        details={deleteTarget && (
-          <>
-            <div><span className="font-medium">File:</span> {deleteTarget.original_name}</div>
-            <div><span className="font-medium">Size:</span> {formatBytes(deleteTarget.size_bytes)}</div>
-          </>
-        )}
-      />
+      {/* Table */}
+      {loading && uploads.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={600}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      checked={selection.isAllSelected(uploadIds)}
+                      indeterminate={selection.count > 0 && !selection.isAllSelected(uploadIds)}
+                      onChange={() => selection.toggleAll(uploadIds)}
+                      aria-label="Select all"
+                    />
+                  </Table.Th>
+                  <Table.Th w={48}></Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("original_name")}>
+                    <Group gap={4} wrap="nowrap">Name <SortIcon column="original_name" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("content_type")}>
+                    <Group gap={4} wrap="nowrap">Type <SortIcon column="content_type" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("size_bytes")}>
+                    <Group gap={4} wrap="nowrap">Size <SortIcon column="size_bytes" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Owner</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                    <Group gap={4} wrap="nowrap">Uploaded <SortIcon column="created_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th ta="right">Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {uploads.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={8}>
+                      <Text ta="center" c="dimmed" py="lg">
+                        {typeFilter ? "No uploads match this filter" : "No uploads found"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  uploads.map((u) => (
+                    <Table.Tr
+                      key={u.id}
+                      bg={selection.isSelected(u.id) ? "var(--mantine-primary-color-light)" : undefined}
+                      style={u.deleted_at ? { opacity: 0.5 } : undefined}
+                    >
+                      <Table.Td>
+                        <Checkbox
+                          checked={selection.isSelected(u.id)}
+                          onChange={() => selection.toggle(u.id)}
+                          aria-label={`Select ${u.original_name}`}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        {u.has_thumbnail ? (
+                          <Image
+                            src={thumbUrl(u.id)}
+                            alt=""
+                            w={32}
+                            h={32}
+                            radius="sm"
+                            fit="cover"
+                            style={{ background: "var(--mantine-color-default-hover)" }}
+                          />
+                        ) : (
+                          <Box w={32} h={32} style={{ display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--mantine-radius-sm)", background: "var(--mantine-color-default-hover)" }}>
+                            {fileIcon(u.content_type)}
+                          </Box>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Text
+                          size="sm"
+                          fw={500}
+                          style={{ cursor: "pointer" }}
+                          c="blue"
+                          truncate
+                          maw={200}
+                          onClick={() => setPreview(u)}
+                        >
+                          {u.original_name}
+                        </Text>
+                        {u.deleted_at && <Badge variant="light" color="red" size="xs">Deleted</Badge>}
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">{u.content_type}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">{formatBytes(u.size_bytes)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">
+                          {u.entity_type && u.entity_id ? `${u.entity_type}:${u.entity_id}` : "\u2014"}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">{formatTime(u.created_at)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4} justify="flex-end" wrap="nowrap">
+                          <Tooltip label="Preview">
+                            <ActionIcon variant="subtle" size="sm" onClick={() => setPreview(u)}>
+                              <IconEye size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Download">
+                            <ActionIcon
+                              variant="subtle"
+                              size="sm"
+                              component="a"
+                              href={fileUrl(u.id)}
+                              target="_blank"
+                            >
+                              <IconDownload size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          {!u.deleted_at && (
+                            <Tooltip label="Delete">
+                              <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setDeleteTarget(u)}>
+                                <IconTrash size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
 
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Delete
-        </Button>
-      </BulkActionBar>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </Text>
+              <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+            </Group>
+          )}
+        </>
+      )}
 
-      <ConfirmDialog
-        open={bulkConfirmOpen}
-        onClose={() => setBulkConfirmOpen(false)}
-        onConfirm={handleBulkDelete}
-        title="Delete Uploads"
-        message={`Are you sure you want to delete ${selection.count} upload${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        loading={bulkDeleting}
-      />
+      {/* Bulk action bar */}
+      {selection.count > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group
+            gap="sm"
+            px="md"
+            py="xs"
+            style={(theme) => ({
+              background: "var(--mantine-color-body)",
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: theme.radius.md,
+              boxShadow: theme.shadows.lg,
+            })}
+          >
+            <Text size="sm" fw={500}>{selection.count} selected</Text>
+            <Button
+              variant="light"
+              color="red"
+              size="xs"
+              leftSection={<IconTrash size={14} />}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              Delete
+            </Button>
+            <ActionIcon variant="subtle" size="sm" onClick={selection.clear}>
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+        </Box>
+      )}
 
-      {/* Preview Dialog */}
-      {preview && (
-        <Dialog open={!!preview} onClose={() => setPreview(null)}>
-          <DialogHeader>
-            <DialogTitle className="truncate max-w-md">{preview.original_name}</DialogTitle>
-            <DialogCloseButton onClick={() => setPreview(null)} />
-          </DialogHeader>
+      {/* Upload dialog */}
+      <Modal
+        opened={uploadOpen}
+        onClose={() => { setUploadOpen(false); setSelectedFiles([]); }}
+        title="Upload File"
+        size="md"
+      >
+        <Stack>
+          <Dropzone
+            onDrop={(files) => setSelectedFiles((prev) => [...prev, ...files])}
+            maxSize={50 * 1024 * 1024}
+            multiple
+          >
+            <Group justify="center" gap="xl" mih={120} style={{ pointerEvents: "none" }}>
+              <Dropzone.Accept>
+                <IconUpload size={40} stroke={1.5} color="var(--mantine-color-blue-6)" />
+              </Dropzone.Accept>
+              <Dropzone.Reject>
+                <IconX size={40} stroke={1.5} color="var(--mantine-color-red-6)" />
+              </Dropzone.Reject>
+              <Dropzone.Idle>
+                <IconUpload size={40} stroke={1.5} color="var(--mantine-color-dimmed)" />
+              </Dropzone.Idle>
+              <div>
+                <Text size="sm" inline>Drag files here or click to browse</Text>
+                <Text size="xs" c="dimmed" inline mt={7}>Max 50 MB per file</Text>
+              </div>
+            </Group>
+          </Dropzone>
 
-          <DialogBody className="space-y-4">
+          {selectedFiles.length > 0 && (
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>{selectedFiles.length} file(s) selected</Text>
+              {selectedFiles.map((f, i) => (
+                <Group key={i} justify="space-between" px="xs" py={4} bg="var(--mantine-color-default-hover)" style={{ borderRadius: "var(--mantine-radius-sm)" }}>
+                  <Text size="sm" truncate style={{ flex: 1 }}>{f.name}</Text>
+                  <Text size="xs" c="dimmed">{formatBytes(f.size)}</Text>
+                </Group>
+              ))}
+            </Stack>
+          )}
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setUploadOpen(false); setSelectedFiles([]); }}>Cancel</Button>
+            <Button onClick={handleUpload} loading={uploading} disabled={selectedFiles.length === 0}>
+              Upload {selectedFiles.length > 0 ? `${selectedFiles.length} file(s)` : ""}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Preview dialog */}
+      <Modal
+        opened={!!preview}
+        onClose={() => setPreview(null)}
+        title={preview?.original_name ?? "Preview"}
+        size="lg"
+      >
+        {preview && (
+          <Stack>
             {/* Preview area */}
             {preview.content_type.startsWith("image/") ? (
-              <div className="flex justify-center bg-muted rounded-lg p-4">
-                <img
+              <Box bg="var(--mantine-color-default-hover)" p="md" style={{ borderRadius: "var(--mantine-radius-md)", textAlign: "center" }}>
+                <Image
                   src={fileUrl(preview.id)}
                   alt={preview.original_name}
-                  className="max-h-96 max-w-full object-contain rounded"
+                  mah={400}
+                  fit="contain"
+                  radius="sm"
                 />
-              </div>
+              </Box>
             ) : preview.content_type.startsWith("video/") ? (
-              <div className="flex justify-center bg-muted rounded-lg p-4">
+              <Box bg="var(--mantine-color-default-hover)" p="md" style={{ borderRadius: "var(--mantine-radius-md)", textAlign: "center" }}>
                 <video
                   src={fileUrl(preview.id)}
                   controls
-                  className="max-h-96 max-w-full rounded"
+                  style={{ maxHeight: 400, maxWidth: "100%", borderRadius: "var(--mantine-radius-sm)" }}
                 />
-              </div>
+              </Box>
             ) : (
-              <div className="flex flex-col items-center gap-3 py-8 bg-muted rounded-lg">
+              <Box bg="var(--mantine-color-default-hover)" py="xl" style={{ borderRadius: "var(--mantine-radius-md)", textAlign: "center" }}>
                 {fileIcon(preview.content_type)}
-                <p className="text-sm text-muted-foreground">No preview available</p>
-              </div>
+                <Text size="sm" c="dimmed" mt="xs">No preview available</Text>
+              </Box>
             )}
 
             {/* Metadata */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <SimpleGrid cols={2} spacing="xs">
               <div>
-                <span className="text-muted-foreground">Type</span>
-                <p className="font-medium">{preview.content_type}</p>
+                <Text size="xs" c="dimmed">Type</Text>
+                <Text size="sm" fw={500}>{preview.content_type}</Text>
               </div>
               <div>
-                <span className="text-muted-foreground">Size</span>
-                <p className="font-medium">{formatBytes(preview.size_bytes)}</p>
+                <Text size="xs" c="dimmed">Size</Text>
+                <Text size="sm" fw={500}>{formatBytes(preview.size_bytes)}</Text>
               </div>
               <div>
-                <span className="text-muted-foreground">Owner</span>
-                <p className="font-medium">
-                  {preview.entity_type && preview.entity_id
-                    ? `${preview.entity_type}:${preview.entity_id}`
-                    : "\u2014"}
-                </p>
+                <Text size="xs" c="dimmed">Owner</Text>
+                <Text size="sm" fw={500}>
+                  {preview.entity_type && preview.entity_id ? `${preview.entity_type}:${preview.entity_id}` : "\u2014"}
+                </Text>
               </div>
               <div>
-                <span className="text-muted-foreground">Uploaded</span>
-                <p className="font-medium">{formatTime(preview.created_at)}</p>
+                <Text size="xs" c="dimmed">Uploaded</Text>
+                <Text size="sm" fw={500}>{formatTime(preview.created_at)}</Text>
               </div>
-              <div>
-                <span className="text-muted-foreground">UUID</span>
-                <p className="font-mono text-xs break-all">{preview.uuid}</p>
+              <div style={{ gridColumn: "span 2" }}>
+                <Text size="xs" c="dimmed">UUID</Text>
+                <Text size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>{preview.uuid}</Text>
               </div>
               {preview.deleted_at && (
                 <div>
-                  <span className="text-muted-foreground">Deleted</span>
-                  <p className="font-medium text-red-600 dark:text-red-400">{formatTime(preview.deleted_at)}</p>
+                  <Text size="xs" c="dimmed">Deleted</Text>
+                  <Text size="sm" fw={500} c="red">{formatTime(preview.deleted_at)}</Text>
                 </div>
               )}
-            </div>
-          </DialogBody>
+            </SimpleGrid>
 
-          <DialogFooter>
-            <a href={fileUrl(preview.id)} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                leftSection={<IconDownload size={16} />}
+                component="a"
+                href={fileUrl(preview.id)}
+                target="_blank"
+              >
                 Download
               </Button>
-            </a>
-            <Button variant="outline" onClick={() => setPreview(null)}>
-              Close
+              <Button variant="default" onClick={() => setPreview(null)}>Close</Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Upload">
+        <Stack>
+          <Text size="sm">Are you sure you want to delete this file? This action cannot be undone.</Text>
+          {deleteTarget && (
+            <Box>
+              <Text size="sm"><strong>File:</strong> {deleteTarget.original_name}</Text>
+              <Text size="sm"><strong>Size:</strong> {formatBytes(deleteTarget.size_bytes)}</Text>
+            </Box>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleDelete} loading={actionLoading}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Bulk delete confirmation */}
+      <Modal opened={bulkDeleteOpen} onClose={() => setBulkDeleteOpen(false)} title="Delete Uploads">
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to delete <strong>{selection.count}</strong> upload(s)? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkDelete} loading={actionLoading}>
+              Delete {selection.count} upload(s)
             </Button>
-          </DialogFooter>
-        </Dialog>
-      )}
-    </div>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

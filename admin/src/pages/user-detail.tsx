@@ -1,26 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router";
-import { toast } from "sonner";
-import { get, del } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { Pagination } from "@/components/ui/pagination";
+import { useParams, Link } from "react-router";
 import {
-  User,
-  Activity,
-  Monitor,
-  Upload,
-  Trash2,
+  ActionIcon,
+  Alert,
+  Anchor,
+  Badge,
+  Breadcrumbs,
+  Button,
+  Card,
+  Group,
   Image,
-  FileText,
-  Film,
-  File,
-} from "lucide-react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+  Loader,
+  Modal,
+  Pagination,
+  SimpleGrid,
+  Stack,
+  Table,
+  Tabs,
+  Text,
+  Title,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconFile,
+  IconFileText,
+  IconHistory,
+  IconPhoto,
+  IconTrash,
+  IconUser,
+  IconVideo,
+  IconDeviceDesktop,
+  IconUpload,
+} from "@tabler/icons-react";
+import { get, del } from "@/lib/api";
 
 interface UserDetail {
   id: number;
@@ -58,7 +72,49 @@ interface UploadEntry {
   created_at: string;
 }
 
-type Tab = "activity" | "sessions" | "uploads";
+const PAGE_SIZE = 20;
+
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "\u2014";
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function formatTime(iso: string): string {
+  if (!iso) return "\u2014";
+  const d = new Date(iso);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function fileIcon(contentType: string) {
+  if (contentType.startsWith("image/")) return <IconPhoto size={16} color="var(--mantine-color-blue-5)" />;
+  if (contentType.startsWith("video/")) return <IconVideo size={16} color="var(--mantine-color-violet-5)" />;
+  if (contentType === "application/pdf") return <IconFileText size={16} color="var(--mantine-color-red-5)" />;
+  return <IconFile size={16} color="var(--mantine-color-dimmed)" />;
+}
+
+function actionLabel(action: string): string {
+  const map: Record<string, string> = {
+    "user.create": "Created",
+    "user.update": "Updated",
+    "user.delete": "Deleted",
+    "user.impersonate": "Impersonated",
+  };
+  return map[action] || action;
+}
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,28 +123,25 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Tabs
-  const [tab, setTab] = useState<Tab>("activity");
+  const [tab, setTab] = useState<string | null>("activity");
 
   // Activity
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [activityTotal, setActivityTotal] = useState(0);
-  const [activityPage, setActivityPage] = useState(0);
+  const [activityPage, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [revokingSession, setRevokingSession] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   // Uploads
   const [uploads, setUploads] = useState<UploadEntry[]>([]);
   const [uploadsTotal, setUploadsTotal] = useState(0);
-  const [uploadsPage, setUploadsPage] = useState(0);
+  const [uploadsPage, setUploadsPage] = useState(1);
   const [uploadsLoading, setUploadsLoading] = useState(false);
-
-  const pageSize = 20;
 
   const loadUser = useCallback(async () => {
     try {
@@ -109,8 +162,8 @@ export default function UserDetailPage() {
     setActivityLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(activityPage * pageSize));
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String((activityPage - 1) * PAGE_SIZE));
       const data = await get<{ entries: ActivityEntry[]; total: number }>(
         `/admin/users/${id}/activity?${params}`
       );
@@ -142,8 +195,8 @@ export default function UserDetailPage() {
     setUploadsLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(uploadsPage * pageSize));
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String((uploadsPage - 1) * PAGE_SIZE));
       const data = await get<{ uploads: UploadEntry[]; total: number }>(
         `/admin/users/${id}/uploads?${params}`
       );
@@ -174,359 +227,313 @@ export default function UserDetailPage() {
 
   async function revokeSession() {
     if (!revokeTarget) return;
-    const sessionId = revokeTarget.id;
-    setRevokingSession(sessionId);
+    setRevoking(true);
     try {
-      await del(`/admin/sessions/${sessionId}`);
+      await del(`/admin/sessions/${revokeTarget.id}`);
       setRevokeTarget(null);
-      toast.success("Session revoked");
+      notifications.show({ message: "Session revoked", color: "green", icon: <IconCheck size={16} /> });
       loadSessions();
     } catch (e: any) {
-      toast.error(e.message || "Failed to revoke session");
+      notifications.show({ message: e.message || "Failed to revoke session", color: "red", icon: <IconAlertCircle size={16} /> });
     } finally {
-      setRevokingSession(null);
+      setRevoking(false);
     }
   }
 
-  function formatTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
-  }
-
-  function relativeTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const now = Date.now();
-    const then = new Date(iso).getTime();
-    const diff = now - then;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  }
-
-  function formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1048576).toFixed(1)} MB`;
-  }
-
-  function fileIcon(contentType: string) {
-    if (contentType.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
-    if (contentType.startsWith("video/")) return <Film className="h-4 w-4 text-purple-500" />;
-    if (contentType === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
-    return <File className="h-4 w-4 text-muted-foreground" />;
-  }
-
-  function actionLabel(action: string): string {
-    const map: Record<string, string> = {
-      "user.create": "Created",
-      "user.update": "Updated",
-      "user.delete": "Deleted",
-      "user.impersonate": "Impersonated",
-    };
-    return map[action] || action;
-  }
-
   if (loading) {
-    return (
-      <div className="p-6">
-        <Spinner />
-      </div>
-    );
+    return <Stack align="center" pt="xl"><Loader /></Stack>;
   }
 
   if (error || !user) {
     return (
-      <div className="p-6">
-        <Breadcrumb items={[{ label: "Users", to: "/users" }, { label: "Not Found" }]} className="mb-4" />
-        <ErrorAlert message={error || "User not found"} onRetry={loadUser} />
-      </div>
+      <Stack p="md">
+        <Breadcrumbs>
+          <Anchor component={Link} to="/users" size="sm">Users</Anchor>
+          <Text size="sm">Not Found</Text>
+        </Breadcrumbs>
+        <Alert icon={<IconAlertCircle size={16} />} color="red" title="Error">
+          {error || "User not found"}
+        </Alert>
+      </Stack>
     );
   }
 
-  const tabs: { key: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
-    { key: "activity", label: "Activity", icon: <Activity className="h-4 w-4" />, count: activityTotal },
-    { key: "sessions", label: "Sessions", icon: <Monitor className="h-4 w-4" />, count: sessionCount },
-    { key: "uploads", label: "Uploads", icon: <Upload className="h-4 w-4" />, count: uploadsTotal },
-  ];
-
-  const activityPages = Math.ceil(activityTotal / pageSize);
-  const uploadsPages = Math.ceil(uploadsTotal / pageSize);
+  const activityPages = Math.ceil(activityTotal / PAGE_SIZE);
+  const uploadsPages = Math.ceil(uploadsTotal / PAGE_SIZE);
 
   return (
-    <div className="p-6">
-      {/* Breadcrumb + Header */}
-      <Breadcrumb items={[{ label: "Users", to: "/users" }, { label: user.email }]} className="mb-2" />
-      <h1 className="text-2xl font-bold mb-6">User Detail</h1>
+    <Stack p="md" gap="md">
+      <Breadcrumbs>
+        <Anchor component={Link} to="/users" size="sm">Users</Anchor>
+        <Text size="sm">{user.email}</Text>
+      </Breadcrumbs>
+
+      <Title order={3}>User Detail</Title>
 
       {/* Profile card */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Profile
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Email</p>
-              <p className="font-medium">{user.email}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Name</p>
-              <p className="font-medium">{user.name || "\u2014"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Status</p>
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  user.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
-                }`}
-              >
-                {user.is_active ? "Active" : "Inactive"}
-              </span>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Created</p>
-              <p className="text-sm">{formatTime(user.created_at)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Updated</p>
-              <p className="text-sm">{formatTime(user.updated_at)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Active Sessions</p>
-              <p className="text-sm font-medium">{sessionCount}</p>
-            </div>
+      <Card withBorder padding="lg">
+        <Group gap="xs" mb="md">
+          <IconUser size={20} />
+          <Text fw={600}>Profile</Text>
+        </Group>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+          <div>
+            <Text size="xs" c="dimmed">Email</Text>
+            <Text size="sm" fw={500}>{user.email}</Text>
           </div>
-        </CardContent>
+          <div>
+            <Text size="xs" c="dimmed">Name</Text>
+            <Text size="sm" fw={500}>{user.name || "\u2014"}</Text>
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">Status</Text>
+            <Badge color={user.is_active ? "green" : "red"} variant="light" size="sm">
+              {user.is_active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">Created</Text>
+            <Text size="sm">{formatTime(user.created_at)}</Text>
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">Updated</Text>
+            <Text size="sm">{formatTime(user.updated_at)}</Text>
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">Active Sessions</Text>
+            <Text size="sm" fw={500}>{sessionCount}</Text>
+          </div>
+        </SimpleGrid>
       </Card>
 
       {/* Tabs */}
-      <div className="flex border-b mb-4">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.icon}
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onChange={setTab}>
+        <Tabs.List>
+          <Tabs.Tab value="activity" leftSection={<IconHistory size={16} />}>
+            Activity {activityTotal > 0 && <Badge size="xs" variant="light" ml={4}>{activityTotal}</Badge>}
+          </Tabs.Tab>
+          <Tabs.Tab value="sessions" leftSection={<IconDeviceDesktop size={16} />}>
+            Sessions {sessionCount > 0 && <Badge size="xs" variant="light" ml={4}>{sessionCount}</Badge>}
+          </Tabs.Tab>
+          <Tabs.Tab value="uploads" leftSection={<IconUpload size={16} />}>
+            Uploads {uploadsTotal > 0 && <Badge size="xs" variant="light" ml={4}>{uploadsTotal}</Badge>}
+          </Tabs.Tab>
+        </Tabs.List>
 
-      {/* Tab content */}
-      {tab === "activity" && (
-        <div>
+        {/* Activity Tab */}
+        <Tabs.Panel value="activity" pt="md">
           {activityLoading ? (
-            <Spinner />
+            <Stack align="center" py="xl"><Loader size="sm" /></Stack>
           ) : (
-            <>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 border-b">
-                      <th className="text-left p-3 font-medium">Action</th>
-                      <th className="text-left p-3 font-medium hidden md:table-cell">By</th>
-                      <th className="text-left p-3 font-medium hidden lg:table-cell">Details</th>
-                      <th className="text-left p-3 font-medium hidden md:table-cell">IP</th>
-                      <th className="text-left p-3 font-medium">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+            <Stack gap="sm">
+              <Table.ScrollContainer minWidth={500}>
+                <Table striped highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Action</Table.Th>
+                      <Table.Th>By</Table.Th>
+                      <Table.Th>Details</Table.Th>
+                      <Table.Th>IP</Table.Th>
+                      <Table.Th>Time</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
                     {activity.length === 0 ? (
-                      <TableEmptyRow colSpan={5} message="No activity recorded" />
+                      <Table.Tr>
+                        <Table.Td colSpan={5}>
+                          <Text ta="center" c="dimmed" py="lg">No activity recorded</Text>
+                        </Table.Td>
+                      </Table.Tr>
                     ) : (
                       activity.map((e) => (
-                        <tr key={e.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="p-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted">
-                              {actionLabel(e.action)}
-                            </span>
-                          </td>
-                          <td className="p-3 hidden md:table-cell">
-                            <span className="text-xs">{e.admin_email || e.admin_id}</span>
-                          </td>
-                          <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs max-w-[200px] truncate">
-                            {e.details || "\u2014"}
-                          </td>
-                          <td className="p-3 hidden md:table-cell font-mono text-xs text-muted-foreground">
-                            {e.ip_address}
-                          </td>
-                          <td className="p-3 text-xs text-muted-foreground" title={formatTime(e.created_at)}>
-                            {relativeTime(e.created_at)}
-                          </td>
-                        </tr>
+                        <Table.Tr key={e.id}>
+                          <Table.Td>
+                            <Badge variant="light" size="sm">{actionLabel(e.action)}</Badge>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs">{e.admin_email || e.admin_id}</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed" lineClamp={1} maw={200}>
+                              {e.details || "\u2014"}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed" ff="monospace">{e.ip_address}</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed" title={formatTime(e.created_at)}>
+                              {timeAgo(e.created_at)}
+                            </Text>
+                          </Table.Td>
+                        </Table.Tr>
                       ))
                     )}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                page={activityPage}
-                totalPages={activityPages}
-                total={activityTotal}
-                pageSize={pageSize}
-                onPrev={() => setActivityPage(activityPage - 1)}
-                onNext={() => setActivityPage(activityPage + 1)}
-              />
-            </>
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+              {activityPages > 1 && (
+                <Group justify="center">
+                  <Pagination total={activityPages} value={activityPage} onChange={setActivityPage} size="sm" />
+                </Group>
+              )}
+            </Stack>
           )}
-        </div>
-      )}
+        </Tabs.Panel>
 
-      {tab === "sessions" && (
-        <div>
+        {/* Sessions Tab */}
+        <Tabs.Panel value="sessions" pt="md">
           {sessionsLoading ? (
-            <Spinner />
+            <Stack align="center" py="xl"><Loader size="sm" /></Stack>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b">
-                    <th className="text-left p-3 font-medium">Session ID</th>
-                    <th className="text-left p-3 font-medium hidden md:table-cell">Created</th>
-                    <th className="text-left p-3 font-medium">Expires</th>
-                    <th className="text-right p-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table.ScrollContainer minWidth={400}>
+              <Table striped highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Session ID</Table.Th>
+                    <Table.Th>Created</Table.Th>
+                    <Table.Th>Expires</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Actions</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
                   {sessions.length === 0 ? (
-                    <TableEmptyRow colSpan={4} message="No active sessions" />
+                    <Table.Tr>
+                      <Table.Td colSpan={4}>
+                        <Text ta="center" c="dimmed" py="lg">No active sessions</Text>
+                      </Table.Td>
+                    </Table.Tr>
                   ) : (
                     sessions.map((s) => (
-                      <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="p-3 font-mono text-xs">{s.id.substring(0, 12)}...</td>
-                        <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
-                          {relativeTime(s.created_at)}
-                        </td>
-                        <td className="p-3 text-xs text-muted-foreground">
-                          {formatTime(s.expires_at)}
-                        </td>
-                        <td className="p-3 text-right">
-                          <Button
-                            variant="ghost"
+                      <Table.Tr key={s.id}>
+                        <Table.Td>
+                          <Text size="xs" ff="monospace">{s.id.substring(0, 12)}...</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" c="dimmed">{timeAgo(s.created_at)}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" c="dimmed">{formatTime(s.expires_at)}</Text>
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <ActionIcon
+                            variant="subtle"
+                            color="red"
                             size="sm"
                             onClick={() => setRevokeTarget(s)}
-                            disabled={revokingSession === s.id}
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
-                        </td>
-                      </tr>
+                            <IconTrash size={14} />
+                          </ActionIcon>
+                        </Table.Td>
+                      </Table.Tr>
                     ))
                   )}
-                </tbody>
-              </table>
-            </div>
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
           )}
-        </div>
-      )}
+        </Tabs.Panel>
 
-      {tab === "uploads" && (
-        <div>
+        {/* Uploads Tab */}
+        <Tabs.Panel value="uploads" pt="md">
           {uploadsLoading ? (
-            <Spinner />
+            <Stack align="center" py="xl"><Loader size="sm" /></Stack>
           ) : (
-            <>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 border-b">
-                      <th className="text-left p-3 font-medium w-8"></th>
-                      <th className="text-left p-3 font-medium">Name</th>
-                      <th className="text-left p-3 font-medium hidden md:table-cell">Type</th>
-                      <th className="text-left p-3 font-medium hidden md:table-cell">Size</th>
-                      <th className="text-left p-3 font-medium">Uploaded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+            <Stack gap="sm">
+              <Table.ScrollContainer minWidth={500}>
+                <Table striped highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th w={40}></Table.Th>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Type</Table.Th>
+                      <Table.Th>Size</Table.Th>
+                      <Table.Th>Uploaded</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
                     {uploads.length === 0 ? (
-                      <TableEmptyRow colSpan={5} message="No uploads" />
+                      <Table.Tr>
+                        <Table.Td colSpan={5}>
+                          <Text ta="center" c="dimmed" py="lg">No uploads</Text>
+                        </Table.Td>
+                      </Table.Tr>
                     ) : (
                       uploads.map((u) => (
-                        <tr key={u.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="p-3">
+                        <Table.Tr key={u.id}>
+                          <Table.Td>
                             {u.has_thumbnail ? (
-                              <img
+                              <Image
                                 src={`/api/admin/uploads/${u.id}/thumb`}
                                 alt=""
-                                className="h-8 w-8 rounded object-cover"
+                                w={32}
+                                h={32}
+                                radius="sm"
+                                fit="cover"
                               />
                             ) : (
                               fileIcon(u.content_type)
                             )}
-                          </td>
-                          <td className="p-3">
-                            <a
+                          </Table.Td>
+                          <Table.Td>
+                            <Anchor
                               href={`/api/admin/uploads/${u.id}/file`}
                               target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:underline text-sm"
+                              size="sm"
                             >
                               {u.original_name}
-                            </a>
-                          </td>
-                          <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
-                            {u.content_type}
-                          </td>
-                          <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
-                            {formatSize(u.size_bytes)}
-                          </td>
-                          <td className="p-3 text-xs text-muted-foreground" title={formatTime(u.created_at)}>
-                            {relativeTime(u.created_at)}
-                          </td>
-                        </tr>
+                            </Anchor>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed">{u.content_type}</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed">{formatSize(u.size_bytes)}</Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Text size="xs" c="dimmed" title={formatTime(u.created_at)}>
+                              {timeAgo(u.created_at)}
+                            </Text>
+                          </Table.Td>
+                        </Table.Tr>
                       ))
                     )}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                page={uploadsPage}
-                totalPages={uploadsPages}
-                total={uploadsTotal}
-                pageSize={pageSize}
-                onPrev={() => setUploadsPage(uploadsPage - 1)}
-                onNext={() => setUploadsPage(uploadsPage + 1)}
-              />
-            </>
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+              {uploadsPages > 1 && (
+                <Group justify="center">
+                  <Pagination total={uploadsPages} value={uploadsPage} onChange={setUploadsPage} size="sm" />
+                </Group>
+              )}
+            </Stack>
           )}
-        </div>
-      )}
+        </Tabs.Panel>
+      </Tabs>
 
-      {/* Revoke Session Confirmation */}
-      <ConfirmDialog
-        open={!!revokeTarget}
+      {/* Revoke Session Modal */}
+      <Modal
+        opened={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
-        onConfirm={revokeSession}
         title="Revoke Session"
-        message="Are you sure you want to revoke this session? The user will be logged out immediately."
-        confirmLabel="Revoke"
-        loading={revokingSession === revokeTarget?.id}
-        details={revokeTarget && (
-          <>
-            <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
-            <div><span className="font-medium">Expires:</span> {formatTime(revokeTarget.expires_at)}</div>
-          </>
-        )}
-      />
-    </div>
+        size="sm"
+      >
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to revoke this session? The user will be logged out immediately.
+          </Text>
+          {revokeTarget && (
+            <Card withBorder padding="sm">
+              <Text size="xs"><Text span fw={500}>Token:</Text> <Text span ff="monospace" size="xs">{revokeTarget.id.substring(0, 16)}...</Text></Text>
+              <Text size="xs"><Text span fw={500}>Expires:</Text> {formatTime(revokeTarget.expires_at)}</Text>
+            </Card>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setRevokeTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={revokeSession} loading={revoking}>Revoke</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }
-

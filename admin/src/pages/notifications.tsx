@@ -1,33 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, post, del, downloadCSV } from "@/lib/api";
-import { useSelection } from "@/lib/use-selection";
-import { Button } from "@/components/ui/button";
 import {
-  Check,
-  CheckCheck,
-  Download,
-  Trash2,
-  Bell,
-  Filter,
-  X,
-} from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { Pagination } from "@/components/ui/pagination";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-import { cn } from "@/lib/utils";
-
-const NOTIFICATION_COLUMNS = [
-  { key: "notification", label: "Notification" },
-  { key: "type", label: "Type" },
-  { key: "time", label: "Time" },
-];
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Group,
+  Indicator,
+  Loader,
+  Modal,
+  NativeSelect,
+  Pagination,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications as notify } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconBell,
+  IconCheck,
+  IconChecks,
+  IconDownload,
+  IconFilter,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
+import { get, post, del, downloadCSV } from "@/lib/api";
+import { useSort } from "@/hooks/use-sort";
+import { useSelection } from "@/hooks/use-selection";
 
 interface Notification {
   id: number;
@@ -47,446 +54,398 @@ interface ListResponse {
   unread: number;
 }
 
-function formatTime(iso: string): string {
-  if (!iso) return "\u2014";
-  const d = new Date(iso);
-  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-  return `${Math.round(diff / 86400)}d ago`;
-}
+const PAGE_SIZE = 20;
 
 const TYPE_COLORS: Record<string, string> = {
-  info: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  success: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-  warning: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  error: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  info: "blue",
+  success: "green",
+  warning: "yellow",
+  error: "red",
 };
 
-const TYPE_DOT: Record<string, string> = {
-  info: "bg-blue-500",
-  success: "bg-green-500",
-  warning: "bg-amber-500",
-  error: "bg-red-500",
-};
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [items, setItems] = useState<Notification[]>([]);
   const [total, setTotal] = useState(0);
   const [unread, setUnread] = useState(0);
-  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
+  // Filter
+  const [unreadOnly, setUnreadOnly] = useState("all");
 
-  // Filter.
-  const [unreadOnly, setUnreadOnly] = useState(false);
-
-  // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+  const selection = useSelection();
 
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("notifications", NOTIFICATION_COLUMNS);
-
-  // Selection.
-  const selection = useSelection<number>();
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  // Modal states
+  const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
-      if (unreadOnly) params.set("unread", "true");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      if (unreadOnly === "unread") params.set("unread", "true");
 
       const data = await get<ListResponse>(`/admin/notifications?${params}`);
-      setNotifications(data.notifications);
+      setItems(data.notifications ?? []);
       setTotal(data.total);
       setUnread(data.unread);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load notifications");
+    } catch {
+      setError("Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  }, [page, unreadOnly, sort.column, sort.direction]);
+  }, [page, unreadOnly, sort]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Clear selection when page, filter, or sort changes.
+  useEffect(() => {
+    setPage(1);
+    selection.clear();
+  }, [unreadOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     selection.clear();
-  }, [page, unreadOnly, sort.column, sort.direction]);
+  }, [page, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function markRead(id: number) {
-    setActing(true);
+    setActionLoading(true);
     try {
       await post(`/admin/notifications/${id}/read`);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
-      );
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
       setUnread((c) => Math.max(0, c - 1));
-    } catch (e: any) {
-      toast.error(e.message || "Failed to mark as read");
+    } catch {
+      notify.show({ message: "Failed to mark as read", color: "red" });
     } finally {
-      setActing(false);
+      setActionLoading(false);
     }
   }
 
   async function markAllRead() {
-    setActing(true);
+    setActionLoading(true);
     try {
       await post("/admin/notifications/read-all");
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
-      );
+      setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
       setUnread(0);
-      toast.success("All notifications marked as read");
-    } catch (e: any) {
-      toast.error(e.message || "Failed to mark all as read");
+      notify.show({ message: "All notifications marked as read", color: "green", icon: <IconCheck size={16} /> });
+    } catch {
+      notify.show({ message: "Failed to mark all as read", color: "red" });
     } finally {
-      setActing(false);
+      setActionLoading(false);
     }
   }
 
-  async function deleteNotification() {
+  async function handleDelete() {
     if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    setActing(true);
+    setActionLoading(true);
     try {
-      await del(`/admin/notifications/${id}`);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      setTotal((t) => Math.max(0, t - 1));
-      if (!deleteTarget.read_at) {
-        setUnread((c) => Math.max(0, c - 1));
-      }
+      await del(`/admin/notifications/${deleteTarget.id}`);
+      notify.show({ message: "Notification deleted", color: "green", icon: <IconCheck size={16} /> });
       setDeleteTarget(null);
-      toast.success("Notification deleted");
-    } catch (e: any) {
-      toast.error(e.message || "Failed to delete notification");
+      load();
+    } catch {
+      notify.show({ message: "Failed to delete notification", color: "red" });
     } finally {
-      setActing(false);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkDelete() {
-    setBulkDeleting(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/notifications/bulk-delete", { ids: selection.ids });
-      setBulkConfirmOpen(false);
+      notify.show({ message: `${data.affected} notification(s) deleted`, color: "green", icon: <IconCheck size={16} /> });
+      setBulkDeleteOpen(false);
       selection.clear();
-      toast.success(`${data.affected} notification${data.affected !== 1 ? "s" : ""} deleted`);
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to bulk delete notifications");
+      load();
+    } catch {
+      notify.show({ message: "Failed to delete notifications", color: "red" });
     } finally {
-      setBulkDeleting(false);
+      setActionLoading(false);
     }
   }
 
   async function handleExport() {
-    setExporting(true);
     try {
-      const params = new URLSearchParams();
-      if (unreadOnly) params.set("unread", "true");
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
+      const params = new URLSearchParams({
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
+      if (unreadOnly === "unread") params.set("unread", "true");
       await downloadCSV(`/admin/notifications/export?${params}`);
     } catch {
-      toast.error("Failed to export notifications");
-    } finally {
-      setExporting(false);
+      notify.show({ message: "Failed to export", color: "red" });
     }
   }
 
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Notifications</h1>
-        <TableSkeleton columns={[
-          { width: "w-6" },
-          { width: "w-48" },
-          { width: "w-16", hidden: "hidden md:table-cell" },
-          { width: "w-20", hidden: "hidden sm:table-cell" },
-          { width: "w-20" },
-        ]} />
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const itemIds = items.map((n) => n.id);
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
-          <p className="text-sm text-muted-foreground">
-            {total} notification{total !== 1 ? "s" : ""}
-            {unread > 0 && ` \u00B7 ${unread} unread`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>Notifications</Title>
+          {!loading && (
+            <Group gap={4}>
+              <Badge variant="light" size="lg">{total}</Badge>
+              {unread > 0 && <Badge variant="light" color="red" size="lg">{unread} unread</Badge>}
+            </Group>
+          )}
+        </Group>
+        <Group gap="xs">
+          <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>
+            Export CSV
           </Button>
           {unread > 0 && (
             <Button
-              variant="outline"
-              size="sm"
-              disabled={acting}
+              variant="light"
+              size="xs"
+              leftSection={<IconChecks size={16} />}
               onClick={markAllRead}
+              loading={actionLoading}
             >
-              <CheckCheck className="h-4 w-4 mr-1.5" />
-              Mark all as read
+              Mark all read
             </Button>
           )}
-        </div>
-      </div>
-
-      {error && (
-        <ErrorAlert
-          message={error}
-          onRetry={load}
-          onDismiss={() => setError("")}
-          className="mb-4"
-        />
-      )}
+        </Group>
+      </Group>
 
       {/* Filter */}
-      <div className="mb-4 flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <select
-          value={unreadOnly ? "unread" : "all"}
-          onChange={(e) => {
-            setUnreadOnly(e.target.value === "unread");
-            setPage(0);
-          }}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="all">All notifications</option>
-          <option value="unread">Unread only</option>
-        </select>
-
-        {unreadOnly && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setUnreadOnly(false);
-              setPage(0);
-            }}
-          >
-            <X className="h-4 w-4 mr-1" />
+      <Group gap="sm">
+        <NativeSelect
+          leftSection={<IconFilter size={16} />}
+          value={unreadOnly}
+          onChange={(e) => setUnreadOnly(e.currentTarget.value)}
+          data={[
+            { value: "all", label: "All notifications" },
+            { value: "unread", label: "Unread only" },
+          ]}
+          w={200}
+        />
+        {unreadOnly === "unread" && (
+          <Button variant="subtle" size="xs" leftSection={<IconX size={14} />} onClick={() => setUnreadOnly("all")}>
             Clear filter
           </Button>
         )}
-      </div>
+      </Group>
 
-      {/* Notification list */}
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected(notifications.map((n) => n.id))}
-                  onChange={() => selection.toggleAll(notifications.map((n) => n.id))}
-                  className="rounded border-input"
-                />
-              </th>
-              <th className="text-left p-3 font-medium w-8"></th>
-              {isVisible("notification") && <th className="text-left p-3 font-medium">Notification</th>}
-              {isVisible("type") && <SortableHeader label="Type" column="type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              {isVisible("time") && <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} className="hidden sm:table-cell" />}
-              <th className="text-right p-3 font-medium w-24">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {notifications.length === 0 ? (
-              <TableEmptyRow
-                colSpan={visibleCount + 3}
-                message={
-                  unreadOnly
-                    ? "No unread notifications"
-                    : "No notifications yet"
-                }
-              />
-            ) : (
-              notifications.map((n) => (
-                <tr
-                  key={n.id}
-                  className={cn(
-                    "border-b last:border-0 hover:bg-muted/30",
-                    !n.read_at && "bg-muted/20",
-                    selection.isSelected(n.id) && "bg-muted/40"
-                  )}
-                >
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={selection.isSelected(n.id)}
-                      onChange={() => selection.toggle(n.id)}
-                      className="rounded border-input"
+      {/* Error */}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
+      )}
+
+      {/* Table */}
+      {loading && items.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={500}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      checked={selection.isAllSelected(itemIds)}
+                      indeterminate={selection.count > 0 && !selection.isAllSelected(itemIds)}
+                      onChange={() => selection.toggleAll(itemIds)}
+                      aria-label="Select all"
                     />
-                  </td>
-                  {/* Unread dot */}
-                  <td className="p-3">
-                    {!n.read_at ? (
-                      <span
-                        className={cn(
-                          "block h-2.5 w-2.5 rounded-full",
-                          TYPE_DOT[n.type] || "bg-blue-500"
+                  </Table.Th>
+                  <Table.Th w={32}></Table.Th>
+                  <Table.Th>Notification</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("type")}>
+                    <Group gap={4} wrap="nowrap">Type <SortIcon column="type" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                    <Group gap={4} wrap="nowrap">Time <SortIcon column="created_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th ta="right">Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {items.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={6}>
+                      <Text ta="center" c="dimmed" py="lg">
+                        {unreadOnly === "unread" ? "No unread notifications" : "No notifications yet"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  items.map((n) => (
+                    <Table.Tr
+                      key={n.id}
+                      bg={
+                        selection.isSelected(n.id)
+                          ? "var(--mantine-primary-color-light)"
+                          : !n.read_at
+                          ? "var(--mantine-color-default-hover)"
+                          : undefined
+                      }
+                    >
+                      <Table.Td>
+                        <Checkbox
+                          checked={selection.isSelected(n.id)}
+                          onChange={() => selection.toggle(n.id)}
+                          aria-label={`Select notification ${n.id}`}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        {!n.read_at ? (
+                          <Indicator color={TYPE_COLORS[n.type] || "blue"} size={10} processing>
+                            <span />
+                          </Indicator>
+                        ) : (
+                          <IconBell size={14} style={{ opacity: 0.3 }} />
                         )}
-                      />
-                    ) : (
-                      <Bell className="h-3.5 w-3.5 text-muted-foreground/40" />
-                    )}
-                  </td>
-
-                  {/* Content */}
-                  {isVisible("notification") && (
-                    <td className="p-3">
-                      <p className={cn("text-sm", !n.read_at && "font-medium")}>
-                        {n.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                        {n.message}
-                      </p>
-                      {/* Show time on mobile (hidden on sm+) */}
-                      <p className="mt-1 text-[11px] text-muted-foreground/70 sm:hidden">
-                        {formatRelativeTime(n.created_at)}
-                      </p>
-                    </td>
-                  )}
-
-                  {/* Type badge */}
-                  {isVisible("type") && (
-                    <td className="p-3 hidden md:table-cell">
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                          TYPE_COLORS[n.type] || "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" fw={n.read_at ? 400 : 600}>{n.title}</Text>
+                        <Text size="xs" c="dimmed" lineClamp={2}>{n.message}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color={TYPE_COLORS[n.type] || "gray"} size="sm">{n.type}</Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Tooltip label={new Date(n.created_at).toLocaleString()}>
+                          <Text size="sm" c="dimmed">{timeAgo(n.created_at)}</Text>
+                        </Tooltip>
+                        {n.read_at && (
+                          <Text size="xs" c="dimmed" style={{ opacity: 0.6 }}>Read {timeAgo(n.read_at)}</Text>
                         )}
-                      >
-                        {n.type}
-                      </span>
-                    </td>
-                  )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4} justify="flex-end" wrap="nowrap">
+                          {!n.read_at && (
+                            <Tooltip label="Mark as read">
+                              <ActionIcon variant="subtle" size="sm" onClick={() => markRead(n.id)}>
+                                <IconCheck size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
+                          <Tooltip label="Delete">
+                            <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setDeleteTarget(n)}>
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
 
-                  {/* Time */}
-                  {isVisible("time") && (
-                    <td className="p-3 hidden sm:table-cell">
-                      <div
-                        className="text-xs text-muted-foreground"
-                        title={formatTime(n.created_at)}
-                      >
-                        {formatRelativeTime(n.created_at)}
-                      </div>
-                      {n.read_at && (
-                        <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                          Read {formatRelativeTime(n.read_at)}
-                        </div>
-                      )}
-                    </td>
-                  )}
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </Text>
+              <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+            </Group>
+          )}
+        </>
+      )}
 
-                  {/* Actions */}
-                  <td className="p-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {!n.read_at && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={acting}
-                          onClick={() => markRead(n.id)}
-                          title="Mark as read"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        disabled={acting}
-                        onClick={() => setDeleteTarget(n)}
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Bulk action bar */}
+      {selection.count > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group
+            gap="sm"
+            px="md"
+            py="xs"
+            style={(theme) => ({
+              background: "var(--mantine-color-body)",
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: theme.radius.md,
+              boxShadow: theme.shadows.lg,
+            })}
+          >
+            <Text size="sm" fw={500}>{selection.count} selected</Text>
+            <Button
+              variant="light"
+              color="red"
+              size="xs"
+              leftSection={<IconTrash size={14} />}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              Delete
+            </Button>
+            <ActionIcon variant="subtle" size="sm" onClick={selection.clear}>
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+        </Box>
+      )}
 
-      {/* Pagination */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
+      {/* Delete confirmation */}
+      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Notification">
+        <Stack>
+          <Text size="sm">Are you sure you want to delete this notification?</Text>
+          {deleteTarget && (
+            <Box>
+              <Text size="sm" fw={500}>{deleteTarget.title}</Text>
+              <Text size="xs" c="dimmed" lineClamp={2}>{deleteTarget.message}</Text>
+            </Box>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleDelete} loading={actionLoading}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={deleteNotification}
-        title="Delete Notification"
-        message="Are you sure you want to delete this notification?"
-        confirmLabel="Delete"
-        loading={acting}
-        details={deleteTarget && (
-          <>
-            <div><span className="font-medium">Title:</span> {deleteTarget.title}</div>
-            <div className="text-xs text-muted-foreground line-clamp-2">{deleteTarget.message}</div>
-          </>
-        )}
-      />
-
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Delete
-        </Button>
-      </BulkActionBar>
-
-      <ConfirmDialog
-        open={bulkConfirmOpen}
-        onClose={() => setBulkConfirmOpen(false)}
-        onConfirm={handleBulkDelete}
-        title="Delete Notifications"
-        message={`Are you sure you want to delete ${selection.count} notification${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        loading={bulkDeleting}
-      />
-    </div>
+      {/* Bulk delete confirmation */}
+      <Modal opened={bulkDeleteOpen} onClose={() => setBulkDeleteOpen(false)} title="Delete Notifications">
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to delete <strong>{selection.count}</strong> notification(s)? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkDelete} loading={actionLoading}>
+              Delete {selection.count} notification(s)
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

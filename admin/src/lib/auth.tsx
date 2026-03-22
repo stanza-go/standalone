@@ -7,9 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { get, post, ApiError } from "@/lib/api";
+import { get, post } from "@/lib/api";
 
-interface Admin {
+export interface Admin {
   id: number;
   email: string;
   name: string;
@@ -60,12 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ admin: null, loading: false });
   }, []);
 
-  // Initial status check on mount
   useEffect(() => {
     checkStatus();
   }, [checkStatus]);
 
-  // Poll status every 60s while authenticated and tab is visible
   useEffect(() => {
     if (!state.admin) {
       if (pollRef.current) {
@@ -103,5 +101,3 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
-
-export type { Admin, ApiError };

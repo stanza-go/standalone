@@ -1,14 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router";
-import { toast } from "sonner";
+import { useParams, useNavigate, Link } from "react-router";
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Breadcrumbs,
+  Button,
+  Card,
+  Code,
+  CopyButton,
+  ActionIcon,
+  Group,
+  Loader,
+  NativeSelect,
+  Pagination,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowLeft,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconCopy,
+  IconSend,
+} from "@tabler/icons-react";
 import { get, post } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { Copy, Check, Send, ArrowLeft } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { Pagination } from "@/components/ui/pagination";
-import { TableEmptyRow } from "@/components/ui/empty-state";
 
 interface Webhook {
   id: number;
@@ -36,35 +59,52 @@ interface Delivery {
   completed_at: string;
 }
 
-interface WebhookDetail {
+interface WebhookDetailResponse {
   webhook: Webhook;
   total_deliveries: number;
   success_count: number;
   failed_count: number;
 }
 
+const PAGE_SIZE = 20;
+
+function formatTime(iso: string): string {
+  if (!iso) return "\u2014";
+  const d = new Date(iso);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString();
+}
+
+function formatJSON(str: string): string {
+  try {
+    return JSON.stringify(JSON.parse(str), null, 2);
+  } catch {
+    return str;
+  }
+}
+
+function deliveryStatusColor(status: string): string {
+  if (status === "success") return "green";
+  if (status === "failed") return "red";
+  return "yellow";
+}
+
 export default function WebhookDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [detail, setDetail] = useState<WebhookDetail | null>(null);
+  const [detail, setDetail] = useState<WebhookDetailResponse | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [deliveryTotal, setDeliveryTotal] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [expandedDelivery, setExpandedDelivery] = useState<number | null>(null);
 
-  // Delivery pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
-
-  // Delivery status filter.
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
 
   const loadDetail = useCallback(async () => {
     try {
-      const data = await get<WebhookDetail>(`/admin/webhooks/${id}`);
+      const data = await get<WebhookDetailResponse>(`/admin/webhooks/${id}`);
       setDetail(data);
       setError("");
     } catch (e: any) {
@@ -75,8 +115,8 @@ export default function WebhookDetailPage() {
   const loadDeliveries = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String((page - 1) * PAGE_SIZE));
       if (statusFilter) params.set("status", statusFilter);
 
       const data = await get<{ deliveries: Delivery[]; total: number }>(
@@ -84,8 +124,8 @@ export default function WebhookDetailPage() {
       );
       setDeliveries(data.deliveries);
       setDeliveryTotal(data.total);
-    } catch (e: any) {
-      // Non-blocking — detail view still works without deliveries.
+    } catch {
+      // Non-blocking
     }
   }, [id, page, statusFilter]);
 
@@ -94,277 +134,229 @@ export default function WebhookDetailPage() {
   }, [loadDetail, loadDeliveries]);
 
   useEffect(() => {
-    setPage(0);
+    setPage(1);
   }, [statusFilter]);
 
   async function sendTest() {
     setSending(true);
     try {
       await post(`/admin/webhooks/${id}/test`);
-      toast.success("Test event queued for delivery");
-      // Reload deliveries after a short delay for the queue to process.
+      notifications.show({ message: "Test event queued for delivery", color: "green", icon: <IconCheck size={16} /> });
       setTimeout(() => {
         loadDeliveries();
         loadDetail();
       }, 2000);
     } catch (e: any) {
-      toast.error(e.message || "Failed to send test event");
+      notifications.show({ message: e.message || "Failed to send test event", color: "red", icon: <IconAlertCircle size={16} /> });
     } finally {
       setSending(false);
     }
   }
 
-  async function copySecret() {
-    if (!detail) return;
-    await navigator.clipboard.writeText(detail.webhook.secret);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  function formatTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
-  }
-
-  const totalPages = Math.ceil(deliveryTotal / pageSize);
-
   if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[300px]">
-        <Spinner />
-      </div>
-    );
+    return <Stack align="center" pt="xl"><Loader /></Stack>;
   }
 
   if (error || !detail) {
     return (
-      <div className="p-6">
-        <ErrorAlert message={error || "Webhook not found"} onRetry={loadDetail} />
-      </div>
+      <Stack p="md">
+        <Alert icon={<IconAlertCircle size={16} />} color="red" title="Error">
+          {error || "Webhook not found"}
+        </Alert>
+      </Stack>
     );
   }
 
   const wh = detail.webhook;
+  const totalPages = Math.ceil(deliveryTotal / PAGE_SIZE);
 
   return (
-    <div className="p-6">
-      <Breadcrumb items={[
-        { label: "Webhooks", to: "/webhooks" },
-        { label: wh.description || wh.url },
-      ]} />
+    <Stack p="md" gap="md">
+      <Breadcrumbs>
+        <Anchor component={Link} to="/webhooks" size="sm">Webhooks</Anchor>
+        <Text size="sm">{wh.description || wh.url}</Text>
+      </Breadcrumbs>
 
-      <div className="flex items-center justify-between mb-6 mt-4">
+      {/* Header */}
+      <Group justify="space-between" align="flex-start">
         <div>
-          <h1 className="text-2xl font-bold">{wh.description || "Webhook Detail"}</h1>
-          <p className="text-sm text-muted-foreground font-mono mt-1">{wh.url}</p>
+          <Title order={3}>{wh.description || "Webhook Detail"}</Title>
+          <Text size="sm" c="dimmed" ff="monospace" mt={4}>{wh.url}</Text>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate("/webhooks")}>
-            <ArrowLeft className="h-4 w-4 mr-1" />
+        <Group>
+          <Button variant="default" size="sm" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/webhooks")}>
             Back
           </Button>
-          <Button size="sm" onClick={sendTest} disabled={sending}>
-            <Send className="h-4 w-4 mr-1" />
-            {sending ? "Sending..." : "Send Test"}
+          <Button size="sm" leftSection={<IconSend size={16} />} onClick={sendTest} loading={sending}>
+            Send Test
           </Button>
-        </div>
-      </div>
+        </Group>
+      </Group>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Status</p>
-          <p className="text-lg font-semibold mt-1">
-            {wh.is_active ? (
-              <span className="text-green-600 dark:text-green-400">Active</span>
-            ) : (
-              <span className="text-yellow-600 dark:text-yellow-400">Paused</span>
+      <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
+        <Card withBorder padding="md">
+          <Text size="sm" c="dimmed">Status</Text>
+          <Text size="lg" fw={600} mt={4} c={wh.is_active ? "green" : "yellow"}>
+            {wh.is_active ? "Active" : "Paused"}
+          </Text>
+        </Card>
+        <Card withBorder padding="md">
+          <Text size="sm" c="dimmed">Total Deliveries</Text>
+          <Text size="lg" fw={600} mt={4}>{detail.total_deliveries}</Text>
+        </Card>
+        <Card withBorder padding="md">
+          <Text size="sm" c="dimmed">Successful</Text>
+          <Text size="lg" fw={600} mt={4} c="green">{detail.success_count}</Text>
+        </Card>
+        <Card withBorder padding="md">
+          <Text size="sm" c="dimmed">Failed</Text>
+          <Text size="lg" fw={600} mt={4} c="red">{detail.failed_count}</Text>
+        </Card>
+      </SimpleGrid>
+
+      {/* Configuration */}
+      <Card withBorder padding="md">
+        <Text fw={600} mb="sm">Configuration</Text>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+          <div>
+            <Text size="sm" c="dimmed" component="span">Events: </Text>
+            <Text size="sm" fw={500} component="span">{wh.events.join(", ")}</Text>
+          </div>
+          <div>
+            <Text size="sm" c="dimmed" component="span">Created: </Text>
+            <Text size="sm" fw={500} component="span">{formatTime(wh.created_at)}</Text>
+          </div>
+        </SimpleGrid>
+        <Group mt="sm" gap="xs" align="center">
+          <Text size="sm" c="dimmed">Signing Secret:</Text>
+          <Code>{wh.secret.slice(0, 12)}...</Code>
+          <CopyButton value={wh.secret}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? "Copied" : "Copy"}>
+                <ActionIcon variant="subtle" size="sm" onClick={copy} color={copied ? "green" : "gray"}>
+                  {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                </ActionIcon>
+              </Tooltip>
             )}
-          </p>
-        </div>
-        <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Total Deliveries</p>
-          <p className="text-lg font-semibold mt-1">{detail.total_deliveries}</p>
-        </div>
-        <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Successful</p>
-          <p className="text-lg font-semibold mt-1 text-green-600 dark:text-green-400">{detail.success_count}</p>
-        </div>
-        <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Failed</p>
-          <p className="text-lg font-semibold mt-1 text-red-600 dark:text-red-400">{detail.failed_count}</p>
-        </div>
-      </div>
+          </CopyButton>
+        </Group>
+      </Card>
 
-      {/* Webhook info */}
-      <div className="border rounded-lg p-4 mb-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Configuration</h2>
-        </div>
+      {/* Delivery History */}
+      <Group justify="space-between" align="center">
+        <Text fw={600} size="lg">Delivery History</Text>
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.currentTarget.value)}
+          data={[
+            { value: "", label: "All statuses" },
+            { value: "success", label: "Success" },
+            { value: "failed", label: "Failed" },
+            { value: "pending", label: "Pending" },
+          ]}
+          size="xs"
+          w={150}
+        />
+      </Group>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="text-muted-foreground">Events:</span>{" "}
-            <span className="font-medium">
-              {wh.events.join(", ")}
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Created:</span>{" "}
-            <span className="font-medium">{formatTime(wh.created_at)}</span>
-          </div>
-        </div>
-
-        <div className="text-sm">
-          <span className="text-muted-foreground">Signing Secret:</span>{" "}
-          <span className="inline-flex items-center gap-2">
-            <code className="font-mono text-xs bg-muted rounded px-2 py-0.5">
-              {wh.secret.slice(0, 12)}{"..."}
-            </code>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={copySecret}>
-              {copied ? (
-                <Check className="h-3 w-3 text-green-600 dark:text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          </span>
-        </div>
-      </div>
-
-      {/* Delivery history */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Delivery History</h2>
-        <div className="flex items-center gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border rounded-md px-2 py-1 bg-background"
-          >
-            <option value="">All statuses</option>
-            <option value="success">Success</option>
-            <option value="failed">Failed</option>
-            <option value="pending">Pending</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="text-left p-3 font-medium">Event</th>
-              <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">HTTP</th>
-              <th className="text-right p-3 font-medium hidden md:table-cell">Attempts</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Delivery ID</th>
-              <th className="text-left p-3 font-medium">Time</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Table.ScrollContainer minWidth={600}>
+        <Table striped highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={30}></Table.Th>
+              <Table.Th>Event</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th>HTTP</Table.Th>
+              <Table.Th style={{ textAlign: "right" }}>Attempts</Table.Th>
+              <Table.Th>Delivery ID</Table.Th>
+              <Table.Th>Time</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
             {deliveries.length === 0 ? (
-              <TableEmptyRow colSpan={6} message="No deliveries yet" />
+              <Table.Tr>
+                <Table.Td colSpan={7}>
+                  <Text ta="center" c="dimmed" py="lg">No deliveries yet</Text>
+                </Table.Td>
+              </Table.Tr>
             ) : (
               deliveries.map((d) => (
                 <>
-                  <tr
+                  <Table.Tr
                     key={d.id}
-                    className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                    style={{ cursor: "pointer" }}
                     onClick={() => setExpandedDelivery(expandedDelivery === d.id ? null : d.id)}
                   >
-                    <td className="p-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
-                        {d.event}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <DeliveryStatusBadge status={d.status} />
-                    </td>
-                    <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
-                      {d.status_code > 0 ? d.status_code : "\u2014"}
-                    </td>
-                    <td className="p-3 text-right text-xs hidden md:table-cell">{d.attempts}</td>
-                    <td className="p-3 font-mono text-xs text-muted-foreground hidden lg:table-cell">
-                      {d.delivery_id ? d.delivery_id.slice(0, 16) + "..." : "\u2014"}
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {formatTime(d.created_at)}
-                    </td>
-                  </tr>
+                    <Table.Td>
+                      {expandedDelivery === d.id
+                        ? <IconChevronDown size={14} />
+                        : <IconChevronRight size={14} />}
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge color="blue" variant="light" size="sm">{d.event}</Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge color={deliveryStatusColor(d.status)} variant="light" size="sm">
+                        {d.status.charAt(0).toUpperCase() + d.status.slice(1)}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" ff="monospace" c="dimmed">
+                        {d.status_code > 0 ? d.status_code : "\u2014"}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: "right" }}>
+                      <Text size="xs">{d.attempts}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" ff="monospace" c="dimmed">
+                        {d.delivery_id ? d.delivery_id.slice(0, 16) + "..." : "\u2014"}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">{formatTime(d.created_at)}</Text>
+                    </Table.Td>
+                  </Table.Tr>
                   {expandedDelivery === d.id && (
-                    <tr key={`${d.id}-detail`} className="border-b">
-                      <td colSpan={6} className="p-4 bg-muted/20">
-                        <div className="space-y-3 text-xs">
+                    <Table.Tr key={`${d.id}-detail`}>
+                      <Table.Td colSpan={7} style={{ background: "var(--mantine-color-gray-0)", paddingBlock: 16 }}>
+                        <Stack gap="sm" px="sm">
                           <div>
-                            <p className="font-medium text-muted-foreground mb-1">Request Payload</p>
-                            <pre className="bg-muted rounded p-3 overflow-x-auto max-h-48">
+                            <Text size="xs" fw={500} c="dimmed" mb={4}>Request Payload</Text>
+                            <Code block style={{ maxHeight: 200, overflow: "auto" }}>
                               {formatJSON(d.payload)}
-                            </pre>
+                            </Code>
                           </div>
                           {d.response_body && (
                             <div>
-                              <p className="font-medium text-muted-foreground mb-1">Response Body</p>
-                              <pre className="bg-muted rounded p-3 overflow-x-auto max-h-48">
+                              <Text size="xs" fw={500} c="dimmed" mb={4}>Response Body</Text>
+                              <Code block style={{ maxHeight: 200, overflow: "auto" }}>
                                 {d.response_body.slice(0, 2048)}
-                              </pre>
+                              </Code>
                             </div>
                           )}
                           {d.completed_at && (
-                            <p className="text-muted-foreground">
+                            <Text size="xs" c="dimmed">
                               Completed: {formatTime(d.completed_at)}
-                            </p>
+                            </Text>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                        </Stack>
+                      </Table.Td>
+                    </Table.Tr>
                   )}
                 </>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={deliveryTotal}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
-    </div>
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination total={totalPages} value={page} onChange={setPage} size="sm" />
+        </Group>
+      )}
+    </Stack>
   );
-}
-
-function DeliveryStatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case "success":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400">
-          Success
-        </span>
-      );
-    case "failed":
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400">
-          Failed
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400">
-          Pending
-        </span>
-      );
-  }
-}
-
-function formatJSON(str: string): string {
-  try {
-    return JSON.stringify(JSON.parse(str), null, 2);
-  } catch {
-    return str;
-  }
 }

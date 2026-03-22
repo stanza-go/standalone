@@ -1,22 +1,30 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import {
+  ActionIcon,
+  Alert,
+  Button,
+  Card,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-react";
 import { get, put } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Check, Loader2, RefreshCw, X } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
-import { ErrorAlert } from "@/components/ui/error-alert";
-
 
 interface Setting {
   key: string;
   value: string;
   group_name: string;
   updated_at: string;
-}
-
-interface SettingsResponse {
-  settings: Setting[];
 }
 
 export default function SettingsPage() {
@@ -28,7 +36,7 @@ export default function SettingsPage() {
 
   async function load() {
     try {
-      const data = await get<SettingsResponse>("/admin/settings");
+      const data = await get<{ settings: Setting[] }>("/admin/settings");
       setSettings(data.settings);
       setError(null);
     } catch (err) {
@@ -53,30 +61,28 @@ export default function SettingsPage() {
   async function saveEdit(key: string) {
     setSaving(true);
     try {
-      const updated = await put<Setting>(`/admin/settings/${key}`, {
-        value: editValue,
-      });
-      setSettings((prev) =>
-        prev.map((s) => (s.key === key ? updated : s))
-      );
+      const updated = await put<Setting>(`/admin/settings/${key}`, { value: editValue });
+      setSettings((prev) => prev.map((s) => (s.key === key ? updated : s)));
       setEditingKey(null);
       setEditValue("");
-      toast.success(`Setting "${key}" updated`);
+      notifications.show({ message: `Setting "${key}" updated`, color: "green", icon: <IconCheck size={16} /> });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      notifications.show({
+        message: err instanceof Error ? err.message : "Failed to save",
+        color: "red",
+        icon: <IconAlertCircle size={16} />,
+      });
     } finally {
       setSaving(false);
     }
   }
 
-  // Group settings by group_name.
-  const grouped = settings.reduce<Record<string, Setting[]>>((acc, s) => {
-    if (!acc[s.group_name]) {
-      acc[s.group_name] = [];
-    }
-    acc[s.group_name].push(s);
-    return acc;
-  }, {});
+  // Group settings by group_name
+  const grouped: Record<string, Setting[]> = {};
+  for (const s of settings) {
+    const list = grouped[s.group_name] ?? (grouped[s.group_name] = []);
+    list.push(s);
+  }
 
   const groupOrder = Object.keys(grouped).sort((a, b) => {
     if (a === "general") return -1;
@@ -85,102 +91,95 @@ export default function SettingsPage() {
   });
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <Stack p="md" gap="md">
+      <Group justify="space-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Application settings stored in the database
-          </p>
+          <Title order={3}>Settings</Title>
+          <Text size="sm" c="dimmed">Application settings stored in the database</Text>
         </div>
-        <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+        <Button variant="default" size="sm" leftSection={<IconRefresh size={16} />} onClick={load}>
           Refresh
         </Button>
-      </div>
+      </Group>
 
       {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError(null)} className="mb-6" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
 
-      {settings.length === 0 && !error && <Spinner />}
+      {settings.length === 0 && !error && <Stack align="center" pt="xl"><Loader /></Stack>}
 
-      <div className="space-y-6">
-        {groupOrder.map((group) => (
-          <Card key={group}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                {group}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {grouped[group].map((s) => (
-                  <div
-                    key={s.key}
-                    className="flex items-center justify-between px-6 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium font-mono">{s.key}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Updated {new Date(s.updated_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="ml-4 flex items-center gap-2">
-                      {editingKey === s.key ? (
-                        <>
-                          <input
-                            type="text"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveEdit(s.key);
-                              if (e.key === "Escape") cancelEdit();
-                            }}
-                            autoFocus
-                            className="h-8 w-48 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => saveEdit(s.key)}
-                            disabled={saving}
-                          >
-                            {saving ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Check className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={cancelEdit}
-                            disabled={saving}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <span
-                            className="cursor-pointer rounded px-2 py-1 text-sm font-mono hover:bg-accent transition-colors"
-                            onClick={() => startEdit(s)}
-                          >
-                            {s.value}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
+      {groupOrder.map((group) => (
+        <Card key={group} withBorder padding={0}>
+          <Group px="md" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+            <Text size="sm" fw={500} c="dimmed" tt="uppercase">{group}</Text>
+          </Group>
+          <Stack gap={0}>
+            {(grouped[group] ?? []).map((s) => (
+              <Group
+                key={s.key}
+                justify="space-between"
+                px="md"
+                py="sm"
+                wrap="nowrap"
+                style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Text size="sm" fw={500} ff="monospace">{s.key}</Text>
+                  <Text size="xs" c="dimmed" mt={2}>
+                    Updated {new Date(s.updated_at).toLocaleString()}
+                  </Text>
+                </div>
+                <Group gap="xs" wrap="nowrap">
+                  {editingKey === s.key ? (
+                    <>
+                      <TextInput
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(s.key);
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                        autoFocus
+                        size="xs"
+                        w={200}
+                      />
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => saveEdit(s.key)}
+                        loading={saving}
+                        color="green"
+                      >
+                        <IconCheck size={14} />
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                      >
+                        <IconX size={14} />
+                      </ActionIcon>
+                    </>
+                  ) : (
+                    <Text
+                      size="sm"
+                      ff="monospace"
+                      style={{ cursor: "pointer", padding: "4px 8px", borderRadius: 4 }}
+                      className="hover-highlight"
+                      onClick={() => startEdit(s)}
+                    >
+                      {s.value}
+                    </Text>
+                  )}
+                </Group>
+              </Group>
+            ))}
+          </Stack>
+        </Card>
+      ))}
+    </Stack>
   );
 }

@@ -1,32 +1,46 @@
-import { useEffect, useState, useCallback } from "react";
-import { toast } from "sonner";
-import { get, post } from "@/lib/api";
-import { useSelection } from "@/lib/use-selection";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useState } from "react";
 import {
-  RotateCw,
-  Inbox,
-  Play,
-  CheckCircle,
-  XCircle,
-  Skull,
-  Ban,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  ChevronDown,
-  ChevronRight,
-  Search,
-  X,
-} from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { EmptyState } from "@/components/ui/empty-state";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Code,
+  Group,
+  Loader,
+  Modal,
+  NativeSelect,
+  Pagination,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconBan,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconCircleCheck,
+  IconCircleX,
+  IconInbox,
+  IconPlayerPlay,
+  IconRefresh,
+  IconRotateClockwise,
+  IconSearch,
+  IconSkull,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
+import { get, post } from "@/lib/api";
+import { useSelection } from "@/hooks/use-selection";
 
 interface QueueStats {
   pending: number;
@@ -53,30 +67,24 @@ interface QueueJob {
   updated_at: string;
 }
 
-interface JobsResponse {
-  jobs: QueueJob[];
-  total: number;
-}
-
-const STATUS_FILTERS = ["", "pending", "running", "completed", "failed", "dead", "cancelled"] as const;
 const PAGE_SIZE = 25;
-
-const QUEUE_COLUMNS = [
-  { key: "id", label: "ID" },
-  { key: "type", label: "Type" },
-  { key: "status", label: "Status" },
-  { key: "attempts", label: "Attempts" },
-  { key: "created_at", label: "Created" },
-  { key: "error", label: "Error" },
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "pending", label: "Pending" },
+  { value: "running", label: "Running" },
+  { value: "completed", label: "Completed" },
+  { value: "failed", label: "Failed" },
+  { value: "dead", label: "Dead" },
+  { value: "cancelled", label: "Cancelled" },
 ];
 
 function formatTime(iso: string): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   return new Date(iso).toLocaleString();
 }
 
 function formatDuration(startIso: string, endIso: string): string {
-  if (!startIso || !endIso) return "—";
+  if (!startIso || !endIso) return "\u2014";
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
   if (ms < 1000) return `${ms}ms`;
   const secs = ms / 1000;
@@ -94,94 +102,69 @@ function formatPayload(raw: string): string {
   }
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
-    running: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-    completed: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-    failed: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-    dead: "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400",
-    cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-500/10 dark:text-gray-400",
-  };
+const statusColors: Record<string, string> = {
+  pending: "yellow",
+  running: "blue",
+  completed: "green",
+  failed: "red",
+  dead: "gray",
+  cancelled: "gray",
+};
+
+function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400"}`}
-    >
-      {status}
-    </span>
+    <Paper withBorder p="md" radius="md">
+      <Group justify="space-between">
+        <div>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600}>{label}</Text>
+          <Text size="xl" fw={700} mt={4}>{value}</Text>
+        </div>
+        <Box c="dimmed">{icon}</Box>
+      </Group>
+    </Paper>
   );
 }
 
 function JobDetail({ job }: { job: QueueJob }) {
   return (
-    <div className="grid gap-4 p-4 sm:grid-cols-2">
-      <div>
-        <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Details</h4>
-        <dl className="space-y-1 text-sm">
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">ID</dt>
-            <dd className="font-mono">{job.id}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Queue</dt>
-            <dd className="font-mono">{job.queue}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Type</dt>
-            <dd className="font-mono">{job.type}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Status</dt>
-            <dd><StatusBadge status={job.status} /></dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Attempts</dt>
-            <dd>{job.attempts}/{job.max_attempts}</dd>
-          </div>
-        </dl>
-      </div>
-      <div>
-        <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Timing</h4>
-        <dl className="space-y-1 text-sm">
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Created</dt>
-            <dd>{formatTime(job.created_at)}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Run at</dt>
-            <dd>{formatTime(job.run_at)}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Started</dt>
-            <dd>{formatTime(job.started_at)}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Completed</dt>
-            <dd>{formatTime(job.completed_at)}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground w-24 shrink-0">Duration</dt>
-            <dd>{formatDuration(job.started_at, job.completed_at)}</dd>
-          </div>
-        </dl>
-      </div>
+    <Box px="md" py="sm">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        <div>
+          <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb="xs">Details</Text>
+          <Stack gap={4}>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>ID</Text><Text size="sm" ff="monospace">{job.id}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Queue</Text><Text size="sm" ff="monospace">{job.queue}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Type</Text><Text size="sm" ff="monospace">{job.type}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Status</Text><Badge variant="light" color={statusColors[job.status] || "gray"} size="sm">{job.status}</Badge></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Attempts</Text><Text size="sm">{job.attempts}/{job.max_attempts}</Text></Group>
+          </Stack>
+        </div>
+        <div>
+          <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb="xs">Timing</Text>
+          <Stack gap={4}>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Created</Text><Text size="sm">{formatTime(job.created_at)}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Run at</Text><Text size="sm">{formatTime(job.run_at)}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Started</Text><Text size="sm">{formatTime(job.started_at)}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Completed</Text><Text size="sm">{formatTime(job.completed_at)}</Text></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Duration</Text><Text size="sm">{formatDuration(job.started_at, job.completed_at)}</Text></Group>
+          </Stack>
+        </div>
+      </SimpleGrid>
+
       {job.payload && job.payload !== "{}" && (
-        <div className="sm:col-span-2">
-          <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Payload</h4>
-          <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-x-auto max-h-48">
-            {formatPayload(job.payload)}
-          </pre>
-        </div>
+        <Box mt="md">
+          <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb="xs">Payload</Text>
+          <Code block style={{ maxHeight: 200, overflow: "auto" }}>{formatPayload(job.payload)}</Code>
+        </Box>
       )}
+
       {job.last_error && (
-        <div className="sm:col-span-2">
-          <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Last Error</h4>
-          <pre className="rounded-md bg-destructive/10 p-3 text-xs font-mono text-destructive overflow-x-auto max-h-32">
-            {job.last_error}
-          </pre>
-        </div>
+        <Box mt="md">
+          <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb="xs">Last Error</Text>
+          <Code block color="red" style={{ maxHeight: 120, overflow: "auto" }}>{job.last_error}</Code>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -189,48 +172,45 @@ export default function QueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null);
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [queueFilter, setQueueFilter] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [acting, setActing] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const selection = useSelection();
+
+  // Modal states
   const [cancelTarget, setCancelTarget] = useState<QueueJob | null>(null);
-
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("queue", QUEUE_COLUMNS);
-
-  // Selection.
-  const selection = useSelection<number>();
   const [bulkRetryOpen, setBulkRetryOpen] = useState(false);
-  const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
-  const [bulkCancelling, setBulkCancelling] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadStats = useCallback(async () => {
     try {
       const data = await get<QueueStats>("/admin/queue/stats");
       setStats(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load stats");
+    } catch {
+      // Stats are supplementary — don't block main view.
     }
   }, []);
 
   const loadJobs = useCallback(async () => {
     try {
+      const offset = (page - 1) * PAGE_SIZE;
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
       if (statusFilter) params.set("status", statusFilter);
       if (typeFilter) params.set("type", typeFilter);
       if (queueFilter) params.set("queue", queueFilter);
-      const data = await get<JobsResponse>(`/admin/queue/jobs?${params}`);
+      const data = await get<{ jobs: QueueJob[]; total: number }>(`/admin/queue/jobs?${params}`);
       setJobs(data.jobs);
       setTotal(data.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load jobs");
     }
-  }, [statusFilter, typeFilter, queueFilter, offset]);
+  }, [page, statusFilter, typeFilter, queueFilter]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -244,27 +224,15 @@ export default function QueuePage() {
     return () => clearInterval(interval);
   }, [loadAll]);
 
-  // Clear selection when filters or offset changes.
   useEffect(() => {
     selection.clear();
-  }, [statusFilter, typeFilter, queueFilter, offset]);
+  }, [statusFilter, typeFilter, queueFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset to first page when filters change.
-  function applyStatusFilter(s: string) {
-    setStatusFilter(s);
-    setOffset(0);
-    setExpanded(null);
-  }
-
-  function applyTypeFilter(val: string) {
-    setTypeFilter(val);
-    setOffset(0);
-    setExpanded(null);
-  }
-
-  function applyQueueFilter(val: string) {
-    setQueueFilter(val);
-    setOffset(0);
+  function resetFilters() {
+    setStatusFilter("");
+    setTypeFilter("");
+    setQueueFilter("");
+    setPage(1);
     setExpanded(null);
   }
 
@@ -272,10 +240,10 @@ export default function QueuePage() {
     setActing(id);
     try {
       await post(`/admin/queue/jobs/${id}/retry`);
-      toast.success("Job queued for retry");
+      notifications.show({ message: "Job queued for retry", color: "green", icon: <IconCheck size={16} /> });
       await loadAll();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to retry job");
+      notifications.show({ message: err instanceof Error ? err.message : "Failed to retry job", color: "red" });
     } finally {
       setActing(null);
     }
@@ -283,377 +251,355 @@ export default function QueuePage() {
 
   async function cancelJob() {
     if (!cancelTarget) return;
-    const id = cancelTarget.id;
-    setActing(id);
+    setActionLoading(true);
     try {
-      await post(`/admin/queue/jobs/${id}/cancel`);
+      await post(`/admin/queue/jobs/${cancelTarget.id}/cancel`);
+      notifications.show({ message: "Job cancelled", color: "green", icon: <IconCheck size={16} /> });
       setCancelTarget(null);
-      toast.success("Job cancelled");
       await loadAll();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to cancel job");
+      notifications.show({ message: err instanceof Error ? err.message : "Failed to cancel job", color: "red" });
     } finally {
-      setActing(null);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkRetry() {
-    setBulkRetrying(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/queue/jobs/bulk-retry", { ids: selection.ids });
+      notifications.show({ message: `${data.affected} job(s) retried`, color: "green", icon: <IconCheck size={16} /> });
       setBulkRetryOpen(false);
       selection.clear();
-      toast.success(`${data.affected} job${data.affected !== 1 ? "s" : ""} retried`);
       await loadAll();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to bulk retry jobs");
+      notifications.show({ message: err instanceof Error ? err.message : "Bulk retry failed", color: "red" });
     } finally {
-      setBulkRetrying(false);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkCancel() {
-    setBulkCancelling(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/queue/jobs/bulk-cancel", { ids: selection.ids });
+      notifications.show({ message: `${data.affected} job(s) cancelled`, color: "green", icon: <IconCheck size={16} /> });
       setBulkCancelOpen(false);
       selection.clear();
-      toast.success(`${data.affected} job${data.affected !== 1 ? "s" : ""} cancelled`);
       await loadAll();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to bulk cancel jobs");
+      notifications.show({ message: err instanceof Error ? err.message : "Bulk cancel failed", color: "red" });
     } finally {
-      setBulkCancelling(false);
+      setActionLoading(false);
     }
   }
 
-  function toggleExpand(id: number) {
-    setExpanded((prev) => (prev === id ? null : id));
-  }
-
-  const hasMore = offset + PAGE_SIZE < total;
-  const hasPrev = offset > 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const jobIds = jobs.map((j) => j.id);
+  const hasActiveFilters = typeFilter !== "" || queueFilter !== "";
 
   const statCards = stats
     ? [
-        { label: "Pending", value: stats.pending, icon: <Inbox className="h-4 w-4" /> },
-        { label: "Running", value: stats.running, icon: <Play className="h-4 w-4" /> },
-        { label: "Completed", value: stats.completed, icon: <CheckCircle className="h-4 w-4" /> },
-        { label: "Failed", value: stats.failed, icon: <XCircle className="h-4 w-4" /> },
-        { label: "Dead", value: stats.dead, icon: <Skull className="h-4 w-4" /> },
-        { label: "Cancelled", value: stats.cancelled, icon: <Ban className="h-4 w-4" /> },
+        { label: "Pending", value: stats.pending, icon: <IconInbox size={20} /> },
+        { label: "Running", value: stats.running, icon: <IconPlayerPlay size={20} /> },
+        { label: "Completed", value: stats.completed, icon: <IconCircleCheck size={20} /> },
+        { label: "Failed", value: stats.failed, icon: <IconCircleX size={20} /> },
+        { label: "Dead", value: stats.dead, icon: <IconSkull size={20} /> },
+        { label: "Cancelled", value: stats.cancelled, icon: <IconBan size={20} /> },
       ]
     : [];
 
-  const hasActiveFilters = typeFilter !== "" || queueFilter !== "";
-
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Job Queue</h1>
-          <p className="text-sm text-muted-foreground">
-            Queue stats and job management
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
-            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+    <Stack>
+      {/* Header */}
+      <Group justify="space-between">
+        <Title order={3}>Job Queue</Title>
+        <Button
+          variant="subtle"
+          size="xs"
+          leftSection={<IconRefresh size={16} />}
+          onClick={loadAll}
+          loading={loading}
+        >
+          Refresh
+        </Button>
+      </Group>
 
+      {/* Error */}
       {error && (
-        <ErrorAlert message={error} onRetry={loadAll} onDismiss={() => setError(null)} className="mb-6" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={loadAll}>Retry</Button>
+        </Alert>
       )}
 
+      {/* Stats cards */}
       {stats && (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {statCards.map((card) => (
-            <Card key={card.label}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">{card.label}</CardTitle>
-                <span className="text-muted-foreground">{card.icon}</span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{card.value}</div>
-              </CardContent>
-            </Card>
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
+          {statCards.map((c) => (
+            <StatCard key={c.label} label={c.label} value={c.value} icon={c.icon} />
           ))}
-        </div>
+        </SimpleGrid>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Jobs</CardTitle>
-            <div className="flex flex-wrap items-center gap-1">
-              {STATUS_FILTERS.map((s) => (
-                <Button
-                  key={s || "all"}
-                  variant={statusFilter === s ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => applyStatusFilter(s)}
-                >
-                  {s || "All"}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Filter by type..."
-                value={typeFilter}
-                onChange={(e) => applyTypeFilter(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background pl-8 pr-8 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-40"
-              />
-              {typeFilter && (
-                <button
-                  onClick={() => applyTypeFilter("")}
-                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Filter by queue..."
-                value={queueFilter}
-                onChange={(e) => applyQueueFilter(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background pl-8 pr-8 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-40"
-              />
-              {queueFilter && (
-                <button
-                  onClick={() => applyQueueFilter("")}
-                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { applyTypeFilter(""); applyQueueFilter(""); }}
-                className="text-xs"
-              >
-                Clear filters
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading && jobs.length === 0 ? (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 3 }, (_, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-4 w-4" />
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-28 hidden md:block" />
-                </div>
-              ))}
-            </div>
-          ) : jobs.length === 0 ? (
-            <EmptyState message="No jobs found" className="py-6" />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="px-4 py-3 w-10">
-                        <input
-                          type="checkbox"
-                          checked={selection.isAllSelected(jobs.map((j) => j.id))}
-                          onChange={() => selection.toggleAll(jobs.map((j) => j.id))}
-                          className="rounded border-input"
-                        />
-                      </th>
-                      <th className="px-4 py-3 font-medium w-8"></th>
-                      {isVisible("id") && <th className="px-4 py-3 font-medium hidden md:table-cell">ID</th>}
-                      {isVisible("type") && <th className="px-4 py-3 font-medium">Type</th>}
-                      {isVisible("status") && <th className="px-4 py-3 font-medium">Status</th>}
-                      {isVisible("attempts") && <th className="px-4 py-3 font-medium hidden md:table-cell">Attempts</th>}
-                      {isVisible("created_at") && <th className="px-4 py-3 font-medium hidden md:table-cell">Created</th>}
-                      {isVisible("error") && <th className="px-4 py-3 font-medium hidden lg:table-cell">Error</th>}
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobs.map((job) => (
-                      <>
-                        <tr
-                          key={job.id}
-                          className={`border-b border-border cursor-pointer hover:bg-muted/50 ${
-                            expanded === job.id ? "bg-muted/30" : ""
-                          } ${selection.isSelected(job.id) ? "bg-muted/40" : ""}`}
-                          onClick={() => toggleExpand(job.id)}
-                        >
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selection.isSelected(job.id)}
-                              onChange={() => selection.toggle(job.id)}
-                              className="rounded border-input"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {expanded === job.id ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </td>
-                          {isVisible("id") && <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{job.id}</td>}
-                          {isVisible("type") && <td className="px-4 py-3 font-mono text-xs">{job.type}</td>}
-                          {isVisible("status") && (
-                            <td className="px-4 py-3">
-                              <StatusBadge status={job.status} />
-                            </td>
+      {/* Filters */}
+      <Group gap="sm">
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.currentTarget.value); setPage(1); setExpanded(null); }}
+          data={STATUS_OPTIONS}
+          size="xs"
+          w={160}
+        />
+        <TextInput
+          placeholder="Filter by type..."
+          size="xs"
+          leftSection={<IconSearch size={14} />}
+          value={typeFilter}
+          onChange={(e) => { setTypeFilter(e.currentTarget.value); setPage(1); setExpanded(null); }}
+          rightSection={
+            typeFilter ? (
+              <ActionIcon variant="subtle" size="xs" onClick={() => { setTypeFilter(""); setPage(1); }}>
+                <IconX size={12} />
+              </ActionIcon>
+            ) : null
+          }
+          w={160}
+        />
+        <TextInput
+          placeholder="Filter by queue..."
+          size="xs"
+          leftSection={<IconSearch size={14} />}
+          value={queueFilter}
+          onChange={(e) => { setQueueFilter(e.currentTarget.value); setPage(1); setExpanded(null); }}
+          rightSection={
+            queueFilter ? (
+              <ActionIcon variant="subtle" size="xs" onClick={() => { setQueueFilter(""); setPage(1); }}>
+                <IconX size={12} />
+              </ActionIcon>
+            ) : null
+          }
+          w={160}
+        />
+        {hasActiveFilters && (
+          <Button variant="subtle" size="xs" onClick={resetFilters}>Clear filters</Button>
+        )}
+      </Group>
+
+      {/* Table */}
+      {loading && jobs.length === 0 ? (
+        <Group justify="center" pt="xl">
+          <Loader />
+        </Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={600}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      checked={selection.isAllSelected(jobIds)}
+                      indeterminate={selection.count > 0 && !selection.isAllSelected(jobIds)}
+                      onChange={() => selection.toggleAll(jobIds)}
+                      aria-label="Select all"
+                    />
+                  </Table.Th>
+                  <Table.Th w={32}></Table.Th>
+                  <Table.Th>Type</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th visibleFrom="md">Attempts</Table.Th>
+                  <Table.Th visibleFrom="md">Created</Table.Th>
+                  <Table.Th visibleFrom="lg">Error</Table.Th>
+                  <Table.Th ta="right">Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {jobs.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={8}>
+                      <Text ta="center" c="dimmed" py="lg">
+                        {statusFilter || typeFilter || queueFilter ? "No jobs match your filters" : "No jobs found"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  jobs.map((job) => (
+                    <Box key={job.id} component="tbody">
+                      <Table.Tr
+                        bg={selection.isSelected(job.id) ? "var(--mantine-primary-color-light)" : undefined}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setExpanded((prev) => (prev === job.id ? null : job.id))}
+                      >
+                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selection.isSelected(job.id)}
+                            onChange={() => selection.toggle(job.id)}
+                            aria-label={`Select job ${job.id}`}
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          {expanded === job.id ? (
+                            <IconChevronDown size={14} style={{ opacity: 0.5 }} />
+                          ) : (
+                            <IconChevronRight size={14} style={{ opacity: 0.5 }} />
                           )}
-                          {isVisible("attempts") && (
-                            <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                              {job.attempts}/{job.max_attempts}
-                            </td>
-                          )}
-                          {isVisible("created_at") && (
-                            <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                              {formatTime(job.created_at)}
-                            </td>
-                          )}
-                          {isVisible("error") && (
-                            <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
-                              {job.last_error || "—"}
-                            </td>
-                          )}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                              {(job.status === "failed" || job.status === "dead") && (
-                                <Button
-                                  variant="ghost"
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" ff="monospace">{job.type}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" color={statusColors[job.status] || "gray"} size="sm">
+                            {job.status}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td visibleFrom="md">
+                          <Text size="sm" c="dimmed">{job.attempts}/{job.max_attempts}</Text>
+                        </Table.Td>
+                        <Table.Td visibleFrom="md">
+                          <Text size="sm" c="dimmed">{formatTime(job.created_at)}</Text>
+                        </Table.Td>
+                        <Table.Td visibleFrom="lg">
+                          <Text size="xs" c="red" truncate maw={200}>{job.last_error || "\u2014"}</Text>
+                        </Table.Td>
+                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                          <Group gap={4} justify="flex-end" wrap="nowrap">
+                            {(job.status === "failed" || job.status === "dead") && (
+                              <Tooltip label="Retry">
+                                <ActionIcon
+                                  variant="subtle"
                                   size="sm"
                                   onClick={() => retryJob(job.id)}
+                                  loading={acting === job.id}
                                   disabled={acting !== null}
-                                  title="Retry"
                                 >
-                                  <RefreshCw className="h-3 w-3" />
-                                </Button>
-                              )}
-                              {job.status === "pending" && (
-                                <Button
-                                  variant="ghost"
+                                  <IconRotateClockwise size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            )}
+                            {job.status === "pending" && (
+                              <Tooltip label="Cancel">
+                                <ActionIcon
+                                  variant="subtle"
                                   size="sm"
+                                  color="red"
                                   onClick={() => setCancelTarget(job)}
                                   disabled={acting !== null}
-                                  title="Cancel"
                                 >
-                                  <Ban className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        {expanded === job.id && (
-                          <tr key={`${job.id}-detail`} className="border-b border-border">
-                            <td colSpan={visibleCount + 3} className="bg-muted/20 p-0">
-                              <JobDetail job={job} />
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {(hasPrev || hasMore) && (
-                <div className="flex items-center justify-between border-t border-border px-4 py-3">
-                  <span className="text-sm text-muted-foreground">
-                    {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setOffset(Math.max(0, offset - PAGE_SIZE)); setExpanded(null); }}
-                      disabled={!hasPrev}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setOffset(offset + PAGE_SIZE); setExpanded(null); }}
-                      disabled={!hasMore}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+                                  <IconBan size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            )}
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                      {expanded === job.id && (
+                        <Table.Tr>
+                          <Table.Td colSpan={8} p={0} bg="var(--mantine-color-gray-light)">
+                            <JobDetail job={job} />
+                          </Table.Td>
+                        </Table.Tr>
+                      )}
+                    </Box>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </Text>
+              <Pagination value={page} onChange={(p) => { setPage(p); setExpanded(null); }} total={totalPages} size="sm" />
+            </Group>
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
 
-      {/* Cancel Confirmation */}
-      <ConfirmDialog
-        open={!!cancelTarget}
-        onClose={() => setCancelTarget(null)}
-        onConfirm={cancelJob}
-        title="Cancel Job"
-        message="Are you sure you want to cancel this job? It will not be executed."
-        confirmLabel="Cancel Job"
-        loading={acting === cancelTarget?.id}
-        details={cancelTarget && (
-          <>
-            <div><span className="font-medium">Type:</span> {cancelTarget.type}</div>
-            <div><span className="font-medium">Queue:</span> {cancelTarget.queue}</div>
-          </>
-        )}
-      />
+      {/* Bulk action bar */}
+      {selection.count > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group
+            gap="sm"
+            px="md"
+            py="xs"
+            style={(theme) => ({
+              background: "var(--mantine-color-body)",
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: theme.radius.md,
+              boxShadow: theme.shadows.lg,
+            })}
+          >
+            <Text size="sm" fw={500}>{selection.count} selected</Text>
+            <Button
+              variant="light"
+              size="xs"
+              leftSection={<IconRotateClockwise size={14} />}
+              onClick={() => setBulkRetryOpen(true)}
+            >
+              Retry
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              size="xs"
+              leftSection={<IconTrash size={14} />}
+              onClick={() => setBulkCancelOpen(true)}
+            >
+              Cancel
+            </Button>
+            <ActionIcon variant="subtle" size="sm" onClick={selection.clear}>
+              <IconX size={14} />
+            </ActionIcon>
+          </Group>
+        </Box>
+      )}
 
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="default" size="sm" onClick={() => setBulkRetryOpen(true)}>
-          <RotateCcw className="h-3.5 w-3.5 mr-1" />
-          Retry
-        </Button>
-        <Button variant="destructive" size="sm" onClick={() => setBulkCancelOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Cancel
-        </Button>
-      </BulkActionBar>
+      {/* Cancel confirmation */}
+      <Modal opened={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Cancel Job">
+        <Stack>
+          <Text size="sm">Are you sure you want to cancel this job? It will not be executed.</Text>
+          {cancelTarget && (
+            <Box>
+              <Text size="sm"><strong>Type:</strong> <Text span ff="monospace" size="xs">{cancelTarget.type}</Text></Text>
+              <Text size="sm"><strong>Queue:</strong> <Text span ff="monospace" size="xs">{cancelTarget.queue}</Text></Text>
+            </Box>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setCancelTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={cancelJob} loading={actionLoading}>Cancel Job</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-      <ConfirmDialog
-        open={bulkRetryOpen}
-        onClose={() => setBulkRetryOpen(false)}
-        onConfirm={handleBulkRetry}
-        title="Retry Jobs"
-        message={`Are you sure you want to retry ${selection.count} job${selection.count !== 1 ? "s" : ""}?`}
-        confirmLabel="Retry"
-        loading={bulkRetrying}
-      />
+      {/* Bulk retry confirmation */}
+      <Modal opened={bulkRetryOpen} onClose={() => setBulkRetryOpen(false)} title="Retry Jobs">
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to retry <strong>{selection.count}</strong> job(s)?
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkRetryOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkRetry} loading={actionLoading}>Retry</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-      <ConfirmDialog
-        open={bulkCancelOpen}
-        onClose={() => setBulkCancelOpen(false)}
-        onConfirm={handleBulkCancel}
-        title="Cancel Jobs"
-        message={`Are you sure you want to cancel ${selection.count} job${selection.count !== 1 ? "s" : ""}? They will not be executed.`}
-        confirmLabel="Cancel"
-        loading={bulkCancelling}
-      />
-    </div>
+      {/* Bulk cancel confirmation */}
+      <Modal opened={bulkCancelOpen} onClose={() => setBulkCancelOpen(false)} title="Cancel Jobs">
+        <Stack>
+          <Text size="sm">
+            Are you sure you want to cancel <strong>{selection.count}</strong> job(s)? They will not be executed.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkCancelOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkCancel} loading={actionLoading}>Cancel Jobs</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }

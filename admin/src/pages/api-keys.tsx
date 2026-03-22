@@ -1,42 +1,46 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
-import { useDebounce } from "@/lib/use-debounce";
-import { useSelection } from "@/lib/use-selection";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogCloseButton,
-  DialogBody,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import { Plus, Pencil, Trash2, Copy, Check, Search, X, Download } from "lucide-react";
-import { TableSkeleton } from "@/components/ui/skeleton";
-import { ErrorAlert } from "@/components/ui/error-alert";
-import { Pagination } from "@/components/ui/pagination";
-import { TableEmptyRow } from "@/components/ui/empty-state";
-import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { ColumnToggle } from "@/components/ui/column-toggle";
-import { useColumnVisibility } from "@/lib/use-column-visibility";
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Code,
+  CopyButton,
+  Group,
+  Loader,
+  Modal,
+  Pagination,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import {
+  IconAlertCircle,
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconCheck,
+  IconCopy,
+  IconDownload,
+  IconPencil,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
+import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useSort } from "@/hooks/use-sort";
+import { useSelection } from "@/hooks/use-selection";
 
-const APIKEY_COLUMNS = [
-  { key: "name", label: "Name" },
-  { key: "key", label: "Key" },
-  { key: "scopes", label: "Scopes" },
-  { key: "last_used", label: "Last Used" },
-  { key: "requests", label: "Requests" },
-  { key: "expires", label: "Expires" },
-  { key: "status", label: "Status" },
-  { key: "created_at", label: "Created" },
-];
-
-interface APIKey {
+interface ApiKey {
   id: number;
   name: string;
   key_prefix: string;
@@ -49,607 +53,383 @@ interface APIKey {
   revoked_at: string;
 }
 
-interface CreatedKey {
-  id: number;
-  name: string;
-  key: string;
-  key_prefix: string;
-  scopes: string;
-  created_by: number;
-  expires_at: string;
-  created_at: string;
+const PAGE_SIZE = 20;
+
+function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
+  if (sort.column !== column) return <IconArrowsSort size={14} stroke={1.5} />;
+  return sort.direction === "asc" ? <IconArrowUp size={14} stroke={1.5} /> : <IconArrowDown size={14} stroke={1.5} />;
 }
 
-export default function APIKeysPage() {
-  const [keys, setKeys] = useState<APIKey[]>([]);
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "—";
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function keyStatus(key: ApiKey): { label: string; color: string } {
+  if (key.revoked_at) return { label: "Revoked", color: "red" };
+  if (key.expires_at && new Date(key.expires_at) < new Date()) return { label: "Expired", color: "gray" };
+  return { label: "Active", color: "green" };
+}
+
+export default function ApiKeysPage() {
+  const [keys, setKeys] = useState<ApiKey[]>([]);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<number | null>(null);
-
-  // Pagination.
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
-
-  // Search.
+  const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounce(searchInput, 300);
-
-  // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+  const selection = useSelection();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Column visibility.
-  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("api-keys", APIKEY_COLUMNS);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [editKey, setEditKey] = useState<ApiKey | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Selection.
-  const selection = useSelection<number>();
-  const [bulkRevoking, setBulkRevoking] = useState(false);
-  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const createForm = useForm({
+    initialValues: { name: "", scopes: "", expires_at: "" },
+    validate: {
+      name: (v) => (!v ? "Name is required" : null),
+    },
+  });
 
-  // Dialog state.
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<APIKey | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<APIKey | null>(null);
-
-  // Form state.
-  const [name, setName] = useState("");
-  const [scopes, setScopes] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-  const [formError, setFormError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-
-  // Export state.
-  const [exporting, setExporting] = useState(false);
-
-  // Created key reveal state.
-  const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  async function handleExport() {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-      await downloadCSV(`/admin/api-keys/export?${params}`);
-    } catch {
-      toast.error("Failed to export API keys");
-    } finally {
-      setExporting(false);
-    }
-  }
+  const editForm = useForm({
+    initialValues: { name: "", scopes: "" },
+  });
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      params.set("limit", String(pageSize));
-      params.set("offset", String(page * pageSize));
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        sort: sort.column,
+        order: sort.direction.toUpperCase(),
+      });
       if (search) params.set("search", search);
-      params.set("sort", sort.column);
-      params.set("order", sort.direction);
-
-      const data = await get<{ api_keys: APIKey[]; total: number }>(
-        `/admin/api-keys?${params}`
-      );
-      setKeys(data.api_keys);
+      const data = await get<{ api_keys: ApiKey[]; total: number }>(`/admin/api-keys?${params}`);
+      setKeys(data.api_keys ?? []);
       setTotal(data.total);
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "Failed to load API keys");
+    } catch {
+      setError("Failed to load API keys");
     } finally {
       setLoading(false);
     }
-  }, [page, search, sort.column, sort.direction]);
+  }, [page, search, sort]);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); selection.clear(); }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { selection.clear(); }, [page, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset to first page when search changes.
-  useEffect(() => {
-    setPage(0);
-  }, [search]);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  // Clear selection when page, search, or sort changes.
-  useEffect(() => {
-    selection.clear();
-  }, [page, search, sort.column, sort.direction]);
-
-  function openCreate() {
-    setEditing(null);
-    setName("");
-    setScopes("");
-    setExpiresAt("");
-    setFormError("");
-    setFieldErrors({});
-    setDialogOpen(true);
-  }
-
-  function openEdit(key: APIKey) {
-    setEditing(key);
-    setName(key.name);
-    setScopes(key.scopes);
-    setExpiresAt("");
-    setFormError("");
-    setFieldErrors({});
-    setDialogOpen(true);
-  }
-
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditing(null);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError("");
-    setFieldErrors({});
-    setSubmitting(true);
-
+  async function handleCreate(values: typeof createForm.values) {
+    setActionLoading(true);
     try {
-      if (editing) {
-        await put(`/admin/api-keys/${editing.id}`, { name, scopes });
-        toast.success("API key updated");
+      const body: Record<string, string> = { name: values.name };
+      if (values.scopes) body.scopes = values.scopes;
+      if (values.expires_at) body.expires_at = new Date(values.expires_at).toISOString();
+      const data = await post<{ api_key: { key: string } }>("/admin/api-keys", body);
+      setNewKey(data.api_key.key);
+      setCreateOpen(false);
+      createForm.reset();
+      load();
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields).length > 0) {
+        createForm.setErrors(e.fields);
       } else {
-        const body: Record<string, unknown> = { name, scopes };
-        if (expiresAt) {
-          body.expires_at = new Date(expiresAt).toISOString().replace(/\.\d{3}Z$/, "Z");
-        }
-        const data = await post<{ api_key: CreatedKey }>("/admin/api-keys", body);
-        setCreatedKey(data.api_key);
-        setCopied(false);
-        toast.success("API key created");
-      }
-      closeDialog();
-      await load();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setFormError(err.message);
-        setFieldErrors(err.fields);
-      } else {
-        setFormError("Operation failed");
+        notifications.show({ message: e instanceof ApiError ? e.message : "Failed to create API key", color: "red" });
       }
     } finally {
-      setSubmitting(false);
+      setActionLoading(false);
+    }
+  }
+
+  function openEdit(key: ApiKey) {
+    setEditKey(key);
+    editForm.setValues({ name: key.name, scopes: key.scopes });
+  }
+
+  async function handleEdit(values: typeof editForm.values) {
+    if (!editKey) return;
+    setActionLoading(true);
+    try {
+      await put(`/admin/api-keys/${editKey.id}`, { name: values.name, scopes: values.scopes });
+      notifications.show({ message: "API key updated", color: "green", icon: <IconCheck size={16} /> });
+      setEditKey(null);
+      load();
+    } catch (e) {
+      notifications.show({ message: e instanceof ApiError ? e.message : "Failed to update", color: "red" });
+    } finally {
+      setActionLoading(false);
     }
   }
 
   async function handleRevoke() {
     if (!revokeTarget) return;
-    const id = revokeTarget.id;
-    setActing(id);
+    setActionLoading(true);
     try {
-      await del(`/admin/api-keys/${id}`);
+      await del(`/admin/api-keys/${revokeTarget.id}`);
+      notifications.show({ message: "API key revoked", color: "green", icon: <IconCheck size={16} /> });
       setRevokeTarget(null);
-      toast.success("API key revoked");
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to revoke key");
+      load();
+    } catch {
+      notifications.show({ message: "Failed to revoke", color: "red" });
     } finally {
-      setActing(null);
+      setActionLoading(false);
     }
   }
 
   async function handleBulkRevoke() {
-    setBulkRevoking(true);
+    setActionLoading(true);
     try {
       const data = await post<{ affected: number }>("/admin/api-keys/bulk-revoke", { ids: selection.ids });
-      setBulkConfirmOpen(false);
+      notifications.show({ message: `${data.affected} key(s) revoked`, color: "green", icon: <IconCheck size={16} /> });
+      setBulkRevokeOpen(false);
       selection.clear();
-      toast.success(`${data.affected} API key${data.affected !== 1 ? "s" : ""} revoked`);
-      await load();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to bulk revoke API keys");
+      load();
+    } catch {
+      notifications.show({ message: "Failed to revoke keys", color: "red" });
     } finally {
-      setBulkRevoking(false);
+      setActionLoading(false);
     }
   }
 
-  async function copyKey(key: string) {
-    await navigator.clipboard.writeText(key);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleExport() {
+    try {
+      const params = new URLSearchParams({ sort: sort.column, order: sort.direction.toUpperCase() });
+      if (search) params.set("search", search);
+      await downloadCSV(`/admin/api-keys/export?${params}`);
+    } catch {
+      notifications.show({ message: "Failed to export", color: "red" });
+    }
   }
 
-  function formatTime(iso: string): string {
-    if (!iso) return "\u2014";
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
-  }
-
-  function isExpired(expiresAt: string): boolean {
-    if (!expiresAt) return false;
-    return new Date(expiresAt) < new Date();
-  }
-
-  const totalPages = Math.ceil(total / pageSize);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">API Keys</h1>
-        <TableSkeleton columns={[
-          { width: "w-24" },
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-24", hidden: "hidden lg:table-cell" },
-          { width: "w-20", hidden: "hidden lg:table-cell" },
-          { width: "w-14", hidden: "hidden lg:table-cell" },
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-16" },
-          { width: "w-20", hidden: "hidden md:table-cell" },
-          { width: "w-20" },
-        ]} />
-      </div>
-    );
-  }
+  const keyIds = keys.map((k) => k.id);
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">API Keys</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {total} key{total !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Key
-          </Button>
-        </div>
-      </div>
+    <Stack>
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Title order={3}>API Keys</Title>
+          {!loading && <Badge variant="light" size="lg">{total}</Badge>}
+        </Group>
+        <Group gap="xs">
+          <Button variant="subtle" size="xs" leftSection={<IconDownload size={16} />} onClick={handleExport}>Export CSV</Button>
+          <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>Create Key</Button>
+        </Group>
+      </Group>
+
+      <TextInput
+        placeholder="Search by name or key prefix..."
+        leftSection={<IconSearch size={16} />}
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.currentTarget.value)}
+        rightSection={searchInput ? <ActionIcon variant="subtle" size="sm" onClick={() => setSearchInput("")}><IconX size={14} /></ActionIcon> : null}
+      />
 
       {error && (
-        <ErrorAlert message={error} onRetry={load} onDismiss={() => setError("")} className="mb-4" />
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" withCloseButton onClose={() => setError("")}>
+          {error}
+          <Button variant="subtle" size="xs" ml="sm" onClick={load}>Retry</Button>
+        </Alert>
       )}
 
-      {/* Search bar */}
-      <div className="mb-4 flex gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name or key prefix..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {searchInput && (
-            <button
-              onClick={() => setSearchInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Key reveal after creation */}
-      {createdKey && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 rounded-md">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-green-800 dark:text-green-400">
-              API key created: {createdKey.name}
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCreatedKey(null)}
-            >
-              <span className="sr-only">Dismiss</span>
-              &times;
-            </Button>
-          </div>
-          <p className="text-xs text-green-700 dark:text-green-400 mb-2">
-            Copy this key now. It will not be shown again.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 bg-background border rounded px-3 py-2 text-sm font-mono break-all">
-              {createdKey.key}
-            </code>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyKey(createdKey.key)}
-            >
-              {copied ? (
-                <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected(keys.map((k) => k.id))}
-                  onChange={() => selection.toggleAll(keys.map((k) => k.id))}
-                  className="rounded border-input"
-                />
-              </th>
-              {isVisible("name") && <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />}
-              {isVisible("key") && <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>}
-              {isVisible("scopes") && <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>}
-              {isVisible("last_used") && <SortableHeader label="Last Used" column="last_used_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />}
-              {isVisible("requests") && <SortableHeader label="Requests" column="request_count" sort={sort} onSort={toggleSort} className="hidden lg:table-cell text-right" />}
-              {isVisible("expires") && <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>}
-              {isVisible("status") && <th className="text-left p-3 font-medium">Status</th>}
-              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
-              <th className="text-right p-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.length === 0 ? (
-              <TableEmptyRow colSpan={visibleCount + 2} message={search ? "No API keys match your search" : "No API keys found"} />
-            ) : (
-              keys.map((k) => (
-                <tr
-                  key={k.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 ${selection.isSelected(k.id) ? "bg-muted/40" : ""}`}
-                >
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={selection.isSelected(k.id)}
-                      onChange={() => selection.toggle(k.id)}
-                      className="rounded border-input"
+      {loading && keys.length === 0 ? (
+        <Group justify="center" pt="xl"><Loader /></Group>
+      ) : (
+        <>
+          <Table.ScrollContainer minWidth={800}>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      checked={selection.isAllSelected(keyIds)}
+                      indeterminate={selection.count > 0 && !selection.isAllSelected(keyIds)}
+                      onChange={() => selection.toggleAll(keyIds)}
+                      aria-label="Select all"
                     />
-                  </td>
-                  {isVisible("name") && <td className="p-3 font-medium">{k.name}</td>}
-                  {isVisible("key") && (
-                    <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
-                      {k.key_prefix}...
-                    </td>
-                  )}
-                  {isVisible("scopes") && (
-                    <td className="p-3 hidden lg:table-cell">
-                      {k.scopes ? (
-                        <div className="flex flex-wrap gap-1">
-                          {k.scopes.split(",").map((s) => (
-                            <ScopeBadge key={s} scope={s.trim()} />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">all</span>
-                      )}
-                    </td>
-                  )}
-                  {isVisible("last_used") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                      {formatTime(k.last_used_at)}
-                    </td>
-                  )}
-                  {isVisible("requests") && (
-                    <td className="p-3 text-right text-xs font-mono hidden lg:table-cell">
-                      {k.request_count > 0 ? k.request_count.toLocaleString() : "\u2014"}
-                    </td>
-                  )}
-                  {isVisible("expires") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {k.expires_at ? (
-                        <span className={isExpired(k.expires_at) ? "text-red-600 dark:text-red-400" : ""}>
-                          {formatTime(k.expires_at)}
-                        </span>
-                      ) : (
-                        "Never"
-                      )}
-                    </td>
-                  )}
-                  {isVisible("status") && (
-                    <td className="p-3">
-                      <KeyStatusBadge revoked={!!k.revoked_at} expired={isExpired(k.expires_at)} />
-                    </td>
-                  )}
-                  {isVisible("created_at") && (
-                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                      {formatTime(k.created_at)}
-                    </td>
-                  )}
-                  <td className="p-3 text-right">
-                    {k.revoked_at ? (
-                      <span className="text-xs text-muted-foreground">
-                        Revoked
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(k)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRevokeTarget(k)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("name")}>
+                    <Group gap={4} wrap="nowrap">Name <SortIcon column="name" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Key</Table.Th>
+                  <Table.Th>Scopes</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("last_used_at")}>
+                    <Group gap={4} wrap="nowrap">Last Used <SortIcon column="last_used_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("request_count")}>
+                    <Group gap={4} wrap="nowrap">Requests <SortIcon column="request_count" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th style={{ cursor: "pointer" }} onClick={() => toggleSort("created_at")}>
+                    <Group gap={4} wrap="nowrap">Created <SortIcon column="created_at" sort={sort} /></Group>
+                  </Table.Th>
+                  <Table.Th ta="right">Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {keys.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={9}>
+                      <Text ta="center" c="dimmed" py="lg">{search ? "No keys match your search" : "No API keys yet"}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  keys.map((key) => {
+                    const status = keyStatus(key);
+                    return (
+                      <Table.Tr key={key.id} bg={selection.isSelected(key.id) ? "var(--mantine-primary-color-light)" : undefined}>
+                        <Table.Td>
+                          <Checkbox checked={selection.isSelected(key.id)} onChange={() => selection.toggle(key.id)} aria-label={`Select ${key.name}`} />
+                        </Table.Td>
+                        <Table.Td><Text size="sm" fw={500}>{key.name}</Text></Table.Td>
+                        <Table.Td><Text size="sm" ff="monospace" c="dimmed">{key.key_prefix}...</Text></Table.Td>
+                        <Table.Td>
+                          {key.scopes ? (
+                            <Group gap={4}>
+                              {key.scopes.split(",").map((s) => (
+                                <Badge key={s} variant="light" size="xs">{s.trim()}</Badge>
+                              ))}
+                            </Group>
+                          ) : (
+                            <Text size="sm" c="dimmed">All</Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" c="dimmed">{timeAgo(key.last_used_at)}</Text>
+                        </Table.Td>
+                        <Table.Td><Text size="sm">{key.request_count}</Text></Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" color={status.color} size="sm">{status.label}</Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Tooltip label={new Date(key.created_at).toLocaleString()}>
+                            <Text size="sm" c="dimmed">{timeAgo(key.created_at)}</Text>
+                          </Tooltip>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap={4} justify="flex-end" wrap="nowrap">
+                            {!key.revoked_at && (
+                              <>
+                                <Tooltip label="Edit">
+                                  <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(key)}><IconPencil size={16} /></ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="Revoke">
+                                  <ActionIcon variant="subtle" size="sm" color="red" onClick={() => setRevokeTarget(key)}><IconTrash size={16} /></ActionIcon>
+                                </Tooltip>
+                              </>
+                            )}
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
 
-      {/* Pagination */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
-      />
+          {totalPages > 1 && (
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</Text>
+              <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+            </Group>
+          )}
+        </>
+      )}
 
-      {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onClose={closeDialog}>
-        <DialogHeader>
-          <DialogTitle>{editing ? "Edit API Key" : "Create API Key"}</DialogTitle>
-          <DialogCloseButton onClick={closeDialog} />
-        </DialogHeader>
+      {selection.count > 0 && (
+        <Box pos="fixed" bottom={20} left="50%" style={{ transform: "translateX(-50%)", zIndex: 100 }}>
+          <Group gap="sm" px="md" py="xs" style={(theme) => ({ background: "var(--mantine-color-body)", border: "1px solid var(--mantine-color-default-border)", borderRadius: theme.radius.md, boxShadow: theme.shadows.lg })}>
+            <Text size="sm" fw={500}>{selection.count} selected</Text>
+            <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => setBulkRevokeOpen(true)}>Revoke</Button>
+            <ActionIcon variant="subtle" size="sm" onClick={selection.clear}><IconX size={14} /></ActionIcon>
+          </Group>
+        </Box>
+      )}
 
-        <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-4">
-            {formError && !Object.keys(fieldErrors).length && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 rounded-md text-sm">
-                {formError}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Production API"
-                className={fieldErrors.name ? "border-destructive" : ""}
-              />
-              {fieldErrors.name && (
-                <p className="text-sm text-destructive">{fieldErrors.name}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="scopes">
-                Scopes{" "}
-                <span className="text-muted-foreground font-normal">
-                  (comma-separated, empty = all)
-                </span>
-              </Label>
-              <Input
-                id="scopes"
-                value={scopes}
-                onChange={(e) => setScopes(e.target.value)}
-                placeholder="e.g. read,write"
-              />
-            </div>
-
-            {!editing && (
-              <div className="space-y-2">
-                <Label htmlFor="expires">
-                  Expires{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="expires"
-                  type="datetime-local"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                />
-              </div>
-            )}
-          </DialogBody>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting
-                ? "Saving..."
-                : editing
-                  ? "Save Changes"
-                  : "Create Key"}
-            </Button>
-          </DialogFooter>
+      {/* Create modal */}
+      <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Create API Key">
+        <form onSubmit={createForm.onSubmit(handleCreate)}>
+          <Stack>
+            <TextInput label="Name" placeholder="My API Key" required {...createForm.getInputProps("name")} />
+            <TextInput label="Scopes" placeholder="Comma-separated (empty = all)" {...createForm.getInputProps("scopes")} />
+            <TextInput label="Expires" type="datetime-local" {...createForm.getInputProps("expires_at")} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Create</Button>
+            </Group>
+          </Stack>
         </form>
-      </Dialog>
+      </Modal>
 
-      {/* Revoke Confirmation */}
-      <ConfirmDialog
-        open={!!revokeTarget}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={handleRevoke}
-        title="Revoke API Key"
-        message="Are you sure you want to revoke this API key? Any application using this key will lose access immediately."
-        confirmLabel="Revoke"
-        loading={acting === revokeTarget?.id}
-        details={revokeTarget && (
-          <>
-            <div><span className="font-medium">Name:</span> {revokeTarget.name}</div>
-            <div><span className="font-medium">Key:</span> <span className="font-mono text-xs">{revokeTarget.key_prefix}...</span></div>
-          </>
-        )}
-      />
+      {/* New key display */}
+      <Modal opened={!!newKey} onClose={() => setNewKey("")} title="API Key Created">
+        <Stack>
+          <Alert color="yellow" variant="light">Copy this key now — it will not be shown again.</Alert>
+          <Code block style={{ wordBreak: "break-all" }}>{newKey}</Code>
+          <Group justify="flex-end">
+            <CopyButton value={newKey}>
+              {({ copied, copy }) => (
+                <Button variant={copied ? "light" : "default"} color={copied ? "green" : undefined} leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />} onClick={copy}>
+                  {copied ? "Copied" : "Copy Key"}
+                </Button>
+              )}
+            </CopyButton>
+          </Group>
+        </Stack>
+      </Modal>
 
-      {/* Bulk Actions */}
-      <BulkActionBar count={selection.count} onClear={selection.clear}>
-        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Revoke
-        </Button>
-      </BulkActionBar>
+      {/* Edit modal */}
+      <Modal opened={!!editKey} onClose={() => setEditKey(null)} title="Edit API Key">
+        <form onSubmit={editForm.onSubmit(handleEdit)}>
+          <Stack>
+            <TextInput label="Name" {...editForm.getInputProps("name")} />
+            <TextInput label="Scopes" placeholder="Comma-separated (empty = all)" {...editForm.getInputProps("scopes")} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setEditKey(null)}>Cancel</Button>
+              <Button type="submit" loading={actionLoading}>Save</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
 
-      <ConfirmDialog
-        open={bulkConfirmOpen}
-        onClose={() => setBulkConfirmOpen(false)}
-        onConfirm={handleBulkRevoke}
-        title="Revoke API Keys"
-        message={`Are you sure you want to revoke ${selection.count} API key${selection.count !== 1 ? "s" : ""}? Any applications using these keys will lose access immediately.`}
-        confirmLabel="Revoke"
-        loading={bulkRevoking}
-      />
-    </div>
-  );
-}
+      {/* Revoke confirmation */}
+      <Modal opened={!!revokeTarget} onClose={() => setRevokeTarget(null)} title="Revoke API Key" size="sm">
+        <Stack>
+          <Text size="sm">Revoke API key <strong>{revokeTarget?.name}</strong>? This cannot be undone.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setRevokeTarget(null)}>Cancel</Button>
+            <Button color="red" onClick={handleRevoke} loading={actionLoading}>Revoke</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
-function ScopeBadge({ scope }: { scope: string }) {
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
-      {scope}
-    </span>
-  );
-}
-
-function KeyStatusBadge({
-  revoked,
-  expired,
-}: {
-  revoked: boolean;
-  expired: boolean;
-}) {
-  if (revoked) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400">
-        Revoked
-      </span>
-    );
-  }
-  if (expired) {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400">
-        Expired
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400">
-      Active
-    </span>
+      {/* Bulk revoke */}
+      <Modal opened={bulkRevokeOpen} onClose={() => setBulkRevokeOpen(false)} title="Revoke API Keys" size="sm">
+        <Stack>
+          <Text size="sm">Revoke <strong>{selection.count}</strong> API key(s)? This cannot be undone.</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setBulkRevokeOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleBulkRevoke} loading={actionLoading}>Revoke {selection.count} key(s)</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Stack>
   );
 }
