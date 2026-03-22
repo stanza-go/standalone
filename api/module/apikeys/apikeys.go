@@ -190,7 +190,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		var createdBy int64
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if ok {
-			createdBy, _ = strconv.ParseInt(claims.UID, 10, 64)
+			createdBy = claims.IntUID()
 		}
 
 		now := time.Now().UTC().Format(time.RFC3339)
@@ -241,9 +241,8 @@ type updateRequest struct {
 
 func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid api key id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -309,9 +308,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid api key id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

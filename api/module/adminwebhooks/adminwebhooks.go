@@ -186,7 +186,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		now := time.Now().UTC().Format(time.RFC3339)
 
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		createdBy, _ := strconv.ParseInt(claims.UID, 10, 64)
+		createdBy := claims.IntUID()
 
 		sql, args := sqlite.Insert("webhooks").
 			Set("url", req.URL).

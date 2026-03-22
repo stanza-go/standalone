@@ -209,9 +209,8 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -253,9 +252,8 @@ type updateRequest struct {
 
 func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -348,9 +346,8 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -453,9 +450,8 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 // activityHandler returns audit log entries where this user is the target entity.
 func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -517,9 +513,8 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 // sessionsHandler returns active refresh tokens for this user.
 func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -569,9 +564,8 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 // uploadsHandler returns uploads belonging to this user.
 func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -637,9 +631,8 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 // so the impersonation expires naturally.
 func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid user id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

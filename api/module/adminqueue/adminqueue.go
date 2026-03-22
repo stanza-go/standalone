@@ -185,9 +185,8 @@ func bulkCancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, 
 
 func retryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid job id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 		if err := q.Retry(id); err != nil {
@@ -203,9 +202,8 @@ func retryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http
 
 func cancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid job id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 		if err := q.Cancel(id); err != nil {

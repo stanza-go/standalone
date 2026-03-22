@@ -40,7 +40,7 @@ func Register(admin *http.Group, db *sqlite.DB, svc *notifications.Service) {
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
@@ -101,7 +101,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		unreadOnly := r.URL.Query().Get("unread") == "true"
 
@@ -142,7 +142,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func unreadCountHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		count := notifications.UnreadCount(db, notifications.EntityAdmin, adminID)
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -154,11 +154,10 @@ func unreadCountHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid notification id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -188,7 +187,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("notifications").
@@ -286,7 +285,7 @@ func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.R
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		conn, err := upgrader.Upgrade(w, r)
 		if err != nil {
@@ -346,7 +345,7 @@ func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.R
 func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
 		var req struct {
 			IDs []int64 `json:"ids"`
@@ -385,11 +384,10 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		adminID := claims.IntUID()
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid notification id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

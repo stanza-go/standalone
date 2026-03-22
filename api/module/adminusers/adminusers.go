@@ -229,9 +229,8 @@ type updateRequest struct {
 
 func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -336,9 +335,8 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -389,9 +387,8 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 // getHandler returns a single admin by ID with active session count.
 func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -427,9 +424,8 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 // activityHandler returns audit log entries performed by this admin.
 func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -491,9 +487,8 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 // sessionsHandler returns active refresh tokens for this admin.
 func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid admin id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

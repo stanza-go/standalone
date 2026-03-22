@@ -5,7 +5,6 @@
 package userapikeys
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -134,7 +133,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		createdBy, _ := strconv.ParseInt(userID, 10, 64)
+		createdBy := claims.IntUID()
 		now := time.Now().UTC().Format(time.RFC3339)
 
 		q := sqlite.Insert("api_keys").
@@ -179,9 +178,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid api key id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -244,9 +242,8 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid api key id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

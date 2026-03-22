@@ -4,7 +4,6 @@
 package usernotifications
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -32,7 +31,7 @@ func Register(user *http.Group, db *sqlite.DB) {
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		userID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		userID := claims.IntUID()
 
 		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
@@ -90,7 +89,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func unreadCountHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		userID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		userID := claims.IntUID()
 
 		count := notifications.UnreadCount(db, notifications.EntityUser, userID)
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -102,11 +101,10 @@ func unreadCountHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		userID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		userID := claims.IntUID()
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid notification id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -136,7 +134,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		userID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		userID := claims.IntUID()
 
 		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("notifications").
@@ -161,11 +159,10 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
-		userID, _ := strconv.ParseInt(claims.UID, 10, 64)
+		userID := claims.IntUID()
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid notification id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 

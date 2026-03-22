@@ -16,7 +16,6 @@ import (
 	nethttp "net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -224,9 +223,8 @@ func detailHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid upload id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -247,9 +245,8 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid upload id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -282,9 +279,8 @@ func fileHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *ht
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid upload id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
@@ -334,9 +330,8 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid upload id")
+		id, ok := http.PathParamInt64(w, r, "id")
+		if !ok {
 			return
 		}
 
