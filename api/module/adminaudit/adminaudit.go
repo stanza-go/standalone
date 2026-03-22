@@ -100,14 +100,12 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		selectQ := buildAuditSelect(r)
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
 			"id", "DESC")
-		sql, args = selectQ.OrderBy("audit_log."+sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
+		sql, args := selectQ.OrderBy("audit_log."+sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list audit entries")

@@ -44,11 +44,9 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			q.Where("read_at IS NULL")
 		}
 
-		var total int
-		sql, args := sqlite.CountFrom(q).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(q)
 
-		sql, args = q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
+		sql, args := q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")

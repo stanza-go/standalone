@@ -59,14 +59,12 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("api_keys")
 		selectQ.WhereSearch(search, "name", "key_prefix")
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "name", "created_at", "last_used_at", "request_count"},
 			"id", "DESC")
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy(sortCol, sortDir).
 			Limit(pg.Limit).
 			Offset(pg.Offset).

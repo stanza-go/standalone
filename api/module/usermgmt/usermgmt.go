@@ -62,14 +62,12 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("deleted_at IS NULL")
 		selectQ.WhereSearch(search, "email", "name")
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "email", "name", "is_active", "created_at", "updated_at"},
 			"id", "DESC")
-		sql, args = selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
+		sql, args := selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list users")
@@ -466,11 +464,9 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("al.entity_type = 'user'").
 			Where("al.entity_id = ?", idStr)
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy("al.created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
@@ -580,11 +576,9 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", idStr).
 			Where("deleted_at IS NULL")
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy("created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).
 			Build()

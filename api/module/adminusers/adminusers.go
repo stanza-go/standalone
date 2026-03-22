@@ -59,14 +59,12 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("deleted_at IS NULL")
 		selectQ.WhereSearch(search, "email", "name")
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "email", "name", "role", "is_active", "created_at", "updated_at"},
 			"id", "ASC")
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy(sortCol, sortDir).
 			Limit(pg.Limit).
 			Offset(pg.Offset).
@@ -438,11 +436,9 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		).From("audit_log").
 			Where("admin_id = ?", idStr)
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy("created_at", "DESC").
 			Limit(limit).Offset(offset).
 			Build()

@@ -61,9 +61,7 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			sb.Where("created_at <= ?", to)
 		}
 
-		var total int
-		countSQL, countArgs := sqlite.CountFrom(sb).Build()
-		_ = db.QueryRow(countSQL, countArgs...).Scan(&total)
+		total, _ := db.Count(sb)
 
 		selectSQL, selectArgs := sb.OrderBy("created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).

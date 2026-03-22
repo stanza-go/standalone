@@ -82,11 +82,9 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("cron_runs").
 			Where("name = ?", name)
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
-		sql, args = selectQ.OrderBy("started_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
+		sql, args := selectQ.OrderBy("started_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "database error")

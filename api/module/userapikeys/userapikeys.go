@@ -57,11 +57,9 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", userID)
 		selectQ.WhereSearch(search, "name", "key_prefix")
 
-		var total int
-		sql, args := sqlite.CountFrom(selectQ).Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
+		total, _ := db.Count(selectQ)
 
-		sql, args = selectQ.
+		sql, args := selectQ.
 			OrderBy("id", "DESC").
 			Limit(pg.Limit).
 			Offset(pg.Offset).
