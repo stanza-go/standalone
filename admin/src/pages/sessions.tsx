@@ -9,7 +9,17 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
 import { Download, Trash2 } from "lucide-react";
+
+const SESSION_COLUMNS = [
+  { key: "token_id", label: "Token ID" },
+  { key: "type", label: "Type" },
+  { key: "admin", label: "Admin" },
+  { key: "created_at", label: "Created" },
+  { key: "expires_at", label: "Expires" },
+];
 
 interface Session {
   id: string;
@@ -30,6 +40,9 @@ export default function SessionsPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("created_at", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("sessions", SESSION_COLUMNS);
 
   // Selection.
   const selection = useSelection<string>();
@@ -155,10 +168,13 @@ export default function SessionsPage() {
             {sessions.length} active session{sessions.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={exporting}>
-          <Download className="h-4 w-4 mr-2" />
-          {exporting ? "Exporting..." : "Export CSV"}
-        </Button>
+        <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -177,17 +193,17 @@ export default function SessionsPage() {
                   className="rounded border-input"
                 />
               </th>
-              <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>
-              <SortableHeader label="Type" column="entity_type" sort={sort} onSort={toggleSort} />
-              <th className="text-left p-3 font-medium">Admin</th>
-              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <SortableHeader label="Expires" column="expires_at" sort={sort} onSort={toggleSort} />
+              {isVisible("token_id") && <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>}
+              {isVisible("type") && <SortableHeader label="Type" column="entity_type" sort={sort} onSort={toggleSort} />}
+              {isVisible("admin") && <th className="text-left p-3 font-medium">Admin</th>}
+              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("expires_at") && <SortableHeader label="Expires" column="expires_at" sort={sort} onSort={toggleSort} />}
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sessions.length === 0 ? (
-              <TableEmptyRow colSpan={7} message="No active sessions" />
+              <TableEmptyRow colSpan={visibleCount + 2} message="No active sessions" />
             ) : (
               sessions.map((session) => (
                 <tr
@@ -202,28 +218,38 @@ export default function SessionsPage() {
                       className="rounded border-input"
                     />
                   </td>
-                  <td className="p-3 font-mono text-xs hidden md:table-cell">
-                    {session.id.substring(0, 12)}...
-                  </td>
-                  <td className="p-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
-                      {session.entity_type}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <div>{session.name || "\u2014"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {session.email}
-                    </div>
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    <div>{formatTime(session.created_at)}</div>
-                    <div>{relativeTime(session.created_at)}</div>
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs">
-                    <div>{formatTime(session.expires_at)}</div>
-                    <div>{relativeTime(session.expires_at)}</div>
-                  </td>
+                  {isVisible("token_id") && (
+                    <td className="p-3 font-mono text-xs hidden md:table-cell">
+                      {session.id.substring(0, 12)}...
+                    </td>
+                  )}
+                  {isVisible("type") && (
+                    <td className="p-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
+                        {session.entity_type}
+                      </span>
+                    </td>
+                  )}
+                  {isVisible("admin") && (
+                    <td className="p-3">
+                      <div>{session.name || "\u2014"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {session.email}
+                      </div>
+                    </td>
+                  )}
+                  {isVisible("created_at") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      <div>{formatTime(session.created_at)}</div>
+                      <div>{relativeTime(session.created_at)}</div>
+                    </td>
+                  )}
+                  {isVisible("expires_at") && (
+                    <td className="p-3 text-muted-foreground text-xs">
+                      <div>{formatTime(session.expires_at)}</div>
+                      <div>{relativeTime(session.expires_at)}</div>
+                    </td>
+                  )}
                   <td className="p-3 text-right">
                     <Button
                       variant="destructive"

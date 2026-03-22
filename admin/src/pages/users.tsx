@@ -33,6 +33,16 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
+
+const USER_COLUMNS = [
+  { key: "id", label: "ID" },
+  { key: "email", label: "Email" },
+  { key: "name", label: "Name" },
+  { key: "status", label: "Status" },
+  { key: "created_at", label: "Created" },
+];
 
 interface User {
   id: number;
@@ -63,6 +73,7 @@ export default function UsersPage() {
   const [sort, toggleSort] = useSort("id", "desc");
 
   // Selection.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("users", USER_COLUMNS);
   const selection = useSelection<number>();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
@@ -289,6 +300,7 @@ export default function UsersPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? "Exporting..." : "Export CSV"}
@@ -337,17 +349,17 @@ export default function UsersPage() {
                   className="rounded border-input"
                 />
               </th>
-              <SortableHeader label="ID" column="id" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <SortableHeader label="Email" column="email" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              {isVisible("id") && <SortableHeader label="ID" column="id" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("email") && <SortableHeader label="Email" column="email" sort={sort} onSort={toggleSort} />}
+              {isVisible("name") && <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />}
+              {isVisible("status") && <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />}
+              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <TableEmptyRow colSpan={7} message={search ? "No users match your search" : "No users found"} />
+              <TableEmptyRow colSpan={visibleCount + 2} message={search ? "No users match your search" : "No users found"} />
             ) : (
               users.map((user) => (
                 <tr
@@ -362,28 +374,34 @@ export default function UsersPage() {
                       className="rounded border-input"
                     />
                   </td>
-                  <td className="p-3 font-mono text-xs hidden md:table-cell">{user.id}</td>
-                  <td className="p-3">
-                    <button
-                      onClick={() => navigate(`/users/${user.id}`)}
-                      className="hover:underline text-left"
-                    >
-                      {user.email}
-                    </button>
-                  </td>
-                  <td className="p-3">{user.name || "\u2014"}</td>
-                  <td className="p-3">
-                    <button
-                      onClick={() => handleToggleActive(user)}
-                      disabled={acting === user.id}
-                      className="cursor-pointer"
-                    >
-                      <StatusBadge active={user.is_active} />
-                    </button>
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {formatTime(user.created_at)}
-                  </td>
+                  {isVisible("id") && <td className="p-3 font-mono text-xs hidden md:table-cell">{user.id}</td>}
+                  {isVisible("email") && (
+                    <td className="p-3">
+                      <button
+                        onClick={() => navigate(`/users/${user.id}`)}
+                        className="hover:underline text-left"
+                      >
+                        {user.email}
+                      </button>
+                    </td>
+                  )}
+                  {isVisible("name") && <td className="p-3">{user.name || "\u2014"}</td>}
+                  {isVisible("status") && (
+                    <td className="p-3">
+                      <button
+                        onClick={() => handleToggleActive(user)}
+                        disabled={acting === user.id}
+                        className="cursor-pointer"
+                      >
+                        <StatusBadge active={user.is_active} />
+                      </button>
+                    </td>
+                  )}
+                  {isVisible("created_at") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {formatTime(user.created_at)}
+                    </td>
+                  )}
                   <td className="p-3 text-right">
                     <span className="inline-flex items-center gap-1">
                       <Button

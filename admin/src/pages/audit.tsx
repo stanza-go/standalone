@@ -18,6 +18,17 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
+
+const AUDIT_COLUMNS = [
+  { key: "time", label: "Time" },
+  { key: "admin", label: "Admin" },
+  { key: "action", label: "Action" },
+  { key: "target", label: "Target" },
+  { key: "details", label: "Details" },
+  { key: "ip", label: "IP" },
+];
 
 interface AuditEntry {
   id: number;
@@ -103,6 +114,9 @@ export default function AuditPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("audit", AUDIT_COLUMNS);
 
   // Export.
   const [exporting, setExporting] = useState(false);
@@ -202,10 +216,13 @@ export default function AuditPage() {
             {total} event{total !== 1 ? "s" : ""} recorded
           </p>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={exporting}>
-          <Download className="h-4 w-4 mr-2" />
-          {exporting ? "Exporting..." : "Export CSV"}
-        </Button>
+        <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -304,18 +321,18 @@ export default function AuditPage() {
           <thead>
             <tr className="bg-muted/50 border-b">
               <SortableHeader label="#" column="id" sort={sort} onSort={toggleSort} className="w-8" />
-              <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} />
-              <th className="text-left p-3 font-medium">Admin</th>
-              <SortableHeader label="Action" column="action" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Target" column="entity_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Details</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">IP</th>
+              {isVisible("time") && <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} />}
+              {isVisible("admin") && <th className="text-left p-3 font-medium">Admin</th>}
+              {isVisible("action") && <SortableHeader label="Action" column="action" sort={sort} onSort={toggleSort} />}
+              {isVisible("target") && <SortableHeader label="Target" column="entity_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("details") && <th className="text-left p-3 font-medium hidden lg:table-cell">Details</th>}
+              {isVisible("ip") && <th className="text-left p-3 font-medium hidden lg:table-cell">IP</th>}
             </tr>
           </thead>
           <tbody>
             {entries.length === 0 ? (
               <TableEmptyRow
-                colSpan={7}
+                colSpan={visibleCount + 1}
                 message={
                   search || actionFilter || dateFrom || dateTo
                     ? "No events match your filters"
@@ -338,44 +355,56 @@ export default function AuditPage() {
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       )}
                     </td>
-                    <td className="p-3">
-                      <div className="text-xs text-muted-foreground" title={formatTime(entry.created_at)}>
-                        {formatRelativeTime(entry.created_at)}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="font-medium text-xs">
-                        {entry.admin_name || entry.admin_email || `Admin #${entry.admin_id}`}
-                      </div>
-                      {entry.admin_name && entry.admin_email && (
-                        <div className="text-xs text-muted-foreground">{entry.admin_email}</div>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${actionColor(entry.action)}`}
-                      >
-                        {ACTION_LABELS[entry.action] || entry.action}
-                      </span>
-                    </td>
-                    <td className="p-3 hidden md:table-cell">
-                      {entry.entity_type && (
-                        <span className="text-xs font-mono text-muted-foreground">
-                          {entry.entity_type}
-                          {entry.entity_id ? `#${entry.entity_id}` : ""}
+                    {isVisible("time") && (
+                      <td className="p-3">
+                        <div className="text-xs text-muted-foreground" title={formatTime(entry.created_at)}>
+                          {formatRelativeTime(entry.created_at)}
+                        </div>
+                      </td>
+                    )}
+                    {isVisible("admin") && (
+                      <td className="p-3">
+                        <div className="font-medium text-xs">
+                          {entry.admin_name || entry.admin_email || `Admin #${entry.admin_id}`}
+                        </div>
+                        {entry.admin_name && entry.admin_email && (
+                          <div className="text-xs text-muted-foreground">{entry.admin_email}</div>
+                        )}
+                      </td>
+                    )}
+                    {isVisible("action") && (
+                      <td className="p-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${actionColor(entry.action)}`}
+                        >
+                          {ACTION_LABELS[entry.action] || entry.action}
                         </span>
-                      )}
-                    </td>
-                    <td className="p-3 hidden lg:table-cell">
-                      <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
-                        {entry.details || "\u2014"}
-                      </span>
-                    </td>
-                    <td className="p-3 hidden lg:table-cell">
-                      <span className="text-xs font-mono text-muted-foreground">
-                        {entry.ip_address}
-                      </span>
-                    </td>
+                      </td>
+                    )}
+                    {isVisible("target") && (
+                      <td className="p-3 hidden md:table-cell">
+                        {entry.entity_type && (
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {entry.entity_type}
+                            {entry.entity_id ? `#${entry.entity_id}` : ""}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {isVisible("details") && (
+                      <td className="p-3 hidden lg:table-cell">
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
+                          {entry.details || "\u2014"}
+                        </span>
+                      </td>
+                    )}
+                    {isVisible("ip") && (
+                      <td className="p-3 hidden lg:table-cell">
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {entry.ip_address}
+                        </span>
+                      </td>
+                    )}
                   </tr>
                 );
               })

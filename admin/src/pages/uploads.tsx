@@ -28,6 +28,16 @@ import { Pagination } from "@/components/ui/pagination";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
+
+const UPLOAD_COLUMNS = [
+  { key: "name", label: "Name" },
+  { key: "content_type", label: "Type" },
+  { key: "size", label: "Size" },
+  { key: "owner", label: "Owner" },
+  { key: "created_at", label: "Uploaded" },
+];
 
 interface UploadItem {
   id: number;
@@ -96,6 +106,9 @@ export default function UploadsPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("uploads", UPLOAD_COLUMNS);
 
   // Preview dialog.
   const [preview, setPreview] = useState<UploadItem | null>(null);
@@ -272,6 +285,7 @@ export default function UploadsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? "Exporting..." : "Export CSV"}
@@ -327,17 +341,17 @@ export default function UploadsPage() {
                 />
               </th>
               <th className="text-left p-3 font-medium w-12"></th>
-              <SortableHeader label="Name" column="original_name" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Type" column="content_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <SortableHeader label="Size" column="size_bytes" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Owner</th>
-              <SortableHeader label="Uploaded" column="created_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />
+              {isVisible("name") && <SortableHeader label="Name" column="original_name" sort={sort} onSort={toggleSort} />}
+              {isVisible("content_type") && <SortableHeader label="Type" column="content_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("size") && <SortableHeader label="Size" column="size_bytes" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("owner") && <th className="text-left p-3 font-medium hidden lg:table-cell">Owner</th>}
+              {isVisible("created_at") && <SortableHeader label="Uploaded" column="created_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />}
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {uploads.length === 0 ? (
-              <TableEmptyRow colSpan={8} message={typeFilter ? "No uploads match this filter" : "No uploads found"} />
+              <TableEmptyRow colSpan={visibleCount + 3} message={typeFilter ? "No uploads match this filter" : "No uploads found"} />
             ) : (
               uploads.map((upload) => (
                 <tr
@@ -367,34 +381,44 @@ export default function UploadsPage() {
                       </div>
                     )}
                   </td>
-                  <td className="p-3">
-                    <button
-                      className="text-left hover:underline cursor-pointer font-medium truncate max-w-[200px] block"
-                      onClick={() => setPreview(upload)}
-                      title={upload.original_name}
-                    >
-                      {upload.original_name}
-                    </button>
-                    {upload.deleted_at && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 mt-0.5">
-                        Deleted
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {upload.content_type}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {formatBytes(upload.size_bytes)}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                    {upload.entity_type && upload.entity_id
-                      ? `${upload.entity_type}:${upload.entity_id}`
-                      : "\u2014"}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                    {formatTime(upload.created_at)}
-                  </td>
+                  {isVisible("name") && (
+                    <td className="p-3">
+                      <button
+                        className="text-left hover:underline cursor-pointer font-medium truncate max-w-[200px] block"
+                        onClick={() => setPreview(upload)}
+                        title={upload.original_name}
+                      >
+                        {upload.original_name}
+                      </button>
+                      {upload.deleted_at && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 mt-0.5">
+                          Deleted
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {isVisible("content_type") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {upload.content_type}
+                    </td>
+                  )}
+                  {isVisible("size") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {formatBytes(upload.size_bytes)}
+                    </td>
+                  )}
+                  {isVisible("owner") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
+                      {upload.entity_type && upload.entity_id
+                        ? `${upload.entity_type}:${upload.entity_id}`
+                        : "\u2014"}
+                    </td>
+                  )}
+                  {isVisible("created_at") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
+                      {formatTime(upload.created_at)}
+                    </td>
+                  )}
                   <td className="p-3 text-right">
                     <span className="inline-flex items-center gap-1">
                       <Button

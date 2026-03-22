@@ -22,6 +22,16 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
+
+const WEBHOOK_COLUMNS = [
+  { key: "url", label: "URL" },
+  { key: "description", label: "Description" },
+  { key: "events", label: "Events" },
+  { key: "status", label: "Status" },
+  { key: "created_at", label: "Created" },
+];
 
 interface Webhook {
   id: number;
@@ -52,6 +62,9 @@ export default function WebhooksPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("created_at", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("webhooks", WEBHOOK_COLUMNS);
 
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -266,6 +279,7 @@ export default function WebhooksPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? "Exporting..." : "Export CSV"}
@@ -352,17 +366,17 @@ export default function WebhooksPage() {
                   className="rounded border-input"
                 />
               </th>
-              <SortableHeader label="URL" column="url" sort={sort} onSort={toggleSort} />
-              <th className="text-left p-3 font-medium hidden md:table-cell">Description</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Events</th>
-              <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              {isVisible("url") && <SortableHeader label="URL" column="url" sort={sort} onSort={toggleSort} />}
+              {isVisible("description") && <th className="text-left p-3 font-medium hidden md:table-cell">Description</th>}
+              {isVisible("events") && <th className="text-left p-3 font-medium hidden lg:table-cell">Events</th>}
+              {isVisible("status") && <SortableHeader label="Status" column="is_active" sort={sort} onSort={toggleSort} />}
+              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {webhooks.length === 0 ? (
-              <TableEmptyRow colSpan={7} message={searchInput ? "No webhooks match your search" : "No webhooks configured"} />
+              <TableEmptyRow colSpan={visibleCount + 2} message={searchInput ? "No webhooks match your search" : "No webhooks configured"} />
             ) : (
               webhooks.map((wh) => (
                 <tr
@@ -378,28 +392,34 @@ export default function WebhooksPage() {
                       className="rounded border-input"
                     />
                   </td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs truncate max-w-[280px]">{wh.url}</span>
-                      <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
-                    </div>
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {wh.description || "\u2014"}
-                  </td>
-                  <td className="p-3 hidden lg:table-cell">
-                    <div className="flex flex-wrap gap-1">
-                      {wh.events.map((ev) => (
-                        <EventBadge key={ev} event={ev} />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <StatusBadge active={wh.is_active} />
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {formatTime(wh.created_at)}
-                  </td>
+                  {isVisible("url") && (
+                    <td className="p-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs truncate max-w-[280px]">{wh.url}</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+                      </div>
+                    </td>
+                  )}
+                  {isVisible("description") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {wh.description || "\u2014"}
+                    </td>
+                  )}
+                  {isVisible("events") && (
+                    <td className="p-3 hidden lg:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {wh.events.map((ev) => (
+                          <EventBadge key={ev} event={ev} />
+                        ))}
+                      </div>
+                    </td>
+                  )}
+                  {isVisible("status") && <td className="p-3"><StatusBadge active={wh.is_active} /></td>}
+                  {isVisible("created_at") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {formatTime(wh.created_at)}
+                    </td>
+                  )}
                   <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <span className="inline-flex items-center gap-1">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(wh)}>

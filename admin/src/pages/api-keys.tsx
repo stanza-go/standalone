@@ -22,6 +22,19 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
+
+const APIKEY_COLUMNS = [
+  { key: "name", label: "Name" },
+  { key: "key", label: "Key" },
+  { key: "scopes", label: "Scopes" },
+  { key: "last_used", label: "Last Used" },
+  { key: "requests", label: "Requests" },
+  { key: "expires", label: "Expires" },
+  { key: "status", label: "Status" },
+  { key: "created_at", label: "Created" },
+];
 
 interface APIKey {
   id: number;
@@ -64,6 +77,9 @@ export default function APIKeysPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("api-keys", APIKEY_COLUMNS);
 
   // Selection.
   const selection = useSelection<number>();
@@ -281,6 +297,7 @@ export default function APIKeysPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? "Exporting..." : "Export CSV"}
@@ -367,20 +384,20 @@ export default function APIKeysPage() {
                   className="rounded border-input"
                 />
               </th>
-              <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
-              <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>
-              <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>
-              <SortableHeader label="Last Used" column="last_used_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />
-              <SortableHeader label="Requests" column="request_count" sort={sort} onSort={toggleSort} className="hidden lg:table-cell text-right" />
-              <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>
-              <th className="text-left p-3 font-medium">Status</th>
-              <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+              {isVisible("name") && <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />}
+              {isVisible("key") && <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>}
+              {isVisible("scopes") && <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>}
+              {isVisible("last_used") && <SortableHeader label="Last Used" column="last_used_at" sort={sort} onSort={toggleSort} className="hidden lg:table-cell" />}
+              {isVisible("requests") && <SortableHeader label="Requests" column="request_count" sort={sort} onSort={toggleSort} className="hidden lg:table-cell text-right" />}
+              {isVisible("expires") && <th className="text-left p-3 font-medium hidden md:table-cell">Expires</th>}
+              {isVisible("status") && <th className="text-left p-3 font-medium">Status</th>}
+              {isVisible("created_at") && <SortableHeader label="Created" column="created_at" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
               <th className="text-right p-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {keys.length === 0 ? (
-              <TableEmptyRow colSpan={10} message={search ? "No API keys match your search" : "No API keys found"} />
+              <TableEmptyRow colSpan={visibleCount + 2} message={search ? "No API keys match your search" : "No API keys found"} />
             ) : (
               keys.map((k) => (
                 <tr
@@ -395,51 +412,56 @@ export default function APIKeysPage() {
                       className="rounded border-input"
                     />
                   </td>
-                  <td className="p-3 font-medium">{k.name}</td>
-                  <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
-                    {k.key_prefix}...
-                  </td>
-                  <td className="p-3 hidden lg:table-cell">
-                    {k.scopes ? (
-                      <div className="flex flex-wrap gap-1">
-                        {k.scopes.split(",").map((s) => (
-                          <ScopeBadge key={s} scope={s.trim()} />
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        all
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
-                    {formatTime(k.last_used_at)}
-                  </td>
-                  <td className="p-3 text-right text-xs font-mono hidden lg:table-cell">
-                    {k.request_count > 0 ? k.request_count.toLocaleString() : "\u2014"}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {k.expires_at ? (
-                      <span
-                        className={
-                          isExpired(k.expires_at) ? "text-red-600 dark:text-red-400" : ""
-                        }
-                      >
-                        {formatTime(k.expires_at)}
-                      </span>
-                    ) : (
-                      "Never"
-                    )}
-                  </td>
-                  <td className="p-3">
-                    <KeyStatusBadge
-                      revoked={!!k.revoked_at}
-                      expired={isExpired(k.expires_at)}
-                    />
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {formatTime(k.created_at)}
-                  </td>
+                  {isVisible("name") && <td className="p-3 font-medium">{k.name}</td>}
+                  {isVisible("key") && (
+                    <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
+                      {k.key_prefix}...
+                    </td>
+                  )}
+                  {isVisible("scopes") && (
+                    <td className="p-3 hidden lg:table-cell">
+                      {k.scopes ? (
+                        <div className="flex flex-wrap gap-1">
+                          {k.scopes.split(",").map((s) => (
+                            <ScopeBadge key={s} scope={s.trim()} />
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">all</span>
+                      )}
+                    </td>
+                  )}
+                  {isVisible("last_used") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
+                      {formatTime(k.last_used_at)}
+                    </td>
+                  )}
+                  {isVisible("requests") && (
+                    <td className="p-3 text-right text-xs font-mono hidden lg:table-cell">
+                      {k.request_count > 0 ? k.request_count.toLocaleString() : "\u2014"}
+                    </td>
+                  )}
+                  {isVisible("expires") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {k.expires_at ? (
+                        <span className={isExpired(k.expires_at) ? "text-red-600 dark:text-red-400" : ""}>
+                          {formatTime(k.expires_at)}
+                        </span>
+                      ) : (
+                        "Never"
+                      )}
+                    </td>
+                  )}
+                  {isVisible("status") && (
+                    <td className="p-3">
+                      <KeyStatusBadge revoked={!!k.revoked_at} expired={isExpired(k.expires_at)} />
+                    </td>
+                  )}
+                  {isVisible("created_at") && (
+                    <td className="p-3 text-muted-foreground text-xs hidden md:table-cell">
+                      {formatTime(k.created_at)}
+                    </td>
+                  )}
                   <td className="p-3 text-right">
                     {k.revoked_at ? (
                       <span className="text-xs text-muted-foreground">

@@ -21,6 +21,8 @@ import {
   X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -58,6 +60,15 @@ interface JobsResponse {
 
 const STATUS_FILTERS = ["", "pending", "running", "completed", "failed", "dead", "cancelled"] as const;
 const PAGE_SIZE = 25;
+
+const QUEUE_COLUMNS = [
+  { key: "id", label: "ID" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "attempts", label: "Attempts" },
+  { key: "created_at", label: "Created" },
+  { key: "error", label: "Error" },
+];
 
 function formatTime(iso: string): string {
   if (!iso) return "—";
@@ -187,6 +198,9 @@ export default function QueuePage() {
   const [acting, setActing] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [cancelTarget, setCancelTarget] = useState<QueueJob | null>(null);
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("queue", QUEUE_COLUMNS);
 
   // Selection.
   const selection = useSelection<number>();
@@ -342,10 +356,13 @@ export default function QueuePage() {
             Queue stats and job management
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
-          <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
+          <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
+            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -464,12 +481,12 @@ export default function QueuePage() {
                         />
                       </th>
                       <th className="px-4 py-3 font-medium w-8"></th>
-                      <th className="px-4 py-3 font-medium hidden md:table-cell">ID</th>
-                      <th className="px-4 py-3 font-medium">Type</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium hidden md:table-cell">Attempts</th>
-                      <th className="px-4 py-3 font-medium hidden md:table-cell">Created</th>
-                      <th className="px-4 py-3 font-medium hidden lg:table-cell">Error</th>
+                      {isVisible("id") && <th className="px-4 py-3 font-medium hidden md:table-cell">ID</th>}
+                      {isVisible("type") && <th className="px-4 py-3 font-medium">Type</th>}
+                      {isVisible("status") && <th className="px-4 py-3 font-medium">Status</th>}
+                      {isVisible("attempts") && <th className="px-4 py-3 font-medium hidden md:table-cell">Attempts</th>}
+                      {isVisible("created_at") && <th className="px-4 py-3 font-medium hidden md:table-cell">Created</th>}
+                      {isVisible("error") && <th className="px-4 py-3 font-medium hidden lg:table-cell">Error</th>}
                       <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
@@ -498,20 +515,28 @@ export default function QueuePage() {
                               <ChevronRight className="h-4 w-4" />
                             )}
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{job.id}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{job.type}</td>
-                          <td className="px-4 py-3">
-                            <StatusBadge status={job.status} />
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                            {job.attempts}/{job.max_attempts}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                            {formatTime(job.created_at)}
-                          </td>
-                          <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
-                            {job.last_error || "—"}
-                          </td>
+                          {isVisible("id") && <td className="px-4 py-3 font-mono text-xs hidden md:table-cell">{job.id}</td>}
+                          {isVisible("type") && <td className="px-4 py-3 font-mono text-xs">{job.type}</td>}
+                          {isVisible("status") && (
+                            <td className="px-4 py-3">
+                              <StatusBadge status={job.status} />
+                            </td>
+                          )}
+                          {isVisible("attempts") && (
+                            <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                              {job.attempts}/{job.max_attempts}
+                            </td>
+                          )}
+                          {isVisible("created_at") && (
+                            <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                              {formatTime(job.created_at)}
+                            </td>
+                          )}
+                          {isVisible("error") && (
+                            <td className="px-4 py-3 max-w-[200px] truncate text-destructive hidden lg:table-cell">
+                              {job.last_error || "—"}
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                               {(job.status === "failed" || job.status === "dead") && (
@@ -541,7 +566,7 @@ export default function QueuePage() {
                         </tr>
                         {expanded === job.id && (
                           <tr key={`${job.id}-detail`} className="border-b border-border">
-                            <td colSpan={9} className="bg-muted/20 p-0">
+                            <td colSpan={visibleCount + 3} className="bg-muted/20 p-0">
                               <JobDetail job={job} />
                             </td>
                           </tr>

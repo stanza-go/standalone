@@ -19,7 +19,15 @@ import { TableEmptyRow } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { ColumnToggle } from "@/components/ui/column-toggle";
+import { useColumnVisibility } from "@/lib/use-column-visibility";
 import { cn } from "@/lib/utils";
+
+const NOTIFICATION_COLUMNS = [
+  { key: "notification", label: "Notification" },
+  { key: "type", label: "Type" },
+  { key: "time", label: "Time" },
+];
 
 interface Notification {
   id: number;
@@ -86,6 +94,9 @@ export default function NotificationsPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Column visibility.
+  const { isVisible, toggle: toggleColumn, visibleCount, columns: colDefs } = useColumnVisibility("notifications", NOTIFICATION_COLUMNS);
 
   // Selection.
   const selection = useSelection<number>();
@@ -231,6 +242,7 @@ export default function NotificationsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ColumnToggle columns={colDefs} isVisible={isVisible} toggle={toggleColumn} />
           <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? "Exporting..." : "Export CSV"}
@@ -302,16 +314,16 @@ export default function NotificationsPage() {
                 />
               </th>
               <th className="text-left p-3 font-medium w-8"></th>
-              <th className="text-left p-3 font-medium">Notification</th>
-              <SortableHeader label="Type" column="type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
-              <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} className="hidden sm:table-cell" />
+              {isVisible("notification") && <th className="text-left p-3 font-medium">Notification</th>}
+              {isVisible("type") && <SortableHeader label="Type" column="type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />}
+              {isVisible("time") && <SortableHeader label="Time" column="created_at" sort={sort} onSort={toggleSort} className="hidden sm:table-cell" />}
               <th className="text-right p-3 font-medium w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
             {notifications.length === 0 ? (
               <TableEmptyRow
-                colSpan={6}
+                colSpan={visibleCount + 3}
                 message={
                   unreadOnly
                     ? "No unread notifications"
@@ -351,45 +363,51 @@ export default function NotificationsPage() {
                   </td>
 
                   {/* Content */}
-                  <td className="p-3">
-                    <p className={cn("text-sm", !n.read_at && "font-medium")}>
-                      {n.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                      {n.message}
-                    </p>
-                    {/* Show time on mobile (hidden on sm+) */}
-                    <p className="mt-1 text-[11px] text-muted-foreground/70 sm:hidden">
-                      {formatRelativeTime(n.created_at)}
-                    </p>
-                  </td>
+                  {isVisible("notification") && (
+                    <td className="p-3">
+                      <p className={cn("text-sm", !n.read_at && "font-medium")}>
+                        {n.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                        {n.message}
+                      </p>
+                      {/* Show time on mobile (hidden on sm+) */}
+                      <p className="mt-1 text-[11px] text-muted-foreground/70 sm:hidden">
+                        {formatRelativeTime(n.created_at)}
+                      </p>
+                    </td>
+                  )}
 
                   {/* Type badge */}
-                  <td className="p-3 hidden md:table-cell">
-                    <span
-                      className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                        TYPE_COLORS[n.type] || "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"
-                      )}
-                    >
-                      {n.type}
-                    </span>
-                  </td>
+                  {isVisible("type") && (
+                    <td className="p-3 hidden md:table-cell">
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                          TYPE_COLORS[n.type] || "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"
+                        )}
+                      >
+                        {n.type}
+                      </span>
+                    </td>
+                  )}
 
                   {/* Time */}
-                  <td className="p-3 hidden sm:table-cell">
-                    <div
-                      className="text-xs text-muted-foreground"
-                      title={formatTime(n.created_at)}
-                    >
-                      {formatRelativeTime(n.created_at)}
-                    </div>
-                    {n.read_at && (
-                      <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        Read {formatRelativeTime(n.read_at)}
+                  {isVisible("time") && (
+                    <td className="p-3 hidden sm:table-cell">
+                      <div
+                        className="text-xs text-muted-foreground"
+                        title={formatTime(n.created_at)}
+                      >
+                        {formatRelativeTime(n.created_at)}
                       </div>
-                    )}
-                  </td>
+                      {n.read_at && (
+                        <div className="text-[11px] text-muted-foreground/60 mt-0.5">
+                          Read {formatRelativeTime(n.read_at)}
+                        </div>
+                      )}
+                    </td>
+                  )}
 
                   {/* Actions */}
                   <td className="p-3 text-right">
