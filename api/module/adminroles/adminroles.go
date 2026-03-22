@@ -101,11 +101,11 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			roles[i].Scopes = loadScopes(db, roles[i].ID)
 
 			var count int
-			row := db.QueryRow(
-				"SELECT COUNT(*) FROM admins WHERE role = ? AND deleted_at IS NULL",
-				roles[i].Name,
-			)
-			_ = row.Scan(&count)
+			cq, ca := sqlite.Count("admins").
+				Where("role = ?", roles[i].Name).
+				Where("deleted_at IS NULL").
+				Build()
+			_ = db.QueryRow(cq, ca...).Scan(&count)
 			roles[i].AdminCount = count
 		}
 
@@ -342,11 +342,11 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// Check if any admins are using this role.
 		var count int
-		row = db.QueryRow(
-			"SELECT COUNT(*) FROM admins WHERE role = ? AND deleted_at IS NULL",
-			name,
-		)
-		_ = row.Scan(&count)
+		cq, ca := sqlite.Count("admins").
+			Where("role = ?", name).
+			Where("deleted_at IS NULL").
+			Build()
+		_ = db.QueryRow(cq, ca...).Scan(&count)
 		if count > 0 {
 			http.WriteError(w, http.StatusConflict, "role is assigned to "+strconv.Itoa(count)+" admin(s)")
 			return
@@ -460,14 +460,15 @@ func ensureBaseScope(scopes []string) []string {
 // Exported for use by other modules (e.g., adminusers).
 func ValidateRoleExists(db *sqlite.DB, role string) bool {
 	var count int
-	row := db.QueryRow("SELECT COUNT(*) FROM roles WHERE name = ?", role)
-	_ = row.Scan(&count)
+	sql, args := sqlite.Count("roles").Where("name = ?", role).Build()
+	_ = db.QueryRow(sql, args...).Scan(&count)
 	return count > 0
 }
 
 // RoleNames returns all role names from the database.
 func RoleNames(db *sqlite.DB) []string {
-	rows, err := db.Query("SELECT name FROM roles ORDER BY id ASC")
+	sql, args := sqlite.Select("name").From("roles").OrderBy("id", "ASC").Build()
+	rows, err := db.Query(sql, args...)
 	if err != nil {
 		return nil
 	}

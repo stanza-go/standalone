@@ -134,16 +134,17 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			return
 		}
 
-		placeholders := make([]string, len(req.IDs))
 		args := make([]any, len(req.IDs))
+		placeholders := make([]string, len(req.IDs))
 		for i, id := range req.IDs {
 			placeholders[i] = "?"
 			args[i] = id
 		}
 
-		query := fmt.Sprintf("DELETE FROM refresh_tokens WHERE id IN (%s)",
-			strings.Join(placeholders, ","))
-		result, err := db.Exec(query, args...)
+		sql, sqlArgs := sqlite.Delete("refresh_tokens").
+			Where("id IN ("+strings.Join(placeholders, ",")+")", args...).
+			Build()
+		result, err := db.Exec(sql, sqlArgs...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke sessions")
 			return

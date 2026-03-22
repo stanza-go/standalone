@@ -115,7 +115,11 @@ func (s *Service) NotifyUser(userID int64, notifType, title, message string, opt
 func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...Option) error {
 	o := applyOpts(options)
 
-	rows, err := s.db.Query("SELECT id FROM admins WHERE is_active = 1 AND deleted_at IS NULL")
+	sq, sa := sqlite.Select("id").From("admins").
+		Where("is_active = 1").
+		Where("deleted_at IS NULL").
+		Build()
+	rows, err := s.db.Query(sq, sa...)
 	if err != nil {
 		return err
 	}
@@ -202,8 +206,8 @@ func (s *Service) lookupEmail(entityType string, entityID int64) (string, error)
 	}
 
 	var addr string
-	err := s.db.QueryRow("SELECT email FROM "+table+" WHERE id = ?", entityID).Scan(&addr)
-	if err != nil {
+	sq, sa := sqlite.Select("email").From(table).Where("id = ?", entityID).Build()
+	if err := s.db.QueryRow(sq, sa...).Scan(&addr); err != nil {
 		return "", err
 	}
 	return addr, nil
@@ -296,7 +300,11 @@ func NotifyUser(db *sqlite.DB, userID int64, notifType, title, message string) (
 
 // NotifyAllAdmins creates a notification for every active admin.
 func NotifyAllAdmins(db *sqlite.DB, notifType, title, message string) error {
-	rows, err := db.Query("SELECT id FROM admins WHERE is_active = 1 AND deleted_at IS NULL")
+	sq, sa := sqlite.Select("id").From("admins").
+		Where("is_active = 1").
+		Where("deleted_at IS NULL").
+		Build()
+	rows, err := db.Query(sq, sa...)
 	if err != nil {
 		return err
 	}

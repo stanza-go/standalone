@@ -252,8 +252,14 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		// Include recent delivery stats.
 		var totalDeliveries, successCount, failedCount int
-		row = db.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END), 0) FROM webhook_deliveries WHERE webhook_id = ?", id)
-		_ = row.Scan(&totalDeliveries, &successCount, &failedCount)
+		sq, sa := sqlite.Select(
+			"COUNT(*)",
+			"COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END), 0)",
+			"COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END), 0)").
+			From("webhook_deliveries").
+			Where("webhook_id = ?", id).
+			Build()
+		_ = db.QueryRow(sq, sa...).Scan(&totalDeliveries, &successCount, &failedCount)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"webhook":          wh,
@@ -365,18 +371,18 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			placeholders[i] = "?"
 			args[i] = id
 		}
-		inClause := strings.Join(placeholders, ",")
+		inExpr := strings.Join(placeholders, ",")
 
 		// Delete deliveries first (FK constraint).
-		_, _ = db.Exec(
-			fmt.Sprintf("DELETE FROM webhook_deliveries WHERE webhook_id IN (%s)", inClause),
-			args...,
-		)
+		dq, da := sqlite.Delete("webhook_deliveries").
+			Where("webhook_id IN ("+inExpr+")", args...).
+			Build()
+		_, _ = db.Exec(dq, da...)
 
-		result, err := db.Exec(
-			fmt.Sprintf("DELETE FROM webhooks WHERE id IN (%s)", inClause),
-			args...,
-		)
+		dq, da = sqlite.Delete("webhooks").
+			Where("id IN ("+inExpr+")", args...).
+			Build()
+		result, err := db.Exec(dq, da...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete webhooks")
 			return
@@ -398,9 +404,11 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		id := r.PathValue("id")
 
 		// Delete deliveries first (FK constraint).
-		_, _ = db.Exec("DELETE FROM webhook_deliveries WHERE webhook_id = ?", id)
+		dq, da := sqlite.Delete("webhook_deliveries").Where("webhook_id = ?", id).Build()
+		_, _ = db.Exec(dq, da...)
 
-		result, err := db.Exec("DELETE FROM webhooks WHERE id = ?", id)
+		dq, da = sqlite.Delete("webhooks").Where("id = ?", id).Build()
+		result, err := db.Exec(dq, da...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to delete webhook")
 			return
@@ -423,9 +431,9 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		status := r.URL.Query().Get("status")
 
 		// Verify webhook exists.
-		row := db.QueryRow("SELECT id FROM webhooks WHERE id = ?", id)
+		vq, va := sqlite.Select("id").From("webhooks").Where("id = ?", id).Build()
 		var whID int64
-		if err := row.Scan(&whID); err != nil {
+		if err := db.QueryRow(vq, va...).Scan(&whID); err != nil {
 			http.WriteError(w, http.StatusNotFound, "webhook not found")
 			return
 		}
@@ -471,9 +479,9 @@ func testHandler(db *sqlite.DB, dispatcher *webhooks.Dispatcher) func(http.Respo
 		id := r.PathValue("id")
 
 		// Verify webhook exists and get its URL.
-		row := db.QueryRow("SELECT url FROM webhooks WHERE id = ?", id)
+		vq, va := sqlite.Select("url").From("webhooks").Where("id = ?", id).Build()
 		var url string
-		if err := row.Scan(&url); err != nil {
+		if err := db.QueryRow(vq, va...).Scan(&url); err != nil {
 			http.WriteError(w, http.StatusNotFound, "webhook not found")
 			return
 		}
