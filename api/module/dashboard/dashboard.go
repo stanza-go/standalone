@@ -116,6 +116,7 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 		}
 
 		// Cron stats — live (in-memory, cheap).
+		cronStats := s.Stats()
 		entries := s.Entries()
 		var cronEnabled, cronRunning int
 		var cronNextRun string
@@ -156,10 +157,13 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 			},
 			"queue": queueStats,
 			"cron": map[string]any{
-				"total":    len(entries),
-				"enabled":  cronEnabled,
-				"running":  cronRunning,
-				"next_run": cronNextRun,
+				"total":     len(entries),
+				"enabled":   cronEnabled,
+				"running":   cronRunning,
+				"next_run":  cronNextRun,
+				"completed": cronStats.Completed,
+				"failed":    cronStats.Failed,
+				"skipped":   cronStats.Skipped,
 			},
 			"cache": map[string]any{
 				"entries":   sc.Size + cc.Size,
