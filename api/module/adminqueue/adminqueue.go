@@ -5,6 +5,7 @@ package adminqueue
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/queue"
@@ -97,13 +98,13 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 		for i, j := range jobs {
 			var runAt, startedAt, completedAt string
 			if !j.RunAt.IsZero() {
-				runAt = j.RunAt.Format("2006-01-02T15:04:05Z")
+				runAt = j.RunAt.Format(time.RFC3339)
 			}
 			if !j.StartedAt.IsZero() {
-				startedAt = j.StartedAt.Format("2006-01-02T15:04:05Z")
+				startedAt = j.StartedAt.Format(time.RFC3339)
 			}
 			if !j.CompletedAt.IsZero() {
-				completedAt = j.CompletedAt.Format("2006-01-02T15:04:05Z")
+				completedAt = j.CompletedAt.Format(time.RFC3339)
 			}
 			result[i] = jobJSON{
 				ID:          j.ID,
@@ -117,8 +118,8 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 				RunAt:       runAt,
 				StartedAt:   startedAt,
 				CompletedAt: completedAt,
-				CreatedAt:   j.CreatedAt.Format("2006-01-02T15:04:05Z"),
-				UpdatedAt:   j.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+				CreatedAt:   j.CreatedAt.Format(time.RFC3339),
+				UpdatedAt:   j.UpdatedAt.Format(time.RFC3339),
 			}
 		}
 

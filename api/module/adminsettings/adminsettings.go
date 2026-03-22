@@ -80,7 +80,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 
 		sql, args := sqlite.Update("settings").
 			Set("value", req.Value).

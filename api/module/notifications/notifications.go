@@ -83,7 +83,7 @@ func (s *Service) DB() *sqlite.DB { return s.db }
 // email. Connected WebSocket clients for this admin receive the notification
 // in real-time.
 func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, options ...Option) (int64, error) {
-	id, err := NotifyAdmin(s.db, adminID, notifType, title, message)
+	id, err := Notify(s.db, EntityAdmin, adminID, notifType, title, message, "")
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +98,7 @@ func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, o
 // NotifyUser creates a notification for an end user and optionally sends an
 // email. (User-side WebSocket is not implemented — only admin hub is used.)
 func (s *Service) NotifyUser(userID int64, notifType, title, message string, options ...Option) (int64, error) {
-	id, err := NotifyUser(s.db, userID, notifType, title, message)
+	id, err := Notify(s.db, EntityUser, userID, notifType, title, message, "")
 	if err != nil {
 		return 0, err
 	}
@@ -115,32 +115,13 @@ func (s *Service) NotifyUser(userID int64, notifType, title, message string, opt
 func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...Option) error {
 	o := applyOpts(options)
 
-	sq, sa := sqlite.Select("id").From("admins").
-		Where("is_active = 1").
-		Where("deleted_at IS NULL").
-		Build()
-	rows, err := s.db.Query(sq, sa...)
+	ids, err := activeAdminIDs(s.db)
 	if err != nil {
 		return err
 	}
 
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-
 	for _, id := range ids {
-		nID, err := NotifyAdmin(s.db, id, notifType, title, message)
+		nID, err := Notify(s.db, EntityAdmin, id, notifType, title, message, "")
 		if err != nil {
 			return err
 		}
@@ -271,11 +252,9 @@ func applyOpts(options []Option) opts {
 	return o
 }
 
-// --- Standalone functions (backward compatible, no email) ---
-
 // Notify creates a notification for a specific entity.
 func Notify(db *sqlite.DB, entityType string, entityID int64, notifType, title, message, data string) (int64, error) {
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	now := time.Now().UTC().Format(time.RFC3339)
 	sql, args := sqlite.Insert("notifications").
 		Set("entity_type", entityType).
 		Set("entity_id", entityID).
@@ -292,48 +271,30 @@ func Notify(db *sqlite.DB, entityType string, entityID int64, notifType, title, 
 	return result.LastInsertID, nil
 }
 
-// NotifyAdmin creates a notification for an admin user.
-func NotifyAdmin(db *sqlite.DB, adminID int64, notifType, title, message string) (int64, error) {
-	return Notify(db, EntityAdmin, adminID, notifType, title, message, "")
-}
-
-// NotifyUser creates a notification for an end user.
-func NotifyUser(db *sqlite.DB, userID int64, notifType, title, message string) (int64, error) {
-	return Notify(db, EntityUser, userID, notifType, title, message, "")
-}
-
-// NotifyAllAdmins creates a notification for every active admin.
-func NotifyAllAdmins(db *sqlite.DB, notifType, title, message string) error {
+// activeAdminIDs returns the IDs of all active, non-deleted admins.
+func activeAdminIDs(db *sqlite.DB) ([]int64, error) {
 	sq, sa := sqlite.Select("id").From("admins").
 		Where("is_active = 1").
 		Where("deleted_at IS NULL").
 		Build()
 	rows, err := db.Query(sq, sa...)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer rows.Close()
 
 	var ids []int64
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
+			return nil, err
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
+		return nil, err
 	}
-	rows.Close()
-
-	for _, id := range ids {
-		if _, err := NotifyAdmin(db, id, notifType, title, message); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ids, nil
 }
 
 // publishToAdmin broadcasts a notification event to connected WebSocket
@@ -349,7 +310,7 @@ func (s *Service) publishToAdmin(adminID, notifID int64, notifType, title, messa
 			Type:       notifType,
 			Title:      title,
 			Message:    message,
-			CreatedAt:  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 		},
 		UnreadCount: unread,
 	})

@@ -4,6 +4,8 @@
 package admincron
 
 import (
+	"time"
+
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -49,10 +51,10 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 			}
 			var lastRun, nextRun string
 			if !e.LastRun.IsZero() {
-				lastRun = e.LastRun.Format("2006-01-02T15:04:05Z")
+				lastRun = e.LastRun.Format(time.RFC3339)
 			}
 			if !e.NextRun.IsZero() {
-				nextRun = e.NextRun.Format("2006-01-02T15:04:05Z")
+				nextRun = e.NextRun.Format(time.RFC3339)
 			}
 			result[i] = entryJSON{
 				Name:     e.Name,

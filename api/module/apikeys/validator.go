@@ -41,14 +41,14 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 		}
 
 		if expiresAt != "" {
-			t, err := time.Parse("2006-01-02T15:04:05Z", expiresAt)
+			t, err := time.Parse(time.RFC3339, expiresAt)
 			if err == nil && t.Before(time.Now().UTC()) {
 				return auth.Claims{}, errors.New("api key expired")
 			}
 		}
 
 		// Update last_used_at and request_count — don't block the request.
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		usageSQL, usageArgs := sqlite.Update("api_keys").
 			Set("last_used_at", now).
 			SetExpr("request_count", "request_count + 1").

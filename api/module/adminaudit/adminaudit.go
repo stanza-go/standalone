@@ -39,7 +39,7 @@ func Log(db *sqlite.DB, r *nethttp.Request, action, entityType, entityID, detail
 		ip = strings.TrimSpace(parts[0])
 	}
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	now := time.Now().UTC().Format(time.RFC3339)
 	sql, args := sqlite.Insert("audit_log").
 		Set("admin_id", claims.UID).
 		Set("action", action).

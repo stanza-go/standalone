@@ -183,7 +183,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		eventsJSON, _ := json.Marshal(req.Events)
 		secret := webhooks.GenerateSecret()
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		createdBy, _ := strconv.ParseInt(claims.UID, 10, 64)
@@ -278,7 +278,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		ub := sqlite.Update("webhooks").Set("updated_at", now).Where("id = ?", id)
 
 		if req.URL != nil {

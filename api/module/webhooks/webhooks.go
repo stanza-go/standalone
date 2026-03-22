@@ -101,7 +101,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 	_ = rows.Err()
 	rows.Close()
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	now := time.Now().UTC().Format(time.RFC3339)
 
 	for _, t := range targets {
 		// Create delivery record.
@@ -156,7 +156,7 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 		Payload: []byte(job.Payload),
 	})
 
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	now := time.Now().UTC().Format(time.RFC3339)
 
 	if err != nil {
 		// Update delivery record as failed.

@@ -165,7 +165,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		if req.ExpiresAt == "" {
 			expiresOK = true
 		} else {
-			t, err := time.Parse("2006-01-02T15:04:05Z", req.ExpiresAt)
+			t, err := time.Parse(time.RFC3339, req.ExpiresAt)
 			expiresOK = err == nil && !t.Before(time.Now().UTC())
 		}
 
@@ -193,7 +193,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			createdBy, _ = strconv.ParseInt(claims.UID, 10, 64)
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		entityID := strconv.FormatInt(createdBy, 10)
 		q := sqlite.Insert("api_keys").
 			Set("name", req.Name).
@@ -315,7 +315,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).
@@ -352,7 +352,7 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
 			ids[i] = id

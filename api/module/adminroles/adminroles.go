@@ -77,13 +77,13 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list roles")
 			return
 		}
+		defer rows.Close()
 
 		var roles []roleJSON
 		for rows.Next() {
 			var role roleJSON
 			var isSystem int
 			if err := rows.Scan(&role.ID, &role.Name, &role.Description, &isSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
-				rows.Close()
 				http.WriteError(w, http.StatusInternalServerError, "failed to scan role")
 				return
 			}
@@ -91,11 +91,9 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			roles = append(roles, role)
 		}
 		if err := rows.Err(); err != nil {
-			rows.Close()
 			http.WriteError(w, http.StatusInternalServerError, "failed to iterate roles")
 			return
 		}
-		rows.Close() // Close before issuing more queries (SQLite single-mutex).
 
 		if roles == nil {
 			roles = []roleJSON{}
@@ -154,7 +152,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		// Ensure "admin" base scope is always included.
 		req.Scopes = ensureBaseScope(req.Scopes)
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Insert("roles").
 			Set("name", req.Name).
 			Set("description", req.Description).
@@ -258,7 +256,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			req.Scopes = ensureBaseScope(req.Scopes)
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		q := sqlite.Update("roles").
 			Set("description", desc).
 			Set("updated_at", now)

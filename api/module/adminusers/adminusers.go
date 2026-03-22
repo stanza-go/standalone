@@ -178,7 +178,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Insert("admins").
 			Set("email", req.Email).
 			Set("password", hash).
@@ -287,7 +287,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			}
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 
 		q := sqlite.Update("admins").
 			Set("name", name).
@@ -349,7 +349,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("admins").
 			Set("deleted_at", now).
 			Set("is_active", 0).
@@ -564,7 +564,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			}
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
 			ids[i] = id

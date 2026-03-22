@@ -213,7 +213,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 				ContentType:  ct,
 				SizeBytes:    written,
 				HasThumbnail: hasThumbnail == 1,
-				CreatedAt:    now.Format("2006-01-02T15:04:05Z"),
+				CreatedAt:    now.Format(time.RFC3339),
 			},
 		})
 	}
@@ -253,7 +253,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("uploads").
 			Set("deleted_at", now).
 			Where("id = ?", id).

@@ -61,16 +61,15 @@ func getProfile(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Join("roles r", "r.id = rs.role_id").
 			Where("r.name = ?", role).
 			Build()
-		rows, err := db.Query(scopeSQL, scopeArgs...)
-		if err == nil {
-			for rows.Next() {
+		if scopeRows, err := db.Query(scopeSQL, scopeArgs...); err == nil {
+			defer scopeRows.Close()
+			for scopeRows.Next() {
 				var scope string
-				if err := rows.Scan(&scope); err == nil {
+				if err := scopeRows.Scan(&scope); err == nil {
 					scopes = append(scopes, scope)
 				}
 			}
-			_ = rows.Err()
-			rows.Close()
+			_ = scopeRows.Err()
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{

@@ -66,13 +66,13 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
 			return
 		}
+		defer rows.Close()
 
 		var items []notifications.Notification
 		for rows.Next() {
 			var n notifications.Notification
 			var readAt string
 			if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Message, &n.Data, &readAt, &n.CreatedAt); err != nil {
-				rows.Close()
 				http.WriteError(w, http.StatusInternalServerError, "failed to scan notification")
 				return
 			}
@@ -82,11 +82,9 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			items = append(items, n)
 		}
 		if err := rows.Err(); err != nil {
-			rows.Close()
 			http.WriteError(w, http.StatusInternalServerError, "failed to iterate notifications")
 			return
 		}
-		rows.Close()
 
 		if items == nil {
 			items = []notifications.Notification{}
@@ -164,7 +162,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("id = ?", id).
@@ -192,7 +190,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
 
-		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		now := time.Now().UTC().Format(time.RFC3339)
 		sql, args := sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("entity_type = ?", notifications.EntityAdmin).
