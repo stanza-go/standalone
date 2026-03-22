@@ -372,33 +372,25 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 		return nil, fmt.Errorf("cron add purge-old-notifications: %w", err)
 	}
 
-	// Automated daily backup at 2:00 AM — copies the SQLite file to the backups directory.
+	// Automated daily backup at 2:00 AM — uses VACUUM INTO for a consistent,
+	// compacted copy that includes all WAL data.
 	if err := s.Add("daily-backup", "0 2 * * *", func(ctx context.Context) error {
 		ts := time.Now().UTC().Format("20060102T150405Z")
 		backupName := fmt.Sprintf("database.sqlite.%s.bak", ts)
 		backupPath := filepath.Join(dir.Backups, backupName)
 
-		src, err := os.Open(db.Path())
-		if err != nil {
-			return fmt.Errorf("open database: %w", err)
+		if err := db.Backup(backupPath); err != nil {
+			return fmt.Errorf("backup database: %w", err)
 		}
-		defer src.Close()
 
-		dst, err := os.Create(backupPath)
+		info, err := os.Stat(backupPath)
 		if err != nil {
-			return fmt.Errorf("create backup file: %w", err)
-		}
-		defer dst.Close()
-
-		written, err := io.Copy(dst, src)
-		if err != nil {
-			_ = os.Remove(backupPath)
-			return fmt.Errorf("copy database: %w", err)
+			return fmt.Errorf("stat backup: %w", err)
 		}
 
 		logger.Info("daily backup completed",
 			log.String("file", backupName),
-			log.Int64("size_bytes", written),
+			log.Int64("size_bytes", info.Size()),
 		)
 		return nil
 	}); err != nil {

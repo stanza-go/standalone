@@ -160,33 +160,23 @@ func backupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *
 		backupName := fmt.Sprintf("database.sqlite.%s.bak", ts)
 		backupPath := filepath.Join(backupsDir, backupName)
 
-		src, err := os.Open(db.Path())
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to open database file")
-			return
-		}
-		defer src.Close()
-
-		dst, err := os.Create(backupPath)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create backup file")
-			return
-		}
-		defer dst.Close()
-
-		written, err := io.Copy(dst, src)
-		if err != nil {
-			_ = os.Remove(backupPath)
-			http.WriteError(w, http.StatusInternalServerError, "failed to write backup")
+		if err := db.Backup(backupPath); err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to create backup")
 			return
 		}
 
-		adminaudit.Log(db, r, "database.backup", "database", "", fmt.Sprintf("file=%s size=%d", backupName, written))
+		info, err := os.Stat(backupPath)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to stat backup")
+			return
+		}
+
+		adminaudit.Log(db, r, "database.backup", "database", "", fmt.Sprintf("file=%s size=%d", backupName, info.Size()))
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"name":       backupName,
 			"path":       backupPath,
-			"size_bytes": written,
+			"size_bytes": info.Size(),
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})
 	}
