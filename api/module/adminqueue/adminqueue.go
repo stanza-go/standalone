@@ -19,7 +19,7 @@ import (
 //	GET  /api/admin/queue/stats       — queue stats by status
 //	GET  /api/admin/queue/jobs        — list jobs (query: status, type, limit, offset)
 //	POST /api/admin/queue/jobs/{id}/retry  — retry a failed/dead job
-//	POST /api/admin/queue/jobs/{id}/cancel — cancel a pending job
+//	POST /api/admin/queue/jobs/{id}/cancel — cancel a pending or running job
 func Register(admin *http.Group, q *queue.Queue, db *sqlite.DB) {
 	admin.HandleFunc("GET /queue/stats", statsHandler(q))
 	admin.HandleFunc("GET /queue/jobs", jobsHandler(q))
