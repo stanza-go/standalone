@@ -12,6 +12,10 @@ const AdminsPage = lazy(() => import("@/pages/admins"));
 const SessionsPage = lazy(() => import("@/pages/sessions"));
 const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
 const RolesPage = lazy(() => import("@/pages/roles"));
+const AuditPage = lazy(() => import("@/pages/audit"));
+const NotificationsPage = lazy(() => import("@/pages/notifications"));
+const UploadsPage = lazy(() => import("@/pages/uploads"));
+const WebhooksPage = lazy(() => import("@/pages/webhooks"));
 
 // Placeholder for pages not yet ported — shows page name
 function Placeholder({ name }: { name: string }) {
@@ -60,11 +64,11 @@ export default function App() {
             <Route path="logs" element={<Placeholder name="Logs" />} />
             <Route path="database" element={<Placeholder name="Database" />} />
             <Route path="api-keys" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><ApiKeysPage /></Suspense>} />
-            <Route path="audit" element={<Placeholder name="Audit Log" />} />
-            <Route path="notifications" element={<Placeholder name="Notifications" />} />
+            <Route path="audit" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><AuditPage /></Suspense>} />
+            <Route path="notifications" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><NotificationsPage /></Suspense>} />
             <Route path="roles" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><RolesPage /></Suspense>} />
-            <Route path="uploads" element={<Placeholder name="Uploads" />} />
-            <Route path="webhooks" element={<Placeholder name="Webhooks" />} />
+            <Route path="uploads" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><UploadsPage /></Suspense>} />
+            <Route path="webhooks" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><WebhooksPage /></Suspense>} />
             <Route path="webhooks/:id" element={<Placeholder name="Webhook Detail" />} />
             <Route path="settings" element={<Placeholder name="Settings" />} />
             <Route path="profile" element={<Placeholder name="Profile" />} />
