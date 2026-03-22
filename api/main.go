@@ -305,7 +305,10 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	if err := s.Add("purge-stale-api-keys", "0 3 * * *", func(ctx context.Context) error {
 		cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
 		sql, args := sqlite.Delete("api_keys").
-			Where("(revoked_at IS NOT NULL AND revoked_at < ?) OR (expires_at IS NOT NULL AND expires_at < ?)", cutoff, cutoff).
+			WhereOr(
+				sqlite.Cond("revoked_at IS NOT NULL AND revoked_at < ?", cutoff),
+				sqlite.Cond("expires_at IS NOT NULL AND expires_at < ?", cutoff),
+			).
 			Build()
 		res, err := db.Exec(sql, args...)
 		if err != nil {
@@ -355,7 +358,10 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	if err := s.Add("purge-old-reset-tokens", "30 4 * * *", func(ctx context.Context) error {
 		cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 		sql, args := sqlite.Delete("password_reset_tokens").
-			Where("used_at IS NOT NULL OR expires_at < ?", cutoff).
+			WhereOr(
+				sqlite.Cond("used_at IS NOT NULL"),
+				sqlite.Cond("expires_at < ?", cutoff),
+			).
 			Build()
 		res, err := db.Exec(sql, args...)
 		if err != nil {
