@@ -53,6 +53,15 @@ import (
 	"github.com/stanza-go/standalone/seed"
 )
 
+// Build metadata — injected at compile time via -ldflags. These remain
+// empty strings in development (go run .) and are set to real values in
+// production builds (make build / Dockerfile).
+var (
+	version   string // semantic version tag (e.g. "v0.1.0"), or "dev"
+	commit    string // short git commit hash (e.g. "a20cce5")
+	buildTime string // UTC build timestamp (e.g. "2026-03-22T10:30:00Z")
+)
+
 // signingKey holds the shared JWT signing key used by both admin and
 // user auth instances.
 type signingKey struct{ key []byte }
@@ -443,7 +452,14 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router.Use(http.RequestLogger(logger))
 	router.Use(http.Compress(http.CompressConfig{}))
 	router.Use(http.ETag(http.ETagConfig{}))
-	router.Use(http.SecureHeaders(http.SecureHeadersConfig{}))
+	secCfg := http.SecureHeadersConfig{}
+	// Enable HSTS when running behind a TLS-terminating proxy (Railway,
+	// Cloud Run, etc.). The PORT env var is the standard signal that the
+	// app is running in a container platform — these always serve HTTPS.
+	if os.Getenv("PORT") != "" {
+		secCfg.HSTSMaxAge = 31536000 // 1 year
+	}
+	router.Use(http.SecureHeaders(secCfg))
 	router.Use(http.MaxBody(2 << 20)) // 2 MB — multipart uploads exempt
 
 	// CORS: allow cross-origin requests from admin and UI dev servers.
@@ -505,7 +521,11 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	api := router.Group("/api")
 
 	// Public routes.
-	health.Register(api, db)
+	health.Register(api, db, health.BuildInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildTime: buildTime,
+	})
 
 	// Auth routes — rate limited to prevent brute force attacks.
 	// 20 requests per minute per IP covers legitimate use (including

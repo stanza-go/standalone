@@ -31,11 +31,20 @@ build-api:
 	mkdir -p api/ui api/admin
 	cp -r ui/dist api/ui/dist
 	cp -r admin/dist api/admin/dist
-	cd api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o bin/standalone .
+	cd api && CGO_ENABLED=1 go build -tags prod \
+		-ldflags="-s -w \
+			-X main.version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
+			-X main.commit=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+			-X main.buildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		-o bin/standalone .
 
 # Docker — build production image from workspace root
 docker:
-	docker build -t stanza -f Dockerfile ..
+	docker build -t stanza -f Dockerfile \
+		--build-arg BUILD_VERSION=$$(cd .. && git -C standalone describe --tags --always --dirty 2>/dev/null || echo dev) \
+		--build-arg BUILD_COMMIT=$$(cd .. && git -C standalone rev-parse --short HEAD 2>/dev/null || echo unknown) \
+		--build-arg BUILD_TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		..
 
 clean:
 	rm -rf api/bin api/ui api/admin ui/dist admin/dist

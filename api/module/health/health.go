@@ -1,5 +1,5 @@
 // Package health provides the health check endpoint. It reports application
-// status, uptime, and database connectivity.
+// status, uptime, build metadata, and database connectivity.
 package health
 
 import (
@@ -12,8 +12,25 @@ import (
 
 var startTime = time.Now()
 
+// BuildInfo holds compile-time metadata injected via -ldflags. Fields
+// are empty strings in development mode (go run .).
+type BuildInfo struct {
+	Version   string // semantic version tag, e.g. "v0.1.0"
+	Commit    string // short git commit hash, e.g. "a20cce5"
+	BuildTime string // UTC build timestamp, e.g. "2026-03-22T10:30:00Z"
+}
+
 // Register mounts the health check routes on the given router group.
-func Register(api *http.Group, db *sqlite.DB) {
+func Register(api *http.Group, db *sqlite.DB, bi BuildInfo) {
+	ver := bi.Version
+	if ver == "" {
+		ver = "dev"
+	}
+	commitVal := bi.Commit
+	if commitVal == "" {
+		commitVal = "unknown"
+	}
+
 	api.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		dbOK := true
 		var dbErr string
@@ -32,17 +49,24 @@ func Register(api *http.Group, db *sqlite.DB) {
 			status = http.StatusServiceUnavailable
 		}
 
-		http.WriteJSON(w, status, map[string]any{
-			"status":    statusText(dbOK),
-			"uptime":    time.Since(startTime).Round(time.Second).String(),
-			"go":        runtime.Version(),
+		resp := map[string]any{
+			"status":     statusText(dbOK),
+			"version":    ver,
+			"commit":     commitVal,
+			"uptime":     time.Since(startTime).Round(time.Second).String(),
+			"go":         runtime.Version(),
 			"goroutines": runtime.NumGoroutine(),
-			"memory_mb": mem.Alloc / 1024 / 1024,
+			"memory_mb":  mem.Alloc / 1024 / 1024,
 			"database": map[string]any{
 				"ok":    dbOK,
 				"error": dbErr,
 			},
-		})
+		}
+		if bi.BuildTime != "" {
+			resp["build_time"] = bi.BuildTime
+		}
+
+		http.WriteJSON(w, status, resp)
 	})
 }
 
