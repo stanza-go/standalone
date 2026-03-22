@@ -66,8 +66,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		contentType := http.QueryParam(r, "content_type")
 
 		// Count.
@@ -90,8 +89,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", userID).
 			Where("deleted_at IS NULL").
 			OrderBy("id", "DESC").
-			Limit(limit).
-			Offset(offset)
+			Limit(pg.Limit).
+			Offset(pg.Offset)
 		if contentType != "" {
 			q.Where("content_type LIKE ?", contentType+"%")
 		}
@@ -117,10 +116,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			uploads = append(uploads, u)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"uploads": uploads,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "uploads", uploads, total)
 	}
 }
 

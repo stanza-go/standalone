@@ -54,8 +54,7 @@ type adminJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
 		countQ := sqlite.Count("admins").Where("deleted_at IS NULL")
@@ -78,8 +77,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args = selectQ.
 			OrderBy(sortCol, sortDir).
-			Limit(limit).
-			Offset(offset).
+			Limit(pg.Limit).
+			Offset(pg.Offset).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -100,10 +99,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			admins = append(admins, a)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"admins": admins,
-			"total":  total,
-		})
+		http.PaginatedResponse(w, "admins", admins, total)
 	}
 }
 

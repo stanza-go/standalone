@@ -54,8 +54,7 @@ type apiKeyJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
 		countQ := sqlite.Count("api_keys")
@@ -80,8 +79,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args = selectQ.
 			OrderBy(sortCol, sortDir).
-			Limit(limit).
-			Offset(offset).
+			Limit(pg.Limit).
+			Offset(pg.Offset).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -102,10 +101,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			keys = append(keys, k)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"api_keys": keys,
-			"total":    total,
-		})
+		http.PaginatedResponse(w, "api_keys", keys, total)
 	}
 }
 

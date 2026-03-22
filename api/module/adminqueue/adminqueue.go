@@ -55,20 +55,9 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			Queue:  r.URL.Query().Get("queue"),
 		}
 
-		if v := r.URL.Query().Get("limit"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				f.Limit = n
-			}
-		}
-		if f.Limit == 0 {
-			f.Limit = 50
-		}
-
-		if v := r.URL.Query().Get("offset"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-				f.Offset = n
-			}
-		}
+		pg := http.ParsePagination(r, 50, 100)
+		f.Limit = pg.Limit
+		f.Offset = pg.Offset
 
 		// SQLite single-mutex: close rows before issuing count query.
 		// Use function scope to ensure rows.Close() runs before JobCount.
@@ -133,10 +122,7 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			}
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"jobs":  result,
-			"total": total,
-		})
+		http.PaginatedResponse(w, "jobs", result, total)
 	}
 }
 

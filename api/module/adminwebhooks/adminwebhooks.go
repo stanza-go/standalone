@@ -69,8 +69,7 @@ type deliveryJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
 		qb := sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
@@ -99,7 +98,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "url", "is_active", "created_at", "updated_at"},
 			"created_at", "DESC")
 
-		sql, args = qb.OrderBy(sortCol, sortDir).Limit(limit).Offset(offset).Build()
+		sql, args = qb.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")
@@ -124,10 +123,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			items = append(items, wh)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"webhooks": items,
-			"total":    total,
-		})
+		http.PaginatedResponse(w, "webhooks", items, total)
 	}
 }
 
@@ -432,8 +428,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		status := r.URL.Query().Get("status")
 
 		// Verify webhook exists.
@@ -465,7 +460,7 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		sql, args = qb.OrderBy("created_at", "DESC").Limit(limit).Offset(offset).Build()
+		sql, args = qb.OrderBy("created_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query deliveries")
@@ -483,10 +478,7 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			items = append(items, d)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"deliveries": items,
-			"total":      total,
-		})
+		http.PaginatedResponse(w, "deliveries", items, total)
 	}
 }
 

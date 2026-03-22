@@ -4,8 +4,6 @@
 package admincron
 
 import (
-	"strconv"
-
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -77,18 +75,7 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 
-		limit := 50
-		if v := r.URL.Query().Get("limit"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
-				limit = n
-			}
-		}
-		offset := 0
-		if v := r.URL.Query().Get("offset"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-				offset = n
-			}
-		}
+		pg := http.ParsePagination(r, 50, 200)
 
 		type runJSON struct {
 			ID         int64  `json:"id"`
@@ -103,7 +90,7 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		func() {
 			rows, err := db.Query(
 				"SELECT id, name, started_at, duration_ms, status, error FROM cron_runs WHERE name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
-				name, limit, offset,
+				name, pg.Limit, pg.Offset,
 			)
 			if err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "database error")
@@ -122,13 +109,10 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}()
 
 		// Get total count for pagination (rows must be closed first — single mutex).
-		var total int64
+		var total int
 		_ = db.QueryRow("SELECT COUNT(*) FROM cron_runs WHERE name = ?", name).Scan(&total)
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"runs":  runs,
-			"total": total,
-		})
+		http.PaginatedResponse(w, "runs", runs, total)
 	}
 }
 

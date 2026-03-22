@@ -69,8 +69,7 @@ type uploadJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		contentType := http.QueryParam(r, "content_type")
 		entityType := http.QueryParam(r, "entity_type")
 		includeDeleted := http.QueryParam(r, "include_deleted") == "true"
@@ -100,8 +99,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
 			From("uploads").
 			OrderBy(sortCol, sortDir).
-			Limit(limit).
-			Offset(offset)
+			Limit(pg.Limit).
+			Offset(pg.Offset)
 		if !includeDeleted {
 			q.Where("deleted_at IS NULL")
 		}
@@ -134,10 +133,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			uploads = append(uploads, u)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"uploads": uploads,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "uploads", uploads, total)
 	}
 }
 

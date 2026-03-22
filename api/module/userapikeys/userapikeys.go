@@ -51,8 +51,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		userID := claims.UID
 
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
 		countQ := sqlite.Count("api_keys").
@@ -77,8 +76,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args = selectQ.
 			OrderBy("id", "DESC").
-			Limit(limit).
-			Offset(offset).
+			Limit(pg.Limit).
+			Offset(pg.Offset).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -98,10 +97,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			keys = append(keys, k)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"api_keys": keys,
-			"total":    total,
-		})
+		http.PaginatedResponse(w, "api_keys", keys, total)
 	}
 }
 

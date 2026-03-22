@@ -45,8 +45,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
 
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
 
 		// Count total.
@@ -70,8 +69,8 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID).
 			OrderBy(sortCol, sortDir).
-			Limit(limit).
-			Offset(offset)
+			Limit(pg.Limit).
+			Offset(pg.Offset)
 		if unreadOnly {
 			q.Where("read_at IS NULL")
 		}

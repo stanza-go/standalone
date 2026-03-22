@@ -42,11 +42,7 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		limit := http.QueryParamInt(r, "limit", 20)
-		if limit > 100 {
-			limit = 100
-		}
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 20, 100)
 
 		// Build count query.
 		cb := sqlite.Count("audit_log").
@@ -85,7 +81,7 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		selectSQL, selectArgs := sb.OrderBy("created_at", "DESC").
-			Limit(limit).Offset(offset).
+			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
 
 		rows, err := db.Query(selectSQL, selectArgs...)
@@ -105,9 +101,6 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			entries = append(entries, e)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"entries": entries,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "entries", entries, total)
 	}
 }

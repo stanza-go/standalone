@@ -57,8 +57,7 @@ type userJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
 		countQ := sqlite.Count("users").Where("deleted_at IS NULL")
@@ -79,7 +78,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := countQ.Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
-		sql, args = selectQ.OrderBy(sortCol, sortDir).Limit(limit).Offset(offset).Build()
+		sql, args = selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list users")
@@ -99,10 +98,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			users = append(users, u)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"users": users,
-			"total": total,
-		})
+		http.PaginatedResponse(w, "users", users, total)
 	}
 }
 
@@ -488,8 +484,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		limit := http.QueryParamInt(r, "limit", 20)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 20, 100)
 		idStr := strconv.FormatInt(id, 10)
 
 		countQ := sqlite.Count("audit_log").
@@ -507,7 +502,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("al.entity_type = 'user'").
 			Where("al.entity_id = ?", idStr).
 			OrderBy("al.created_at", "DESC").
-			Limit(limit).Offset(offset).
+			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -537,10 +532,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			entries = append(entries, e)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"entries": entries,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "entries", entries, total)
 	}
 }
 
@@ -601,8 +593,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		limit := http.QueryParamInt(r, "limit", 20)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 20, 100)
 		idStr := strconv.FormatInt(id, 10)
 
 		countQ := sqlite.Count("uploads").
@@ -621,7 +612,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", idStr).
 			Where("deleted_at IS NULL").
 			OrderBy("created_at", "DESC").
-			Limit(limit).Offset(offset).
+			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -652,10 +643,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			uploads = append(uploads, u)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"uploads": uploads,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "uploads", uploads, total)
 	}
 }
 

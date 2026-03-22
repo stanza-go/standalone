@@ -69,8 +69,7 @@ type entryJSON struct {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := http.QueryParamInt(r, "limit", 50)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 50, 100)
 		action := r.URL.Query().Get("action")
 		adminID := r.URL.Query().Get("admin_id")
 		search := r.URL.Query().Get("search")
@@ -129,7 +128,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"id", "DESC")
 
 		selectSQL += " ORDER BY audit_log." + sortCol + " " + sortDir + " LIMIT ? OFFSET ?"
-		selectArgs = append(selectArgs, limit, offset)
+		selectArgs = append(selectArgs, pg.Limit, pg.Offset)
 
 		rows, err := db.Query(selectSQL, selectArgs...)
 		if err != nil {
@@ -150,10 +149,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			entries = append(entries, e)
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"entries": entries,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "entries", entries, total)
 	}
 }
 
