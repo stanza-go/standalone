@@ -36,6 +36,7 @@ func Register(admin *http.Group, a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispa
 	admin.HandleFunc("GET /users", listHandler(db))
 	admin.HandleFunc("GET /users/export", exportHandler(db))
 	admin.HandleFunc("POST /users", createHandler(db, wh))
+	admin.HandleFunc("POST /users/bulk-delete", bulkDeleteHandler(db, wh))
 	admin.HandleFunc("GET /users/{id}", getHandler(db))
 	admin.HandleFunc("PUT /users/{id}", updateHandler(db, wh))
 	admin.HandleFunc("DELETE /users/{id}", deleteHandler(db, wh))
@@ -401,6 +402,70 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
+		})
+	}
+}
+
+func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, 0, len(req.IDs)+3)
+		args = append(args, now, 0, now)
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+
+		query := fmt.Sprintf(
+			"UPDATE users SET deleted_at = ?, is_active = ?, updated_at = ? WHERE id IN (%s) AND deleted_at IS NULL",
+			strings.Join(placeholders, ","),
+		)
+		result, err := db.Exec(query, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete users")
+			return
+		}
+
+		// Revoke sessions for deleted users.
+		for _, id := range req.IDs {
+			idStr := strconv.FormatInt(id, 10)
+			sql, a := sqlite.Delete("refresh_tokens").
+				Where("entity_type = 'user'").
+				Where("entity_id = ?", idStr).
+				Build()
+			_, _ = db.Exec(sql, a...)
+		}
+
+		// Audit log each deletion.
+		for _, id := range req.IDs {
+			adminaudit.Log(db, r, "user.delete", "user", strconv.FormatInt(id, 10), "bulk")
+		}
+
+		_ = wh.Dispatch(r.Context(), "user.bulk_deleted", map[string]any{
+			"ids":      req.IDs,
+			"affected": result.RowsAffected,
+		})
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
 		})
 	}
 }

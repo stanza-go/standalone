@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -33,6 +34,7 @@ func Register(admin *http.Group, db *sqlite.DB, svc *notifications.Service) {
 	admin.HandleFunc("GET /notifications/unread-count", unreadCountHandler(db))
 	admin.HandleFunc("GET /notifications/stream", streamHandler(svc))
 	admin.HandleFunc("POST /notifications/send", sendHandler(svc))
+	admin.HandleFunc("POST /notifications/bulk-delete", bulkDeleteHandler(db))
 	admin.HandleFunc("POST /notifications/{id}/read", markReadHandler(db))
 	admin.HandleFunc("POST /notifications/read-all", markAllReadHandler(db))
 	admin.HandleFunc("DELETE /notifications/{id}", deleteHandler(db))
@@ -353,6 +355,52 @@ func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.R
 				}
 			}
 		}
+	}
+}
+
+func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, _ := auth.ClaimsFromContext(r.Context())
+		adminID, _ := strconv.ParseInt(claims.UID, 10, 64)
+
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, 0, len(req.IDs)+2)
+		args = append(args, notifications.EntityAdmin, adminID)
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+
+		query := fmt.Sprintf(
+			"DELETE FROM notifications WHERE entity_type = ? AND entity_id = ? AND id IN (%s)",
+			strings.Join(placeholders, ","),
+		)
+		result, err := db.Exec(query, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete notifications")
+			return
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
+		})
 	}
 }
 

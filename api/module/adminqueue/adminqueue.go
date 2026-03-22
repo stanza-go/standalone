@@ -23,6 +23,8 @@ import (
 func Register(admin *http.Group, q *queue.Queue, db *sqlite.DB) {
 	admin.HandleFunc("GET /queue/stats", statsHandler(q))
 	admin.HandleFunc("GET /queue/jobs", jobsHandler(q))
+	admin.HandleFunc("POST /queue/jobs/bulk-retry", bulkRetryHandler(q, db))
+	admin.HandleFunc("POST /queue/jobs/bulk-cancel", bulkCancelHandler(q, db))
 	admin.HandleFunc("POST /queue/jobs/{id}/retry", retryHandler(q, db))
 	admin.HandleFunc("POST /queue/jobs/{id}/cancel", cancelHandler(q, db))
 }
@@ -134,6 +136,72 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"jobs":  result,
 			"total": total,
+		})
+	}
+}
+
+func bulkRetryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		var affected int64
+		for _, id := range req.IDs {
+			if err := q.Retry(id); err == nil {
+				affected++
+				adminaudit.Log(db, r, "job.retry", "job", strconv.FormatInt(id, 10), "bulk")
+			}
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": affected,
+		})
+	}
+}
+
+func bulkCancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		var affected int64
+		for _, id := range req.IDs {
+			if err := q.Cancel(id); err == nil {
+				affected++
+				adminaudit.Log(db, r, "job.cancel", "job", strconv.FormatInt(id, 10), "bulk")
+			}
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": affected,
 		})
 	}
 }

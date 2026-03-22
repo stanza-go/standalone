@@ -33,6 +33,7 @@ func Register(admin *http.Group, db *sqlite.DB, dispatcher *webhooks.Dispatcher)
 	admin.HandleFunc("GET /webhooks", listHandler(db))
 	admin.HandleFunc("GET /webhooks/export", exportHandler(db))
 	admin.HandleFunc("POST /webhooks", createHandler(db))
+	admin.HandleFunc("POST /webhooks/bulk-delete", bulkDeleteHandler(db))
 	admin.HandleFunc("GET /webhooks/{id}", getHandler(db))
 	admin.HandleFunc("PUT /webhooks/{id}", updateHandler(db))
 	admin.HandleFunc("DELETE /webhooks/{id}", deleteHandler(db))
@@ -350,6 +351,58 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		http.WriteJSON(w, http.StatusOK, wh)
+	}
+}
+
+func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, len(req.IDs))
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		inClause := strings.Join(placeholders, ",")
+
+		// Delete deliveries first (FK constraint).
+		_, _ = db.Exec(
+			fmt.Sprintf("DELETE FROM webhook_deliveries WHERE webhook_id IN (%s)", inClause),
+			args...,
+		)
+
+		result, err := db.Exec(
+			fmt.Sprintf("DELETE FROM webhooks WHERE id IN (%s)", inClause),
+			args...,
+		)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete webhooks")
+			return
+		}
+
+		for _, id := range req.IDs {
+			adminaudit.Log(db, r, "webhook.delete", "webhook", strconv.FormatInt(id, 10), "bulk")
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
+		})
 	}
 }
 

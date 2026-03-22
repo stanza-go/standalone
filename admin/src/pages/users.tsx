@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import {
   Plus,
   Pencil,
@@ -59,6 +61,11 @@ export default function UsersPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -123,6 +130,11 @@ export default function UsersPage() {
   useEffect(() => {
     setPage(0);
   }, [search]);
+
+  // Clear selection when page, search, or sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [page, search, sort.column, sort.direction]);
 
   function openCreate() {
     setEditing(null);
@@ -221,6 +233,21 @@ export default function UsersPage() {
     }
   }
 
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/users/bulk-delete", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} user${data.affected !== 1 ? "s" : ""} deleted`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to bulk delete users");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   async function copyToken() {
     if (!impersonateToken) return;
     await navigator.clipboard.writeText(impersonateToken);
@@ -302,6 +329,14 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(users.map((u) => u.id))}
+                  onChange={() => selection.toggleAll(users.map((u) => u.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <SortableHeader label="ID" column="id" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
               <SortableHeader label="Email" column="email" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
@@ -312,13 +347,21 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <TableEmptyRow colSpan={6} message={search ? "No users match your search" : "No users found"} />
+              <TableEmptyRow colSpan={7} message={search ? "No users match your search" : "No users found"} />
             ) : (
               users.map((user) => (
                 <tr
                   key={user.id}
-                  className="border-b last:border-0 hover:bg-muted/30"
+                  className={`border-b last:border-0 hover:bg-muted/30 ${selection.isSelected(user.id) ? "bg-muted/40" : ""}`}
                 >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(user.id)}
+                      onChange={() => selection.toggle(user.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   <td className="p-3 font-mono text-xs hidden md:table-cell">{user.id}</td>
                   <td className="p-3">
                     <button
@@ -524,6 +567,24 @@ export default function UsersPage() {
             <div><span className="font-medium">Name:</span> {deleteTarget.name || "\u2014"}</div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Users"
+        message={`Are you sure you want to delete ${selection.count} user${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={bulkDeleting}
       />
     </div>
   );

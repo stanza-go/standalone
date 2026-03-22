@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { get, post } from "@/lib/api";
+import { useSelection } from "@/lib/use-selection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,8 @@ import {
   Skull,
   Ban,
   RefreshCw,
+  RotateCcw,
+  Trash2,
   ChevronDown,
   ChevronRight,
   Search,
@@ -21,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 
 interface QueueStats {
   pending: number;
@@ -184,6 +188,13 @@ export default function QueuePage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [cancelTarget, setCancelTarget] = useState<QueueJob | null>(null);
 
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkRetryOpen, setBulkRetryOpen] = useState(false);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [bulkCancelling, setBulkCancelling] = useState(false);
+
   const loadStats = useCallback(async () => {
     try {
       const data = await get<QueueStats>("/admin/queue/stats");
@@ -218,6 +229,11 @@ export default function QueuePage() {
     const interval = setInterval(loadAll, 10_000);
     return () => clearInterval(interval);
   }, [loadAll]);
+
+  // Clear selection when filters or offset changes.
+  useEffect(() => {
+    selection.clear();
+  }, [statusFilter, typeFilter, queueFilter, offset]);
 
   // Reset to first page when filters change.
   function applyStatusFilter(s: string) {
@@ -264,6 +280,36 @@ export default function QueuePage() {
       toast.error(err instanceof Error ? err.message : "Failed to cancel job");
     } finally {
       setActing(null);
+    }
+  }
+
+  async function handleBulkRetry() {
+    setBulkRetrying(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/queue/jobs/bulk-retry", { ids: selection.ids });
+      setBulkRetryOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} job${data.affected !== 1 ? "s" : ""} retried`);
+      await loadAll();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to bulk retry jobs");
+    } finally {
+      setBulkRetrying(false);
+    }
+  }
+
+  async function handleBulkCancel() {
+    setBulkCancelling(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/queue/jobs/bulk-cancel", { ids: selection.ids });
+      setBulkCancelOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} job${data.affected !== 1 ? "s" : ""} cancelled`);
+      await loadAll();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to bulk cancel jobs");
+    } finally {
+      setBulkCancelling(false);
     }
   }
 
@@ -409,6 +455,14 @@ export default function QueuePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selection.isAllSelected(jobs.map((j) => j.id))}
+                          onChange={() => selection.toggleAll(jobs.map((j) => j.id))}
+                          className="rounded border-input"
+                        />
+                      </th>
                       <th className="px-4 py-3 font-medium w-8"></th>
                       <th className="px-4 py-3 font-medium hidden md:table-cell">ID</th>
                       <th className="px-4 py-3 font-medium">Type</th>
@@ -426,9 +480,17 @@ export default function QueuePage() {
                           key={job.id}
                           className={`border-b border-border cursor-pointer hover:bg-muted/50 ${
                             expanded === job.id ? "bg-muted/30" : ""
-                          }`}
+                          } ${selection.isSelected(job.id) ? "bg-muted/40" : ""}`}
                           onClick={() => toggleExpand(job.id)}
                         >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selection.isSelected(job.id)}
+                              onChange={() => selection.toggle(job.id)}
+                              className="rounded border-input"
+                            />
+                          </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {expanded === job.id ? (
                               <ChevronDown className="h-4 w-4" />
@@ -479,7 +541,7 @@ export default function QueuePage() {
                         </tr>
                         {expanded === job.id && (
                           <tr key={`${job.id}-detail`} className="border-b border-border">
-                            <td colSpan={8} className="bg-muted/20 p-0">
+                            <td colSpan={9} className="bg-muted/20 p-0">
                               <JobDetail job={job} />
                             </td>
                           </tr>
@@ -534,6 +596,38 @@ export default function QueuePage() {
             <div><span className="font-medium">Queue:</span> {cancelTarget.queue}</div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="default" size="sm" onClick={() => setBulkRetryOpen(true)}>
+          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+          Retry
+        </Button>
+        <Button variant="destructive" size="sm" onClick={() => setBulkCancelOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Cancel
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkRetryOpen}
+        onClose={() => setBulkRetryOpen(false)}
+        onConfirm={handleBulkRetry}
+        title="Retry Jobs"
+        message={`Are you sure you want to retry ${selection.count} job${selection.count !== 1 ? "s" : ""}?`}
+        confirmLabel="Retry"
+        loading={bulkRetrying}
+      />
+
+      <ConfirmDialog
+        open={bulkCancelOpen}
+        onClose={() => setBulkCancelOpen(false)}
+        onConfirm={handleBulkCancel}
+        title="Cancel Jobs"
+        message={`Are you sure you want to cancel ${selection.count} job${selection.count !== 1 ? "s" : ""}? They will not be executed.`}
+        confirmLabel="Cancel"
+        loading={bulkCancelling}
       />
     </div>
   );

@@ -32,6 +32,7 @@ func Register(admin *http.Group, db *sqlite.DB) {
 	admin.HandleFunc("GET /api-keys", listHandler(db))
 	admin.HandleFunc("GET /api-keys/export", exportHandler(db))
 	admin.HandleFunc("POST /api-keys", createHandler(db))
+	admin.HandleFunc("POST /api-keys/bulk-revoke", bulkRevokeHandler(db))
 	admin.HandleFunc("PUT /api-keys/{id}", updateHandler(db))
 	admin.HandleFunc("DELETE /api-keys/{id}", deleteHandler(db))
 }
@@ -358,6 +359,54 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
+		})
+	}
+}
+
+func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, 0, len(req.IDs)+1)
+		args = append(args, now)
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+
+		query := fmt.Sprintf(
+			"UPDATE api_keys SET revoked_at = ? WHERE id IN (%s) AND revoked_at IS NULL",
+			strings.Join(placeholders, ","),
+		)
+		result, err := db.Exec(query, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke api keys")
+			return
+		}
+
+		for _, id := range req.IDs {
+			adminaudit.Log(db, r, "api_key.revoke", "api_key", strconv.FormatInt(id, 10), "bulk")
+		}
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
 		})
 	}
 }

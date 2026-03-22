@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, post, del, downloadCSV } from "@/lib/api";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import {
   Check,
@@ -16,6 +17,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { Pagination } from "@/components/ui/pagination";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +87,11 @@ export default function NotificationsPage() {
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
 
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -109,6 +116,11 @@ export default function NotificationsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Clear selection when page, filter, or sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [page, unreadOnly, sort.column, sort.direction]);
 
   async function markRead(id: number) {
     setActing(true);
@@ -158,6 +170,21 @@ export default function NotificationsPage() {
       toast.error(e.message || "Failed to delete notification");
     } finally {
       setActing(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/notifications/bulk-delete", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} notification${data.affected !== 1 ? "s" : ""} deleted`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to bulk delete notifications");
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -266,6 +293,14 @@ export default function NotificationsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(notifications.map((n) => n.id))}
+                  onChange={() => selection.toggleAll(notifications.map((n) => n.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <th className="text-left p-3 font-medium w-8"></th>
               <th className="text-left p-3 font-medium">Notification</th>
               <SortableHeader label="Type" column="type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
@@ -276,7 +311,7 @@ export default function NotificationsPage() {
           <tbody>
             {notifications.length === 0 ? (
               <TableEmptyRow
-                colSpan={5}
+                colSpan={6}
                 message={
                   unreadOnly
                     ? "No unread notifications"
@@ -289,9 +324,18 @@ export default function NotificationsPage() {
                   key={n.id}
                   className={cn(
                     "border-b last:border-0 hover:bg-muted/30",
-                    !n.read_at && "bg-muted/20"
+                    !n.read_at && "bg-muted/20",
+                    selection.isSelected(n.id) && "bg-muted/40"
                   )}
                 >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(n.id)}
+                      onChange={() => selection.toggle(n.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   {/* Unread dot */}
                   <td className="p-3">
                     {!n.read_at ? (
@@ -406,6 +450,24 @@ export default function NotificationsPage() {
             <div className="text-xs text-muted-foreground line-clamp-2">{deleteTarget.message}</div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Notifications"
+        message={`Are you sure you want to delete ${selection.count} notification${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={bulkDeleting}
       />
     </div>
   );

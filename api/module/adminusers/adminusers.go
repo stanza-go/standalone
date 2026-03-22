@@ -34,6 +34,7 @@ func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /admins", listHandler(db))
 	admin.HandleFunc("GET /admins/export", exportHandler(db))
 	admin.HandleFunc("POST /admins", createHandler(db, wh))
+	admin.HandleFunc("POST /admins/bulk-delete", bulkDeleteHandler(db, wh))
 	admin.HandleFunc("GET /admins/{id}", getHandler(db))
 	admin.HandleFunc("PUT /admins/{id}", updateHandler(db, wh))
 	admin.HandleFunc("DELETE /admins/{id}", deleteHandler(db, wh))
@@ -542,6 +543,80 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"sessions": sessions,
 			"total":    len(sessions),
+		})
+	}
+}
+
+func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		// Prevent self-deletion.
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if ok {
+			for _, id := range req.IDs {
+				if claims.UID == strconv.FormatInt(id, 10) {
+					http.WriteError(w, http.StatusBadRequest, "cannot delete your own account")
+					return
+				}
+			}
+		}
+
+		now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, 0, len(req.IDs)+4)
+		args = append(args, now, 0, now)
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+
+		query := fmt.Sprintf(
+			"UPDATE admins SET deleted_at = ?, is_active = ?, updated_at = ? WHERE id IN (%s) AND deleted_at IS NULL",
+			strings.Join(placeholders, ","),
+		)
+		result, err := db.Exec(query, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete admins")
+			return
+		}
+
+		// Revoke sessions for deleted admins.
+		for _, id := range req.IDs {
+			idStr := strconv.FormatInt(id, 10)
+			sql, a := sqlite.Delete("refresh_tokens").
+				Where("entity_type = 'admin'").
+				Where("entity_id = ?", idStr).
+				Build()
+			_, _ = db.Exec(sql, a...)
+		}
+
+		for _, id := range req.IDs {
+			adminaudit.Log(db, r, "admin.delete", "admin", strconv.FormatInt(id, 10), "bulk")
+		}
+
+		_ = wh.Dispatch(r.Context(), "admin.bulk_deleted", map[string]any{
+			"ids":      req.IDs,
+			"affected": result.RowsAffected,
+		})
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
 		})
 	}
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { useDebounce } from "@/lib/use-debounce";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Plus, Pencil, Trash2, Copy, Check, Search, X, Download } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -62,6 +64,11 @@ export default function APIKeysPage() {
 
   // Sort.
   const [sort, toggleSort] = useSort("id", "desc");
+
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkRevoking, setBulkRevoking] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   // Dialog state.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -130,6 +137,11 @@ export default function APIKeysPage() {
   useEffect(() => {
     setPage(0);
   }, [search]);
+
+  // Clear selection when page, search, or sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [page, search, sort.column, sort.direction]);
 
   function openCreate() {
     setEditing(null);
@@ -203,6 +215,21 @@ export default function APIKeysPage() {
       toast.error(e.message || "Failed to revoke key");
     } finally {
       setActing(null);
+    }
+  }
+
+  async function handleBulkRevoke() {
+    setBulkRevoking(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/api-keys/bulk-revoke", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} API key${data.affected !== 1 ? "s" : ""} revoked`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to bulk revoke API keys");
+    } finally {
+      setBulkRevoking(false);
     }
   }
 
@@ -332,6 +359,14 @@ export default function APIKeysPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(keys.map((k) => k.id))}
+                  onChange={() => selection.toggleAll(keys.map((k) => k.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <SortableHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium hidden md:table-cell">Key</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Scopes</th>
@@ -345,13 +380,21 @@ export default function APIKeysPage() {
           </thead>
           <tbody>
             {keys.length === 0 ? (
-              <TableEmptyRow colSpan={9} message={search ? "No API keys match your search" : "No API keys found"} />
+              <TableEmptyRow colSpan={10} message={search ? "No API keys match your search" : "No API keys found"} />
             ) : (
               keys.map((k) => (
                 <tr
                   key={k.id}
-                  className="border-b last:border-0 hover:bg-muted/30"
+                  className={`border-b last:border-0 hover:bg-muted/30 ${selection.isSelected(k.id) ? "bg-muted/40" : ""}`}
                 >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(k.id)}
+                      onChange={() => selection.toggle(k.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   <td className="p-3 font-medium">{k.name}</td>
                   <td className="p-3 font-mono text-xs text-muted-foreground hidden md:table-cell">
                     {k.key_prefix}...
@@ -530,6 +573,24 @@ export default function APIKeysPage() {
             <div><span className="font-medium">Key:</span> <span className="font-mono text-xs">{revokeTarget.key_prefix}...</span></div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Revoke
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkRevoke}
+        title="Revoke API Keys"
+        message={`Are you sure you want to revoke ${selection.count} API key${selection.count !== 1 ? "s" : ""}? Any applications using these keys will lose access immediately.`}
+        confirmLabel="Revoke"
+        loading={bulkRevoking}
       />
     </div>
   );

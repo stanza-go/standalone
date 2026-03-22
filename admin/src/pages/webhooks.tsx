@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Plus, Pencil, Trash2, Copy, Check, Search, X, ExternalLink, Download } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
@@ -55,6 +57,11 @@ export default function WebhooksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Webhook | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null);
+
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   // Form state.
   const [url, setUrl] = useState("");
@@ -100,6 +107,11 @@ export default function WebhooksPage() {
   useEffect(() => {
     setPage(0);
   }, [searchInput]);
+
+  // Clear selection when page, search, or sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [page, searchInput, sort.column, sort.direction]);
 
   function openCreate() {
     setEditing(null);
@@ -202,6 +214,21 @@ export default function WebhooksPage() {
       toast.error("Failed to export webhooks");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/webhooks/bulk-delete", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} webhook${data.affected !== 1 ? "s" : ""} deleted`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to bulk delete webhooks");
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -317,6 +344,14 @@ export default function WebhooksPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(webhooks.map((w) => w.id))}
+                  onChange={() => selection.toggleAll(webhooks.map((w) => w.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <SortableHeader label="URL" column="url" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium hidden md:table-cell">Description</th>
               <th className="text-left p-3 font-medium hidden lg:table-cell">Events</th>
@@ -327,14 +362,22 @@ export default function WebhooksPage() {
           </thead>
           <tbody>
             {webhooks.length === 0 ? (
-              <TableEmptyRow colSpan={6} message={searchInput ? "No webhooks match your search" : "No webhooks configured"} />
+              <TableEmptyRow colSpan={7} message={searchInput ? "No webhooks match your search" : "No webhooks configured"} />
             ) : (
               webhooks.map((wh) => (
                 <tr
                   key={wh.id}
-                  className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                  className={`border-b last:border-0 hover:bg-muted/30 cursor-pointer ${selection.isSelected(wh.id) ? "bg-muted/40" : ""}`}
                   onClick={() => navigate(`/webhooks/${wh.id}`)}
                 >
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(wh.id)}
+                      onChange={() => selection.toggle(wh.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   <td className="p-3">
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs truncate max-w-[280px]">{wh.url}</span>
@@ -476,6 +519,24 @@ export default function WebhooksPage() {
             {deleteTarget.description && <div><span className="font-medium">Description:</span> {deleteTarget.description}</div>}
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Webhooks"
+        message={`Are you sure you want to delete ${selection.count} webhook${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={bulkDeleting}
       />
     </div>
   );

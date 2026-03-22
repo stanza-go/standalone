@@ -6,6 +6,7 @@ package adminsessions
 import (
 	"encoding/csv"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -23,6 +24,7 @@ import (
 func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /sessions", listHandler(db))
 	admin.HandleFunc("GET /sessions/export", exportHandler(db))
+	admin.HandleFunc("POST /sessions/bulk-revoke", bulkRevokeHandler(db, wh))
 	admin.HandleFunc("DELETE /sessions/{id}", revokeHandler(db, wh))
 }
 
@@ -111,6 +113,55 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			_ = cw.Write([]string{id, entityType, entityID, email, name, createdAt, expiresAt})
 		}
 		cw.Flush()
+	}
+}
+
+func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := http.ReadJSON(r, &req); err != nil {
+			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.WriteError(w, http.StatusBadRequest, "ids required")
+			return
+		}
+		if len(req.IDs) > 100 {
+			http.WriteError(w, http.StatusBadRequest, "maximum 100 ids per request")
+			return
+		}
+
+		placeholders := make([]string, len(req.IDs))
+		args := make([]any, len(req.IDs))
+		for i, id := range req.IDs {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+
+		query := fmt.Sprintf("DELETE FROM refresh_tokens WHERE id IN (%s)",
+			strings.Join(placeholders, ","))
+		result, err := db.Exec(query, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke sessions")
+			return
+		}
+
+		for _, id := range req.IDs {
+			adminaudit.Log(db, r, "session.revoke", "session", id, "bulk")
+		}
+
+		_ = wh.Dispatch(r.Context(), "session.bulk_revoked", map[string]any{
+			"ids":      req.IDs,
+			"affected": result.RowsAffected,
+		})
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"affected": result.RowsAffected,
+		})
 	}
 }
 

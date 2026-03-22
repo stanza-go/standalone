@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, del, upload, downloadCSV } from "@/lib/api";
+import { get, del, post, upload, downloadCSV } from "@/lib/api";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import {
   Trash2,
   Download,
@@ -101,6 +103,11 @@ export default function UploadsPage() {
   // Delete confirmation.
   const [deleteTarget, setDeleteTarget] = useState<UploadItem | null>(null);
 
+  // Selection.
+  const selection = useSelection<number>();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
   // Upload dialog.
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -136,6 +143,11 @@ export default function UploadsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Clear selection when page, filters, or sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [page, typeFilter, includeDeleted, sort.column, sort.direction]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -215,6 +227,22 @@ export default function UploadsPage() {
     }
   }
 
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/uploads/bulk-delete", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} upload${data.affected !== 1 ? "s" : ""} deleted`);
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to bulk delete uploads";
+      toast.error(msg);
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   const totalPages = Math.ceil(total / pageSize);
 
   if (loading) {
@@ -290,6 +318,14 @@ export default function UploadsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(uploads.map((u) => u.id))}
+                  onChange={() => selection.toggleAll(uploads.map((u) => u.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <th className="text-left p-3 font-medium w-12"></th>
               <SortableHeader label="Name" column="original_name" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Type" column="content_type" sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
@@ -301,13 +337,21 @@ export default function UploadsPage() {
           </thead>
           <tbody>
             {uploads.length === 0 ? (
-              <TableEmptyRow colSpan={7} message={typeFilter ? "No uploads match this filter" : "No uploads found"} />
+              <TableEmptyRow colSpan={8} message={typeFilter ? "No uploads match this filter" : "No uploads found"} />
             ) : (
               uploads.map((upload) => (
                 <tr
                   key={upload.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 ${upload.deleted_at ? "opacity-50" : ""}`}
+                  className={`border-b last:border-0 hover:bg-muted/30 ${upload.deleted_at ? "opacity-50" : ""} ${selection.isSelected(upload.id) ? "bg-muted/40" : ""}`}
                 >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(upload.id)}
+                      onChange={() => selection.toggle(upload.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   {/* Thumbnail / icon */}
                   <td className="p-3">
                     {upload.has_thumbnail ? (
@@ -479,6 +523,24 @@ export default function UploadsPage() {
             <div><span className="font-medium">Size:</span> {formatBytes(deleteTarget.size_bytes)}</div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Uploads"
+        message={`Are you sure you want to delete ${selection.count} upload${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={bulkDeleting}
       />
 
       {/* Preview Dialog */}

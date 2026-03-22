@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { get, del, downloadCSV } from "@/lib/api";
+import { get, del, post, downloadCSV } from "@/lib/api";
+import { useSelection } from "@/lib/use-selection";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TableEmptyRow } from "@/components/ui/empty-state";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
-import { Download } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 
 interface Session {
   id: string;
@@ -29,6 +31,11 @@ export default function SessionsPage() {
   // Sort.
   const [sort, toggleSort] = useSort("created_at", "desc");
 
+  // Selection.
+  const selection = useSelection<string>();
+  const [bulkRevoking, setBulkRevoking] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
   // Revoke confirmation.
   const [revokeTarget, setRevokeTarget] = useState<Session | null>(null);
 
@@ -49,6 +56,11 @@ export default function SessionsPage() {
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Clear selection when sort changes.
+  useEffect(() => {
+    selection.clear();
+  }, [sort.column, sort.direction]);
 
   async function handleExport() {
     setExporting(true);
@@ -77,6 +89,21 @@ export default function SessionsPage() {
       toast.error(e.message || "Failed to revoke session");
     } finally {
       setActing(null);
+    }
+  }
+
+  async function handleBulkRevoke() {
+    setBulkRevoking(true);
+    try {
+      const data = await post<{ affected: number }>("/admin/sessions/bulk-revoke", { ids: selection.ids });
+      setBulkConfirmOpen(false);
+      selection.clear();
+      toast.success(`${data.affected} session${data.affected !== 1 ? "s" : ""} revoked`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to bulk revoke sessions");
+    } finally {
+      setBulkRevoking(false);
     }
   }
 
@@ -142,6 +169,14 @@ export default function SessionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
+              <th className="p-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected(sessions.map((s) => s.id))}
+                  onChange={() => selection.toggleAll(sessions.map((s) => s.id))}
+                  className="rounded border-input"
+                />
+              </th>
               <th className="text-left p-3 font-medium hidden md:table-cell">Token ID</th>
               <SortableHeader label="Type" column="entity_type" sort={sort} onSort={toggleSort} />
               <th className="text-left p-3 font-medium">Admin</th>
@@ -152,13 +187,21 @@ export default function SessionsPage() {
           </thead>
           <tbody>
             {sessions.length === 0 ? (
-              <TableEmptyRow colSpan={6} message="No active sessions" />
+              <TableEmptyRow colSpan={7} message="No active sessions" />
             ) : (
               sessions.map((session) => (
                 <tr
                   key={session.id}
-                  className="border-b last:border-0 hover:bg-muted/30"
+                  className={`border-b last:border-0 hover:bg-muted/30 ${selection.isSelected(session.id) ? "bg-muted/40" : ""}`}
                 >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selection.isSelected(session.id)}
+                      onChange={() => selection.toggle(session.id)}
+                      className="rounded border-input"
+                    />
+                  </td>
                   <td className="p-3 font-mono text-xs hidden md:table-cell">
                     {session.id.substring(0, 12)}...
                   </td>
@@ -213,6 +256,24 @@ export default function SessionsPage() {
             <div><span className="font-medium">Token:</span> <span className="font-mono text-xs">{revokeTarget.id.substring(0, 16)}...</span></div>
           </>
         )}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionBar count={selection.count} onClear={selection.clear}>
+        <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Revoke
+        </Button>
+      </BulkActionBar>
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={handleBulkRevoke}
+        title="Revoke Sessions"
+        message={`Are you sure you want to revoke ${selection.count} session${selection.count !== 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmLabel="Revoke"
+        loading={bulkRevoking}
       />
     </div>
   );
