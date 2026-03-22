@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/framework/pkg/webhook"
 	"github.com/stanza-go/standalone/module/adminaudit"
 	"github.com/stanza-go/standalone/module/webhooks"
@@ -173,12 +173,12 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		if req.URL == "" {
-			http.WriteError(w, http.StatusBadRequest, "url is required")
-			return
-		}
-		if !strings.HasPrefix(req.URL, "https://") && !strings.HasPrefix(req.URL, "http://") {
-			http.WriteError(w, http.StatusBadRequest, "url must start with http:// or https://")
+		v := validate.Fields(
+			validate.Required("url", req.URL),
+			validate.URL("url", req.URL),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
@@ -287,8 +287,8 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		ub := sqlite.Update("webhooks").Set("updated_at", now).Where("id = ?", id)
 
 		if req.URL != nil {
-			if !strings.HasPrefix(*req.URL, "https://") && !strings.HasPrefix(*req.URL, "http://") {
-				http.WriteError(w, http.StatusBadRequest, "url must start with http:// or https://")
+			if fe := validate.URL("url", *req.URL); fe != nil {
+				http.WriteError(w, http.StatusBadRequest, fe.Message)
 				return
 			}
 			ub = ub.Set("url", *req.URL)
