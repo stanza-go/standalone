@@ -547,6 +547,9 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 		Commit:    commit,
 		BuildTime: buildTime,
 	})
+	api.HandleFunc("GET /metrics", http.PrometheusHandler(
+		collectPrometheus(db, m, q, s, whDispatcher, a, emailClient),
+	))
 
 	// Auth routes — rate limited to prevent brute force attacks.
 	// 20 requests per minute per IP covers legitimate use (including
@@ -662,4 +665,84 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	}
 
 	logger.Info("modules registered")
+}
+
+// collectPrometheus returns a collector function that gathers metrics
+// from all framework packages for Prometheus exposition. Called on each
+// scrape of GET /api/metrics.
+func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.Scheduler, wh *webhooks.Dispatcher, a *auth.Auth, ec *email.Client) func() []http.PrometheusMetric {
+	return func() []http.PrometheusMetric {
+		var out []http.PrometheusMetric
+
+		// SQLite.
+		ds := db.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_sqlite_reads_total", Help: "Total read queries executed", Type: "counter", Value: float64(ds.TotalReads)},
+			http.PrometheusMetric{Name: "stanza_sqlite_writes_total", Help: "Total write queries executed", Type: "counter", Value: float64(ds.TotalWrites)},
+			http.PrometheusMetric{Name: "stanza_sqlite_pool_waits_total", Help: "Total read pool wait events", Type: "counter", Value: float64(ds.PoolWaits)},
+			http.PrometheusMetric{Name: "stanza_sqlite_read_pool_size", Help: "Read pool total connections", Type: "gauge", Value: float64(ds.ReadPoolSize)},
+			http.PrometheusMetric{Name: "stanza_sqlite_read_pool_in_use", Help: "Read pool connections currently in use", Type: "gauge", Value: float64(ds.ReadPoolInUse)},
+		)
+
+		// HTTP.
+		hs := m.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_http_requests_total", Help: "Total HTTP requests processed", Type: "counter", Value: float64(hs.TotalRequests)},
+			http.PrometheusMetric{Name: "stanza_http_requests_active", Help: "HTTP requests currently being processed", Type: "gauge", Value: float64(hs.ActiveRequests)},
+			http.PrometheusMetric{Name: "stanza_http_responses_2xx_total", Help: "Total 2xx responses", Type: "counter", Value: float64(hs.Status2xx)},
+			http.PrometheusMetric{Name: "stanza_http_responses_3xx_total", Help: "Total 3xx responses", Type: "counter", Value: float64(hs.Status3xx)},
+			http.PrometheusMetric{Name: "stanza_http_responses_4xx_total", Help: "Total 4xx responses", Type: "counter", Value: float64(hs.Status4xx)},
+			http.PrometheusMetric{Name: "stanza_http_responses_5xx_total", Help: "Total 5xx responses", Type: "counter", Value: float64(hs.Status5xx)},
+			http.PrometheusMetric{Name: "stanza_http_response_bytes_total", Help: "Total response bytes written", Type: "counter", Value: float64(hs.BytesWritten)},
+			http.PrometheusMetric{Name: "stanza_http_request_duration_avg_ms", Help: "Average request duration in milliseconds", Type: "gauge", Value: hs.AvgDurationMs},
+		)
+
+		// Queue.
+		qs, err := q.Stats()
+		if err == nil {
+			out = append(out,
+				http.PrometheusMetric{Name: "stanza_queue_pending", Help: "Jobs waiting to be processed", Type: "gauge", Value: float64(qs.Pending)},
+				http.PrometheusMetric{Name: "stanza_queue_running", Help: "Jobs currently being processed", Type: "gauge", Value: float64(qs.Running)},
+				http.PrometheusMetric{Name: "stanza_queue_completed_total", Help: "Total jobs completed successfully", Type: "counter", Value: float64(qs.Completed)},
+				http.PrometheusMetric{Name: "stanza_queue_failed_total", Help: "Total jobs that failed", Type: "counter", Value: float64(qs.Failed)},
+				http.PrometheusMetric{Name: "stanza_queue_dead_total", Help: "Total jobs that exceeded max retries", Type: "counter", Value: float64(qs.Dead)},
+				http.PrometheusMetric{Name: "stanza_queue_cancelled_total", Help: "Total jobs cancelled", Type: "counter", Value: float64(qs.Cancelled)},
+			)
+		}
+
+		// Cron.
+		cs := s.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_cron_jobs_registered", Help: "Number of registered cron jobs", Type: "gauge", Value: float64(cs.Jobs)},
+			http.PrometheusMetric{Name: "stanza_cron_completed_total", Help: "Total cron runs completed", Type: "counter", Value: float64(cs.Completed)},
+			http.PrometheusMetric{Name: "stanza_cron_failed_total", Help: "Total cron runs that errored", Type: "counter", Value: float64(cs.Failed)},
+			http.PrometheusMetric{Name: "stanza_cron_skipped_total", Help: "Total cron runs skipped (previous still running)", Type: "counter", Value: float64(cs.Skipped)},
+		)
+
+		// Webhook.
+		ws := wh.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_webhook_sends_total", Help: "Total webhook delivery attempts", Type: "counter", Value: float64(ws.Sends)},
+			http.PrometheusMetric{Name: "stanza_webhook_successes_total", Help: "Total successful webhook deliveries", Type: "counter", Value: float64(ws.Successes)},
+			http.PrometheusMetric{Name: "stanza_webhook_failures_total", Help: "Total failed webhook deliveries", Type: "counter", Value: float64(ws.Failures)},
+			http.PrometheusMetric{Name: "stanza_webhook_retries_total", Help: "Total webhook delivery retries", Type: "counter", Value: float64(ws.Retries)},
+		)
+
+		// Auth.
+		as := a.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_auth_tokens_issued_total", Help: "Total JWT tokens issued", Type: "counter", Value: float64(as.Issued)},
+			http.PrometheusMetric{Name: "stanza_auth_tokens_accepted_total", Help: "Total JWT tokens validated successfully", Type: "counter", Value: float64(as.Accepted)},
+			http.PrometheusMetric{Name: "stanza_auth_tokens_rejected_total", Help: "Total JWT tokens rejected", Type: "counter", Value: float64(as.Rejected)},
+		)
+
+		// Email.
+		es := ec.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_email_sent_total", Help: "Total emails sent successfully", Type: "counter", Value: float64(es.Sent)},
+			http.PrometheusMetric{Name: "stanza_email_errors_total", Help: "Total email send failures", Type: "counter", Value: float64(es.Errors)},
+		)
+
+		return out
+	}
 }
