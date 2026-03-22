@@ -8,8 +8,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/cache"
 	"github.com/stanza-go/framework/pkg/cron"
+	"github.com/stanza-go/framework/pkg/email"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/queue"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -41,7 +43,7 @@ type dbStats struct {
 //
 //	GET /api/admin/dashboard        — system, database, queue, cron, and app stats
 //	GET /api/admin/dashboard/charts — time-series data for dashboard charts
-func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, wh *webhooks.Dispatcher) {
+func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, wh *webhooks.Dispatcher, a *auth.Auth, ec *email.Client) {
 	statsCache := cache.New[*dbStats](
 		cache.WithTTL[*dbStats](30 * time.Second),
 		cache.WithMaxSize[*dbStats](1),
@@ -50,7 +52,7 @@ func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Schedule
 		cache.WithTTL[*chartsData](5 * time.Minute),
 		cache.WithMaxSize[*chartsData](3),
 	)
-	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, m, wh, statsCache, chartsCache))
+	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, m, wh, a, ec, statsCache, chartsCache))
 	admin.HandleFunc("GET /dashboard/charts", chartsHandler(db, chartsCache))
 }
 
@@ -85,7 +87,7 @@ func queryDBStats(db *sqlite.DB) (*dbStats, error) {
 	return st, nil
 }
 
-func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, wh *webhooks.Dispatcher, statsCache *cache.Cache[*dbStats], chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
+func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, wh *webhooks.Dispatcher, a *auth.Auth, ec *email.Client, statsCache *cache.Cache[*dbStats], chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
@@ -174,6 +176,8 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metr
 			},
 			"http":    m.Stats(),
 			"webhook": wh.Stats(),
+			"auth":    a.Stats(),
+			"email":   ec.Stats(),
 			"stats": map[string]any{
 				"total_admins":    st.TotalAdmins,
 				"total_users":     st.TotalUsers,

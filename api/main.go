@@ -567,7 +567,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	admin.Use(auth.RequireScope("admin"))
 
 	// Dashboard and profile: base admin scope only.
-	dashboard.Register(admin, db, q, s, m, whDispatcher)
+	dashboard.Register(admin, db, q, s, m, whDispatcher, a, emailClient)
 	adminprofile.Register(admin, db, logger)
 
 	// Scoped admin sub-groups — each module gets its specific scope.
