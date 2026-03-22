@@ -35,7 +35,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args := sqlite.Select(
 			"rt.id", "rt.entity_type", "rt.entity_id", "rt.created_at", "rt.expires_at",
-			"COALESCE(a.email, '')", "COALESCE(a.name, '')").
+			sqlite.CoalesceEmpty("a.email"), sqlite.CoalesceEmpty("a.name")).
 			From("refresh_tokens rt").
 			LeftJoin("admins a", "rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)").
 			Where("rt.expires_at > ?", now).
@@ -76,7 +76,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args := sqlite.Select(
 			"rt.id", "rt.entity_type", "rt.entity_id", "rt.created_at", "rt.expires_at",
-			"COALESCE(a.email, '')", "COALESCE(a.name, '')").
+			sqlite.CoalesceEmpty("a.email"), sqlite.CoalesceEmpty("a.name")).
 			From("refresh_tokens rt").
 			LeftJoin("admins a", "rt.entity_type = 'admin' AND rt.entity_id = CAST(a.id AS TEXT)").
 			Where("rt.expires_at > ?", now).

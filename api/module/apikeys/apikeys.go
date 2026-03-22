@@ -53,9 +53,9 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		search := r.URL.Query().Get("search")
 
 		selectQ := sqlite.Select("id", "name", "key_prefix", "scopes",
-			"entity_type", "COALESCE(entity_id, '')", "created_by",
-			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
-			"created_at", "COALESCE(revoked_at, '')").
+			"entity_type", sqlite.CoalesceEmpty("entity_id"), "created_by",
+			"request_count", sqlite.CoalesceEmpty("last_used_at"), sqlite.CoalesceEmpty("expires_at"),
+			"created_at", sqlite.CoalesceEmpty("revoked_at")).
 			From("api_keys")
 		selectQ.WhereSearch(search, "name", "key_prefix")
 
@@ -90,9 +90,9 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		search := r.URL.Query().Get("search")
 
 		q := sqlite.Select("id", "name", "key_prefix", "scopes",
-			"entity_type", "COALESCE(entity_id, '')", "request_count",
-			"COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
-			"created_at", "COALESCE(revoked_at, '')").
+			"entity_type", sqlite.CoalesceEmpty("entity_id"), "request_count",
+			sqlite.CoalesceEmpty("last_used_at"), sqlite.CoalesceEmpty("expires_at"),
+			"created_at", sqlite.CoalesceEmpty("revoked_at")).
 			From("api_keys").
 			WhereSearch(search, "name", "key_prefix")
 
@@ -233,9 +233,9 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Load current key.
 		var current apiKeyJSON
 		sql, args := sqlite.Select("name", "scopes", "key_prefix",
-			"entity_type", "COALESCE(entity_id, '')", "created_by",
-			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
-			"created_at", "COALESCE(revoked_at, '')").
+			"entity_type", sqlite.CoalesceEmpty("entity_id"), "created_by",
+			"request_count", sqlite.CoalesceEmpty("last_used_at"), sqlite.CoalesceEmpty("expires_at"),
+			"created_at", sqlite.CoalesceEmpty("revoked_at")).
 			From("api_keys").
 			Where("id = ?", id).
 			Build()

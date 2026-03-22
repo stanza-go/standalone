@@ -70,7 +70,7 @@ type entryJSON struct {
 func buildAuditSelect(r *http.Request) *sqlite.SelectBuilder {
 	q := sqlite.Select(
 		"audit_log.id", "audit_log.admin_id",
-		"COALESCE(admins.email, '')", "COALESCE(admins.name, '')",
+		sqlite.CoalesceEmpty("admins.email"), sqlite.CoalesceEmpty("admins.name"),
 		"audit_log.action", "audit_log.entity_type", "audit_log.entity_id",
 		"audit_log.details", "audit_log.ip_address", "audit_log.created_at",
 	).From("audit_log").
@@ -157,7 +157,7 @@ func recentHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sql, args := sqlite.Select(
 			"audit_log.id", "audit_log.admin_id",
-			"COALESCE(admins.email, '')", "COALESCE(admins.name, '')",
+			sqlite.CoalesceEmpty("admins.email"), sqlite.CoalesceEmpty("admins.name"),
 			"audit_log.action", "audit_log.entity_type", "audit_log.entity_id",
 			"audit_log.details", "audit_log.ip_address", "audit_log.created_at",
 		).From("audit_log").

@@ -448,7 +448,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		idStr := strconv.FormatInt(id, 10)
 
 		selectQ := sqlite.Select(
-			"al.id", "al.admin_id", "COALESCE(a.email, '')", "COALESCE(a.name, '')",
+			"al.id", "al.admin_id", sqlite.CoalesceEmpty("a.email"), sqlite.CoalesceEmpty("a.name"),
 			"al.action", "al.details", "al.ip_address", "al.created_at",
 		).From("audit_log al").
 			LeftJoin("admins a", "a.id = CAST(al.admin_id AS INTEGER)").

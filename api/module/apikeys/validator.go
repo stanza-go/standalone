@@ -26,8 +26,8 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 		var expiresAt string
 		var revokedAt string
 
-		sql, args := sqlite.Select("id", "scopes", "entity_type", "COALESCE(entity_id, '')",
-			"COALESCE(expires_at, '')", "COALESCE(revoked_at, '')").
+		sql, args := sqlite.Select("id", "scopes", "entity_type", sqlite.CoalesceEmpty("entity_id"),
+			sqlite.CoalesceEmpty("expires_at"), sqlite.CoalesceEmpty("revoked_at")).
 			From("api_keys").
 			Where("key_hash = ?", keyHash).
 			Build()

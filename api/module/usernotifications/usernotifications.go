@@ -36,7 +36,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
 
-		q := sqlite.Select("id", "type", "title", "message", "data", "COALESCE(read_at, '')", "created_at").
+		q := sqlite.Select("id", "type", "title", "message", "data", sqlite.CoalesceEmpty("read_at"), "created_at").
 			From("notifications").
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID)

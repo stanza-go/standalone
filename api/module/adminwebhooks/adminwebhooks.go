@@ -409,7 +409,7 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		qb := sqlite.Select("id", "webhook_id", "delivery_id", "event", "payload", "status", "status_code", "response_body", "attempts", "created_at", "COALESCE(completed_at, '')").
+		qb := sqlite.Select("id", "webhook_id", "delivery_id", "event", "payload", "status", "status_code", "response_body", "attempts", "created_at", sqlite.CoalesceEmpty("completed_at")).
 			From("webhook_deliveries").
 			Where("webhook_id = ?", id)
 		if status != "" {

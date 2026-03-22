@@ -75,7 +75,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		q := sqlite.Select("id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "uploaded_by",
-			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
+			"entity_type", "entity_id", "created_at", sqlite.CoalesceEmpty("deleted_at")).
 			From("uploads")
 		if !includeDeleted {
 			q.Where("deleted_at IS NULL")
@@ -121,7 +121,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		q := sqlite.Select("id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "uploaded_by",
-			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
+			"entity_type", "entity_id", "created_at", sqlite.CoalesceEmpty("deleted_at")).
 			From("uploads")
 		if !includeDeleted {
 			q.Where("deleted_at IS NULL")
@@ -475,7 +475,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 func findUpload(db *sqlite.DB, id int64) (uploadJSON, error) {
 	sql, args := sqlite.Select("id", "uuid", "original_name", "content_type",
 		"size_bytes", "has_thumbnail", "uploaded_by",
-		"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
+		"entity_type", "entity_id", "created_at", sqlite.CoalesceEmpty("deleted_at")).
 		From("uploads").
 		Where("id = ?", id).
 		Build()
