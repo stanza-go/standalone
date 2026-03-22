@@ -10,6 +10,26 @@ export default defineConfig(({ command }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router"],
+          "vendor-mantine": [
+            "@mantine/core",
+            "@mantine/hooks",
+            "@mantine/form",
+            "@mantine/notifications",
+            "@mantine/dates",
+            "@mantine/dropzone",
+            "@mantine/spotlight",
+          ],
+          "vendor-charts": ["recharts", "@mantine/charts"],
+          "vendor-icons": ["@tabler/icons-react"],
+        },
+      },
+    },
+  },
   server: {
     port: 23706,
     proxy: {
