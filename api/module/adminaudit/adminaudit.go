@@ -67,70 +67,51 @@ type entryJSON struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+// buildAuditSelect returns a SelectBuilder for audit entries with the admin
+// LEFT JOIN and all applicable filters from query parameters.
+func buildAuditSelect(r *http.Request) *sqlite.SelectBuilder {
+	q := sqlite.Select(
+		"audit_log.id", "audit_log.admin_id",
+		"COALESCE(admins.email, '')", "COALESCE(admins.name, '')",
+		"audit_log.action", "audit_log.entity_type", "audit_log.entity_id",
+		"audit_log.details", "audit_log.ip_address", "audit_log.created_at",
+	).From("audit_log").
+		LeftJoin("admins", "admins.id = CAST(audit_log.admin_id AS INTEGER)")
+
+	if action := r.URL.Query().Get("action"); action != "" {
+		q.Where("audit_log.action = ?", action)
+	}
+	if adminID := r.URL.Query().Get("admin_id"); adminID != "" {
+		q.Where("audit_log.admin_id = ?", adminID)
+	}
+	if search := r.URL.Query().Get("search"); search != "" {
+		like := "%" + escapeLike(search) + "%"
+		q.Where("(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')", like, like)
+	}
+	if from := r.URL.Query().Get("from"); from != "" {
+		q.Where("audit_log.created_at >= ?", from)
+	}
+	if to := r.URL.Query().Get("to"); to != "" {
+		q.Where("audit_log.created_at <= ?", to)
+	}
+
+	return q
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
-		action := r.URL.Query().Get("action")
-		adminID := r.URL.Query().Get("admin_id")
-		search := r.URL.Query().Get("search")
-		from := r.URL.Query().Get("from")
-		to := r.URL.Query().Get("to")
-
-		// Count query.
-		countSQL := "SELECT count(*) FROM audit_log"
-		var countArgs []any
-		var conditions []string
-
-		if action != "" {
-			conditions = append(conditions, "audit_log.action = ?")
-			countArgs = append(countArgs, action)
-		}
-		if adminID != "" {
-			conditions = append(conditions, "audit_log.admin_id = ?")
-			countArgs = append(countArgs, adminID)
-		}
-		if search != "" {
-			conditions = append(conditions, "(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')")
-			like := "%" + escapeLike(search) + "%"
-			countArgs = append(countArgs, like, like)
-		}
-		if from != "" {
-			conditions = append(conditions, "audit_log.created_at >= ?")
-			countArgs = append(countArgs, from)
-		}
-		if to != "" {
-			conditions = append(conditions, "audit_log.created_at <= ?")
-			countArgs = append(countArgs, to)
-		}
-
-		if len(conditions) > 0 {
-			countSQL += " WHERE " + strings.Join(conditions, " AND ")
-		}
+		selectQ := buildAuditSelect(r)
 
 		var total int
-		_ = db.QueryRow(countSQL, countArgs...).Scan(&total)
-
-		// Select query with LEFT JOIN for admin info.
-		selectSQL := `SELECT audit_log.id, audit_log.admin_id, COALESCE(admins.email, ''), COALESCE(admins.name, ''),
-			audit_log.action, audit_log.entity_type, audit_log.entity_id,
-			audit_log.details, audit_log.ip_address, audit_log.created_at
-			FROM audit_log
-			LEFT JOIN admins ON admins.id = CAST(audit_log.admin_id AS INTEGER)`
-
-		var selectArgs []any
-		if len(conditions) > 0 {
-			selectSQL += " WHERE " + strings.Join(conditions, " AND ")
-			selectArgs = append(selectArgs, countArgs...)
-		}
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
 			"id", "DESC")
-
-		selectSQL += " ORDER BY audit_log." + sortCol + " " + sortDir + " LIMIT ? OFFSET ?"
-		selectArgs = append(selectArgs, pg.Limit, pg.Offset)
-
-		rows, err := db.Query(selectSQL, selectArgs...)
+		sql, args = selectQ.OrderBy("audit_log."+sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list audit entries")
 			return
@@ -155,53 +136,13 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		action := r.URL.Query().Get("action")
-		adminID := r.URL.Query().Get("admin_id")
-		search := r.URL.Query().Get("search")
-		from := r.URL.Query().Get("from")
-		to := r.URL.Query().Get("to")
-
-		var conditions []string
-		var queryArgs []any
-
-		if action != "" {
-			conditions = append(conditions, "audit_log.action = ?")
-			queryArgs = append(queryArgs, action)
-		}
-		if adminID != "" {
-			conditions = append(conditions, "audit_log.admin_id = ?")
-			queryArgs = append(queryArgs, adminID)
-		}
-		if search != "" {
-			conditions = append(conditions, "(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')")
-			like := "%" + escapeLike(search) + "%"
-			queryArgs = append(queryArgs, like, like)
-		}
-		if from != "" {
-			conditions = append(conditions, "audit_log.created_at >= ?")
-			queryArgs = append(queryArgs, from)
-		}
-		if to != "" {
-			conditions = append(conditions, "audit_log.created_at <= ?")
-			queryArgs = append(queryArgs, to)
-		}
-
-		selectSQL := `SELECT audit_log.id, audit_log.admin_id, COALESCE(admins.email, ''), COALESCE(admins.name, ''),
-			audit_log.action, audit_log.entity_type, audit_log.entity_id,
-			audit_log.details, audit_log.ip_address, audit_log.created_at
-			FROM audit_log
-			LEFT JOIN admins ON admins.id = CAST(audit_log.admin_id AS INTEGER)`
-
-		if len(conditions) > 0 {
-			selectSQL += " WHERE " + strings.Join(conditions, " AND ")
-		}
+		selectQ := buildAuditSelect(r)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
 			"id", "DESC")
-		selectSQL += " ORDER BY audit_log." + sortCol + " " + sortDir
-
-		rows, err := db.Query(selectSQL, queryArgs...)
+		sql, args := selectQ.OrderBy("audit_log."+sortCol, sortDir).Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to export audit log")
 			return
@@ -238,12 +179,17 @@ func escapeLike(s string) string {
 // activity feed. Lightweight endpoint — no pagination, no filtering.
 func recentHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query(`SELECT audit_log.id, audit_log.admin_id, COALESCE(admins.email, ''), COALESCE(admins.name, ''),
-			audit_log.action, audit_log.entity_type, audit_log.entity_id,
-			audit_log.details, audit_log.ip_address, audit_log.created_at
-			FROM audit_log
-			LEFT JOIN admins ON admins.id = CAST(audit_log.admin_id AS INTEGER)
-			ORDER BY audit_log.id DESC LIMIT 10`)
+		sql, args := sqlite.Select(
+			"audit_log.id", "audit_log.admin_id",
+			"COALESCE(admins.email, '')", "COALESCE(admins.name, '')",
+			"audit_log.action", "audit_log.entity_type", "audit_log.entity_id",
+			"audit_log.details", "audit_log.ip_address", "audit_log.created_at",
+		).From("audit_log").
+			LeftJoin("admins", "admins.id = CAST(audit_log.admin_id AS INTEGER)").
+			OrderBy("audit_log.id", "DESC").
+			Limit(10).
+			Build()
+		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list recent activity")
 			return

@@ -74,8 +74,23 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
-
 		pg := http.ParsePagination(r, 50, 200)
+
+		selectQ := sqlite.Select("id", "name", "started_at", "duration_ms", "status", "error").
+			From("cron_runs").
+			Where("name = ?", name)
+
+		var total int
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = selectQ.OrderBy("started_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
+		rows, err := db.Query(sql, args...)
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer rows.Close()
 
 		type runJSON struct {
 			ID         int64  `json:"id"`
@@ -87,30 +102,14 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		runs := make([]runJSON, 0)
-		func() {
-			rows, err := db.Query(
-				"SELECT id, name, started_at, duration_ms, status, error FROM cron_runs WHERE name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
-				name, pg.Limit, pg.Offset,
-			)
-			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "database error")
+		for rows.Next() {
+			var run runJSON
+			if err := rows.Scan(&run.ID, &run.Name, &run.StartedAt, &run.DurationMs, &run.Status, &run.Error); err != nil {
+				http.WriteError(w, http.StatusInternalServerError, "scan error")
 				return
 			}
-			defer rows.Close()
-
-			for rows.Next() {
-				var run runJSON
-				if err := rows.Scan(&run.ID, &run.Name, &run.StartedAt, &run.DurationMs, &run.Status, &run.Error); err != nil {
-					http.WriteError(w, http.StatusInternalServerError, "scan error")
-					return
-				}
-				runs = append(runs, run)
-			}
-		}()
-
-		// Get total count for pagination (rows must be closed first — single mutex).
-		var total int
-		_ = db.QueryRow("SELECT COUNT(*) FROM cron_runs WHERE name = ?", name).Scan(&total)
+			runs = append(runs, run)
+		}
 
 		http.PaginatedResponse(w, "runs", runs, total)
 	}
