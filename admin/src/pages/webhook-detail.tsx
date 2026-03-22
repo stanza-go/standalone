@@ -328,7 +328,7 @@ export default function WebhookDetailPage() {
                   </Table.Tr>
                   {expandedDelivery === d.id && (
                     <Table.Tr key={`${d.id}-detail`}>
-                      <Table.Td colSpan={7} style={{ background: "var(--mantine-color-gray-0)", paddingBlock: 16 }}>
+                      <Table.Td colSpan={7} bg="var(--mantine-color-gray-light)" style={{ paddingBlock: 16 }}>
                         <Stack gap="sm" px="sm">
                           <div>
                             <Text size="xs" fw={500} c="dimmed" mb={4}>Request Payload</Text>
