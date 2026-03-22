@@ -7,6 +7,11 @@ import Shell from "@/components/layout/shell";
 import LoginPage from "@/pages/login";
 
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const UsersPage = lazy(() => import("@/pages/users"));
+const AdminsPage = lazy(() => import("@/pages/admins"));
+const SessionsPage = lazy(() => import("@/pages/sessions"));
+const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
+const RolesPage = lazy(() => import("@/pages/roles"));
 
 // Placeholder for pages not yet ported — shows page name
 function Placeholder({ name }: { name: string }) {
@@ -45,19 +50,19 @@ export default function App() {
                 </Suspense>
               }
             />
-            <Route path="users" element={<Placeholder name="Users" />} />
+            <Route path="users" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><UsersPage /></Suspense>} />
             <Route path="users/:id" element={<Placeholder name="User Detail" />} />
-            <Route path="admins" element={<Placeholder name="Admin Users" />} />
+            <Route path="admins" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><AdminsPage /></Suspense>} />
             <Route path="admins/:id" element={<Placeholder name="Admin Detail" />} />
-            <Route path="sessions" element={<Placeholder name="Sessions" />} />
+            <Route path="sessions" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><SessionsPage /></Suspense>} />
             <Route path="cron" element={<Placeholder name="Cron Jobs" />} />
             <Route path="queue" element={<Placeholder name="Job Queue" />} />
             <Route path="logs" element={<Placeholder name="Logs" />} />
             <Route path="database" element={<Placeholder name="Database" />} />
-            <Route path="api-keys" element={<Placeholder name="API Keys" />} />
+            <Route path="api-keys" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><ApiKeysPage /></Suspense>} />
             <Route path="audit" element={<Placeholder name="Audit Log" />} />
             <Route path="notifications" element={<Placeholder name="Notifications" />} />
-            <Route path="roles" element={<Placeholder name="Roles" />} />
+            <Route path="roles" element={<Suspense fallback={<Center pt="xl"><Loader /></Center>}><RolesPage /></Suspense>} />
             <Route path="uploads" element={<Placeholder name="Uploads" />} />
             <Route path="webhooks" element={<Placeholder name="Webhooks" />} />
             <Route path="webhooks/:id" element={<Placeholder name="Webhook Detail" />} />
