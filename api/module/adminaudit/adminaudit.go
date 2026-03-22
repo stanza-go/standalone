@@ -85,7 +85,7 @@ func buildAuditSelect(r *http.Request) *sqlite.SelectBuilder {
 		q.Where("audit_log.admin_id = ?", adminID)
 	}
 	if search := r.URL.Query().Get("search"); search != "" {
-		like := "%" + escapeLike(search) + "%"
+		like := "%" + sqlite.EscapeLike(search) + "%"
 		q.Where("(audit_log.details LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\')", like, like)
 	}
 	if from := r.URL.Query().Get("from"); from != "" {
@@ -168,15 +168,6 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		cw.Flush()
 	}
-}
-
-// escapeLike escapes LIKE wildcards (% and _) in a search term so they
-// are matched literally when used with ESCAPE '\'.
-func escapeLike(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
-	return s
 }
 
 // recentHandler returns the last 10 audit entries for the dashboard

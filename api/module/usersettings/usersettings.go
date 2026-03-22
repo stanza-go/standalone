@@ -148,15 +148,17 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		now := time.Now().UTC().Format(time.RFC3339)
 
-		// Upsert each setting using INSERT OR REPLACE.
+		// Upsert each setting.
 		for key, value := range req.Settings {
-			_, err := db.Exec(
-				`INSERT INTO user_settings (user_id, key, value, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?)
-				 ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-				claims.UID, key, value, now, now,
-			)
-			if err != nil {
+			sql, args := sqlite.Insert("user_settings").
+				Set("user_id", claims.UID).
+				Set("key", key).
+				Set("value", value).
+				Set("created_at", now).
+				Set("updated_at", now).
+				OnConflict([]string{"user_id", "key"}, []string{"value", "updated_at"}).
+				Build()
+			if _, err := db.Exec(sql, args...); err != nil {
 				http.WriteError(w, http.StatusInternalServerError, "failed to save setting")
 				return
 			}

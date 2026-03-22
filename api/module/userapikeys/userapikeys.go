@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -61,7 +60,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID)
 		if search != "" {
-			like := "%" + escapeLike(search) + "%"
+			like := "%" + sqlite.EscapeLike(search) + "%"
 			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 		}
 
@@ -288,11 +287,3 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-// escapeLike escapes LIKE wildcards (% and _) in a search term so they
-// are matched literally when used with ESCAPE '\'.
-func escapeLike(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
-	return s
-}

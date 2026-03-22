@@ -64,7 +64,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("users").
 			Where("deleted_at IS NULL")
 		if search != "" {
-			like := "%" + escapeLike(search) + "%"
+			like := "%" + sqlite.EscapeLike(search) + "%"
 			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
 
@@ -111,7 +111,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("users").
 			Where("deleted_at IS NULL")
 		if search != "" {
-			like := "%" + escapeLike(search) + "%"
+			like := "%" + sqlite.EscapeLike(search) + "%"
 			q.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
 
@@ -465,15 +465,6 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			"affected": result.RowsAffected,
 		})
 	}
-}
-
-// escapeLike escapes LIKE wildcards (% and _) in a search term so they
-// are matched literally when used with ESCAPE '\'.
-func escapeLike(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
-	return s
 }
 
 // activityHandler returns audit log entries where this user is the target entity.

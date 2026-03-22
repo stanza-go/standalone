@@ -75,7 +75,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		qb := sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks")
 		if search != "" {
-			escaped := escapeLike(search)
+			escaped := sqlite.EscapeLike(search)
 			qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
 		}
 
@@ -129,7 +129,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		qb := sqlite.Select("id", "url", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks")
 		if search != "" {
-			escaped := escapeLike(search)
+			escaped := sqlite.EscapeLike(search)
 			qb = qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
 		}
 
@@ -521,9 +521,3 @@ func Verify(secret, id, timestamp, signature string, body []byte) bool {
 	return webhook.Verify(secret, id, timestamp, signature, body)
 }
 
-func escapeLike(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "%", "\\%")
-	s = strings.ReplaceAll(s, "_", "\\_")
-	return s
-}

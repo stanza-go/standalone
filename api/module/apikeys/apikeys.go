@@ -63,7 +63,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys")
 		if search != "" {
-			like := "%" + escapeLike(search) + "%"
+			like := "%" + sqlite.EscapeLike(search) + "%"
 			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 		}
 
@@ -116,7 +116,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys")
 		if search != "" {
-			like := "%" + escapeLike(search) + "%"
+			like := "%" + sqlite.EscapeLike(search) + "%"
 			q.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 		}
 
@@ -406,11 +406,3 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-// escapeLike escapes LIKE wildcards (% and _) in a search term so they
-// are matched literally when used with ESCAPE '\'.
-func escapeLike(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
-	return s
-}
