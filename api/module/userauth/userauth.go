@@ -47,6 +47,8 @@ type registerRequest struct {
 // them in automatically.
 func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		var req registerRequest
 		if err := http.ReadJSON(r, &req); err != nil {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -69,7 +71,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhoo
 
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			logger.Error("hash password", log.String("error", err.Error()))
+			l.Error("hash password", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -90,7 +92,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhoo
 				http.WriteError(w, http.StatusConflict, "email already registered")
 				return
 			}
-			logger.Error("create user", log.String("error", err.Error()))
+			l.Error("create user", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -99,11 +101,11 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger, wh *webhoo
 		uid := strconv.FormatInt(id, 10)
 
 		// Auto-login: issue tokens.
-		if err := issueSession(w, a, db, logger, uid); err != nil {
+		if err := issueSession(w, a, db, l, uid); err != nil {
 			return
 		}
 
-		logger.Info("user registered", log.String("email", req.Email), log.String("uid", uid))
+		l.Info("user registered", log.String("email", req.Email), log.String("uid", uid))
 
 		_ = wh.Dispatch(r.Context(), "user.registered", map[string]any{
 			"id":    id,
@@ -131,6 +133,8 @@ type loginRequest struct {
 // access and refresh tokens, and sets them as cookies.
 func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		var req loginRequest
 		if err := http.ReadJSON(r, &req); err != nil {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -166,11 +170,11 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 
 		uid := strconv.FormatInt(id, 10)
 
-		if err := issueSession(w, a, db, logger, uid); err != nil {
+		if err := issueSession(w, a, db, l, uid); err != nil {
 			return
 		}
 
-		logger.Info("user login", log.String("email", req.Email), log.String("uid", uid))
+		l.Info("user login", log.String("email", req.Email), log.String("uid", uid))
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"user": map[string]any{
@@ -187,6 +191,8 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 // scopes. The frontend polls this endpoint every ~1 minute.
 func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err != nil {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -237,7 +243,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 
 		accessToken, err := a.IssueAccessToken(uid, []string{"user"})
 		if err != nil {
-			logger.Error("issue access token", log.String("error", err.Error()))
+			l.Error("issue access token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}

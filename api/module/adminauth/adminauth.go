@@ -40,6 +40,8 @@ type loginRequest struct {
 // access and refresh tokens, and sets them as cookies.
 func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		var req loginRequest
 		if err := http.ReadJSON(r, &req); err != nil {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -77,7 +79,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		// Issue access token.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
 		if err != nil {
-			logger.Error("issue access token", log.String("error", err.Error()))
+			l.Error("issue access token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -85,14 +87,14 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		// Generate and store refresh token.
 		refreshToken, err := auth.GenerateRefreshToken()
 		if err != nil {
-			logger.Error("generate refresh token", log.String("error", err.Error()))
+			l.Error("generate refresh token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 
 		tokenID, err := randomID()
 		if err != nil {
-			logger.Error("generate token id", log.String("error", err.Error()))
+			l.Error("generate token id", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -107,7 +109,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			logger.Error("store refresh token", log.String("error", err.Error()))
+			l.Error("store refresh token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -116,7 +118,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 		a.SetAccessTokenCookie(w, accessToken)
 		a.SetRefreshTokenCookie(w, refreshToken)
 
-		logger.Info("admin login", log.String("email", req.Email), log.String("uid", uid))
+		l.Info("admin login", log.String("email", req.Email), log.String("uid", uid))
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"admin": map[string]any{
@@ -134,6 +136,8 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 // The frontend polls this endpoint every ~1 minute.
 func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err != nil {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -190,7 +194,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Re
 		// Issue fresh access token with current scopes.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
 		if err != nil {
-			logger.Error("issue access token", log.String("error", err.Error()))
+			l.Error("issue access token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}

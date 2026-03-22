@@ -77,6 +77,8 @@ type updateRequest struct {
 // updateProfile updates the authenticated user's name and/or email.
 func updateProfile(db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -122,7 +124,7 @@ func updateProfile(db *sqlite.DB, logger *log.Logger, wh *webhooks.Dispatcher) f
 				http.WriteError(w, http.StatusConflict, "email already in use")
 				return
 			}
-			logger.Error("update user profile", log.String("error", err.Error()))
+			l.Error("update user profile", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -172,6 +174,8 @@ type passwordRequest struct {
 // changePassword verifies the current password and updates to a new one.
 func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -216,7 +220,7 @@ func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter,
 		// Hash and store new password.
 		newHash, err := auth.HashPassword(req.NewPassword)
 		if err != nil {
-			logger.Error("hash password", log.String("error", err.Error()))
+			l.Error("hash password", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -229,7 +233,7 @@ func changePassword(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter,
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			logger.Error("update password", log.String("error", err.Error()))
+			l.Error("update password", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}

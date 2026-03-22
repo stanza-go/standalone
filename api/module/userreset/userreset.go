@@ -45,6 +45,8 @@ type forgotPasswordRequest struct {
 // email exists — prevents email enumeration.
 func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		var req forgotPasswordRequest
 		if err := http.ReadJSON(r, &req); err != nil {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -78,7 +80,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&userID); err != nil {
 			// User not found — return success anyway to prevent enumeration.
-			logger.Debug("password reset requested for unknown email", log.String("email", req.Email))
+			l.Debug("password reset requested for unknown email", log.String("email", req.Email))
 			http.WriteJSON(w, http.StatusOK, successResponse)
 			return
 		}
@@ -95,14 +97,14 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log
 		// Generate reset token (32 bytes = 64 hex chars).
 		token, err := generateToken()
 		if err != nil {
-			logger.Error("generate reset token", log.String("error", err.Error()))
+			l.Error("generate reset token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 
 		tokenID, err := randomID()
 		if err != nil {
-			logger.Error("generate token id", log.String("error", err.Error()))
+			l.Error("generate token id", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -118,7 +120,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			logger.Error("store reset token", log.String("error", err.Error()))
+			l.Error("store reset token", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -126,17 +128,17 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, logger *log
 		// Send the reset email.
 		if emailClient.Configured() {
 			if err := sendResetEmail(r.Context(), emailClient, req.Email, token); err != nil {
-				logger.Error("send reset email",
+				l.Error("send reset email",
 					log.String("email", req.Email),
 					log.String("error", err.Error()),
 				)
 				// Don't fail the request — the token is stored and can be
 				// retried. Log the error for observability.
 			} else {
-				logger.Info("password reset email sent", log.String("email", req.Email))
+				l.Info("password reset email sent", log.String("email", req.Email))
 			}
 		} else {
-			logger.Warn("email not configured — reset token generated but not sent",
+			l.Warn("email not configured — reset token generated but not sent",
 				log.String("email", req.Email),
 				log.String("token", token),
 			)
@@ -156,6 +158,8 @@ type resetPasswordRequest struct {
 // password. The token is marked as used after a successful reset.
 func resetPasswordHandler(db *sqlite.DB, logger *log.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		l := log.FromContext(r.Context())
+
 		var req resetPasswordRequest
 		if err := http.ReadJSON(r, &req); err != nil {
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -205,7 +209,7 @@ func resetPasswordHandler(db *sqlite.DB, logger *log.Logger) func(http.ResponseW
 		// Hash the new password.
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			logger.Error("hash password", log.String("error", err.Error()))
+			l.Error("hash password", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -221,7 +225,7 @@ func resetPasswordHandler(db *sqlite.DB, logger *log.Logger) func(http.ResponseW
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			logger.Error("update password", log.String("error", err.Error()))
+			l.Error("update password", log.String("error", err.Error()))
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -253,7 +257,7 @@ func resetPasswordHandler(db *sqlite.DB, logger *log.Logger) func(http.ResponseW
 			_, _ = db.Exec(sql, args...)
 		}
 
-		logger.Info("password reset completed", log.String("email", tokenEmail))
+		l.Info("password reset completed", log.String("email", tokenEmail))
 
 		http.WriteJSON(w, http.StatusOK, map[string]string{
 			"status": "password has been reset",
