@@ -65,6 +65,21 @@ type deliveryJSON struct {
 	CompletedAt  string `json:"completed_at"`
 }
 
+func scanWebhook(rows *sqlite.Rows) (webhookJSON, error) {
+	var wh webhookJSON
+	var eventsStr string
+	var active int
+	if err := rows.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
+		return wh, err
+	}
+	wh.IsActive = active == 1
+	_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
+	if wh.Events == nil {
+		wh.Events = []string{}
+	}
+	return wh, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
@@ -80,20 +95,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "url", "is_active", "created_at", "updated_at"},
 			"created_at", "DESC")
 		sql, args := qb.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		items, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (webhookJSON, error) {
-			var wh webhookJSON
-			var eventsStr string
-			var active int
-			if err := rows.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
-				return wh, err
-			}
-			wh.IsActive = active == 1
-			_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
-			if wh.Events == nil {
-				wh.Events = []string{}
-			}
-			return wh, nil
-		})
+		items, err := sqlite.QueryAll(db, sql, args, scanWebhook)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")
 			return
@@ -214,19 +216,10 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("webhooks").
 			Where("id = ?", id).
 			Build()
-		row := db.QueryRow(sql, args...)
-
-		var wh webhookJSON
-		var eventsStr string
-		var active int
-		if err := row.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
+		wh, err := sqlite.QueryOne(db, sql, args, scanWebhook)
+		if err != nil {
 			http.WriteError(w, http.StatusNotFound, "webhook not found")
 			return
-		}
-		wh.IsActive = active == 1
-		_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
-		if wh.Events == nil {
-			wh.Events = []string{}
 		}
 
 		// Include recent delivery stats.
@@ -307,19 +300,10 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("webhooks").
 			Where("id = ?", id).
 			Build()
-		row := db.QueryRow(sql, args...)
-
-		var wh webhookJSON
-		var eventsStr string
-		var active int
-		if err := row.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
+		wh, err := sqlite.QueryOne(db, sql, args, scanWebhook)
+		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to read updated webhook")
 			return
-		}
-		wh.IsActive = active == 1
-		_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
-		if wh.Events == nil {
-			wh.Events = []string{}
 		}
 
 		http.WriteJSON(w, http.StatusOK, wh)

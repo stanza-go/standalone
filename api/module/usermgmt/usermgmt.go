@@ -52,6 +52,16 @@ type userJSON struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+func scanUser(rows *sqlite.Rows) (userJSON, error) {
+	var u userJSON
+	var isActive int
+	if err := rows.Scan(&u.ID, &u.Email, &u.Name, &isActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return u, err
+	}
+	u.IsActive = isActive == 1
+	return u, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
@@ -68,15 +78,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "email", "name", "is_active", "created_at", "updated_at"},
 			"id", "DESC")
 		sql, args := selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		users, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (userJSON, error) {
-			var u userJSON
-			var isActive int
-			if err := rows.Scan(&u.ID, &u.Email, &u.Name, &isActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
-				return u, err
-			}
-			u.IsActive = isActive == 1
-			return u, nil
-		})
+		users, err := sqlite.QueryAll(db, sql, args, scanUser)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list users")
 			return
@@ -203,19 +205,16 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		var u userJSON
-		var isActive int
 		sql, args := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
 			From("users").
 			Where("id = ?", id).
 			Where("deleted_at IS NULL").
 			Build()
-		row := db.QueryRow(sql, args...)
-		if err := row.Scan(&u.ID, &u.Email, &u.Name, &isActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		u, err := sqlite.QueryOne(db, sql, args, scanUser)
+		if err != nil {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
 		}
-		u.IsActive = isActive == 1
 
 		// Count active sessions for this user.
 		var sessionCount int

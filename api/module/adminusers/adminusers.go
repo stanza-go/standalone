@@ -49,6 +49,16 @@ type adminJSON struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+func scanAdmin(rows *sqlite.Rows) (adminJSON, error) {
+	var a adminJSON
+	var isActive int
+	if err := rows.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		return a, err
+	}
+	a.IsActive = isActive == 1
+	return a, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
@@ -69,15 +79,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Limit(pg.Limit).
 			Offset(pg.Offset).
 			Build()
-		admins, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (adminJSON, error) {
-			var a adminJSON
-			var isActive int
-			if err := rows.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
-				return a, err
-			}
-			a.IsActive = isActive == 1
-			return a, nil
-		})
+		admins, err := sqlite.QueryAll(db, sql, args, scanAdmin)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list admins")
 			return
@@ -381,19 +383,16 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		var a adminJSON
-		var isActive int
 		sql, args := sqlite.Select("id", "email", "name", "role", "is_active", "created_at", "updated_at").
 			From("admins").
 			Where("id = ?", id).
 			Where("deleted_at IS NULL").
 			Build()
-		row := db.QueryRow(sql, args...)
-		if err := row.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		a, err := sqlite.QueryOne(db, sql, args, scanAdmin)
+		if err != nil {
 			http.WriteError(w, http.StatusNotFound, "admin not found")
 			return
 		}
-		a.IsActive = isActive == 1
 
 		var sessionCount int
 		sql, args = sqlite.Count("refresh_tokens").

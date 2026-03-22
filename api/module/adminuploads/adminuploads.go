@@ -66,6 +66,18 @@ type uploadJSON struct {
 	DeletedAt    string `json:"deleted_at"`
 }
 
+func scanUpload(rows *sqlite.Rows) (uploadJSON, error) {
+	var u uploadJSON
+	var hasThumbnail int
+	if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
+		&u.SizeBytes, &hasThumbnail, &u.UploadedBy,
+		&u.EntityType, &u.EntityID, &u.CreatedAt, &u.DeletedAt); err != nil {
+		return u, err
+	}
+	u.HasThumbnail = hasThumbnail == 1
+	return u, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
@@ -93,17 +105,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
 			"id", "DESC")
 		sql, args := q.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		uploads, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (uploadJSON, error) {
-			var u uploadJSON
-			var hasThumbnail int
-			if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-				&u.SizeBytes, &hasThumbnail, &u.UploadedBy,
-				&u.EntityType, &u.EntityID, &u.CreatedAt, &u.DeletedAt); err != nil {
-				return u, err
-			}
-			u.HasThumbnail = hasThumbnail == 1
-			return u, nil
-		})
+		uploads, err := sqlite.QueryAll(db, sql, args, scanUpload)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")
 			return
@@ -479,17 +481,7 @@ func findUpload(db *sqlite.DB, id int64) (uploadJSON, error) {
 		From("uploads").
 		Where("id = ?", id).
 		Build()
-
-	var u uploadJSON
-	var hasThumbnail int
-	err := db.QueryRow(sql, args...).Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-		&u.SizeBytes, &hasThumbnail, &u.UploadedBy,
-		&u.EntityType, &u.EntityID, &u.CreatedAt, &u.DeletedAt)
-	if err != nil {
-		return uploadJSON{}, err
-	}
-	u.HasThumbnail = hasThumbnail == 1
-	return u, nil
+	return sqlite.QueryOne(db, sql, args, scanUpload)
 }
 
 // generateThumbnail creates a JPEG thumbnail for an image file.

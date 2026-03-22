@@ -60,6 +60,17 @@ type uploadJSON struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+func scanUserUpload(rows *sqlite.Rows) (uploadJSON, error) {
+	var u uploadJSON
+	var hasThumbnail int
+	if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
+		&u.SizeBytes, &hasThumbnail, &u.CreatedAt); err != nil {
+		return u, err
+	}
+	u.HasThumbnail = hasThumbnail == 1
+	return u, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
@@ -81,16 +92,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		total, _ := db.Count(q)
 
 		sql, args := q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
-		uploads, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (uploadJSON, error) {
-			var u uploadJSON
-			var hasThumbnail int
-			if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-				&u.SizeBytes, &hasThumbnail, &u.CreatedAt); err != nil {
-				return u, err
-			}
-			u.HasThumbnail = hasThumbnail == 1
-			return u, nil
-		})
+		uploads, err := sqlite.QueryAll(db, sql, args, scanUserUpload)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")
 			return
@@ -377,16 +379,7 @@ func findUserUpload(db *sqlite.DB, id int64, userID string) (uploadJSON, error) 
 		Where("entity_id = ?", userID).
 		Where("deleted_at IS NULL").
 		Build()
-
-	var u uploadJSON
-	var hasThumbnail int
-	err := db.QueryRow(sql, args...).Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-		&u.SizeBytes, &hasThumbnail, &u.CreatedAt)
-	if err != nil {
-		return uploadJSON{}, err
-	}
-	u.HasThumbnail = hasThumbnail == 1
-	return u, nil
+	return sqlite.QueryOne(db, sql, args, scanUserUpload)
 }
 
 // generateThumbnail creates a JPEG thumbnail for an image file.

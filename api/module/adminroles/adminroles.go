@@ -66,21 +66,23 @@ type roleJSON struct {
 	UpdatedAt   string   `json:"updated_at"`
 }
 
+func scanRole(rows *sqlite.Rows) (roleJSON, error) {
+	var role roleJSON
+	var isSystem int
+	if err := rows.Scan(&role.ID, &role.Name, &role.Description, &isSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
+		return role, err
+	}
+	role.IsSystem = isSystem == 1
+	return role, nil
+}
+
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sql, args := sqlite.Select("id", "name", "description", "is_system", "created_at", "updated_at").
 			From("roles").
 			OrderBy("id", "ASC").
 			Build()
-		roles, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (roleJSON, error) {
-			var role roleJSON
-			var isSystem int
-			if err := rows.Scan(&role.ID, &role.Name, &role.Description, &isSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
-				return role, err
-			}
-			role.IsSystem = isSystem == 1
-			return role, nil
-		})
+		roles, err := sqlite.QueryAll(db, sql, args, scanRole)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list roles")
 			return
