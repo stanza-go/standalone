@@ -95,18 +95,9 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		// Validate expiration if provided.
-		var expiresOK bool
-		if req.ExpiresAt == "" {
-			expiresOK = true
-		} else {
-			t, err := time.Parse(time.RFC3339, req.ExpiresAt)
-			expiresOK = err == nil && !t.Before(time.Now().UTC())
-		}
-
 		v := validate.Fields(
 			validate.Required("name", req.Name),
-			validate.Check("expires_at", expiresOK, "must be a valid ISO 8601 date in the future"),
+			validate.FutureDate("expires_at", req.ExpiresAt),
 		)
 		if v.HasErrors() {
 			v.WriteError(w)

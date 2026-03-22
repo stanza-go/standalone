@@ -14,6 +14,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/validate"
 )
 
 // Register mounts the admin auth routes on the given router group.
@@ -47,8 +48,12 @@ func loginHandler(a *auth.Auth, db *sqlite.DB, logger *log.Logger) func(http.Res
 			http.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if req.Email == "" || req.Password == "" {
-			http.WriteError(w, http.StatusBadRequest, "email and password are required")
+		v := validate.Fields(
+			validate.Required("email", req.Email),
+			validate.Required("password", req.Password),
+		)
+		if v.HasErrors() {
+			v.WriteError(w)
 			return
 		}
 
