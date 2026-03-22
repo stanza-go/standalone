@@ -43,6 +43,11 @@ func NewDispatcher(db *sqlite.DB, q *queue.Queue, logger *log.Logger) *Dispatche
 	return d
 }
 
+// Stats returns the underlying webhook client delivery counters.
+func (d *Dispatcher) Stats() webhook.ClientStats {
+	return d.client.Stats()
+}
+
 // deliveryJob is the payload enqueued for each webhook delivery.
 type deliveryJob struct {
 	DeliveryID int64  `json:"delivery_id"`
