@@ -69,33 +69,21 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		contentType := http.QueryParam(r, "content_type")
 
-		// Count.
-		countQ := sqlite.Count("uploads").
-			Where("entity_type = ?", entityType).
-			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL")
-		if contentType != "" {
-			countQ.Where("content_type LIKE ?", contentType+"%")
-		}
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		// List.
 		q := sqlite.Select("id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "created_at").
 			From("uploads").
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL").
-			OrderBy("id", "DESC").
-			Limit(pg.Limit).
-			Offset(pg.Offset)
+			Where("deleted_at IS NULL")
 		if contentType != "" {
 			q.Where("content_type LIKE ?", contentType+"%")
 		}
 
-		sql, args = q.Build()
+		var total int
+		sql, args := sqlite.CountFrom(q).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")

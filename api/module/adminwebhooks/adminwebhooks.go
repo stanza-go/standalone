@@ -74,22 +74,14 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		qb := sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks")
-
 		if search != "" {
 			escaped := escapeLike(search)
-			qb = qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
+			qb.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
 		}
 
-		countQB := sqlite.Select("COUNT(*)").From("webhooks")
-		if search != "" {
-			escaped := escapeLike(search)
-			countQB = countQB.Where("(url LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
-		}
-
-		sql, args := countQB.Build()
-		row := db.QueryRow(sql, args...)
 		var total int
-		if err := row.Scan(&total); err != nil {
+		sql, args := sqlite.CountFrom(qb).Build()
+		if err := db.QueryRow(sql, args...).Scan(&total); err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to count webhooks")
 			return
 		}
@@ -97,7 +89,6 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "url", "is_active", "created_at", "updated_at"},
 			"created_at", "DESC")
-
 		sql, args = qb.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -442,20 +433,13 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		qb := sqlite.Select("id", "webhook_id", "delivery_id", "event", "payload", "status", "status_code", "response_body", "attempts", "created_at", "COALESCE(completed_at, '')").
 			From("webhook_deliveries").
 			Where("webhook_id = ?", id)
-
-		countQB := sqlite.Select("COUNT(*)").
-			From("webhook_deliveries").
-			Where("webhook_id = ?", id)
-
 		if status != "" {
-			qb = qb.Where("status = ?", status)
-			countQB = countQB.Where("status = ?", status)
+			qb.Where("status = ?", status)
 		}
 
-		sql, args := countQB.Build()
-		row = db.QueryRow(sql, args...)
 		var total int
-		if err := row.Scan(&total); err != nil {
+		sql, args := sqlite.CountFrom(qb).Build()
+		if err := db.QueryRow(sql, args...).Scan(&total); err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to count deliveries")
 			return
 		}

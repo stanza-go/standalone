@@ -74,33 +74,10 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		entityType := http.QueryParam(r, "entity_type")
 		includeDeleted := http.QueryParam(r, "include_deleted") == "true"
 
-		// Count.
-		countQ := sqlite.Count("uploads")
-		if !includeDeleted {
-			countQ.Where("deleted_at IS NULL")
-		}
-		if contentType != "" {
-			countQ.Where("content_type LIKE ?", contentType+"%")
-		}
-		if entityType != "" {
-			countQ.Where("entity_type = ?", entityType)
-		}
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		sortCol, sortDir := http.QueryParamSort(r,
-			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
-			"id", "DESC")
-
-		// List.
 		q := sqlite.Select("id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "uploaded_by",
 			"entity_type", "entity_id", "created_at", "COALESCE(deleted_at, '')").
-			From("uploads").
-			OrderBy(sortCol, sortDir).
-			Limit(pg.Limit).
-			Offset(pg.Offset)
+			From("uploads")
 		if !includeDeleted {
 			q.Where("deleted_at IS NULL")
 		}
@@ -111,7 +88,14 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			q.Where("entity_type = ?", entityType)
 		}
 
-		sql, args = q.Build()
+		var total int
+		sql, args := sqlite.CountFrom(q).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sortCol, sortDir := http.QueryParamSort(r,
+			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
+			"id", "DESC")
+		sql, args = q.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")

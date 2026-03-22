@@ -37,29 +37,19 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
 
-		// Count total.
-		countQ := sqlite.Count("notifications").
-			Where("entity_type = ?", notifications.EntityUser).
-			Where("entity_id = ?", userID)
-		if unreadOnly {
-			countQ.Where("read_at IS NULL")
-		}
-		sql, args := countQ.Build()
-		var total int
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		// Fetch page.
 		q := sqlite.Select("id", "type", "title", "message", "data", "COALESCE(read_at, '')", "created_at").
 			From("notifications").
 			Where("entity_type = ?", notifications.EntityUser).
-			Where("entity_id = ?", userID).
-			OrderBy("id", "DESC").
-			Limit(pg.Limit).
-			Offset(pg.Offset)
+			Where("entity_id = ?", userID)
 		if unreadOnly {
 			q.Where("read_at IS NULL")
 		}
-		sql, args = q.Build()
+
+		var total int
+		sql, args := sqlite.CountFrom(q).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")

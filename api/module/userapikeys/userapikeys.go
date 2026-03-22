@@ -54,24 +54,19 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
-		countQ := sqlite.Count("api_keys").
-			Where("entity_type = ?", entityType).
-			Where("entity_id = ?", userID)
 		selectQ := sqlite.Select("id", "name", "key_prefix",
 			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
 			"created_at", "COALESCE(revoked_at, '')").
 			From("api_keys").
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID)
-
 		if search != "" {
 			like := "%" + escapeLike(search) + "%"
-			countQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 		}
 
 		var total int
-		sql, args := countQ.Build()
+		sql, args := sqlite.CountFrom(selectQ).Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sql, args = selectQ.

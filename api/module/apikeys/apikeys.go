@@ -57,7 +57,6 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
-		countQ := sqlite.Count("api_keys")
 		selectQ := sqlite.Select("id", "name", "key_prefix", "scopes",
 			"entity_type", "COALESCE(entity_id, '')", "created_by",
 			"request_count", "COALESCE(last_used_at, '')", "COALESCE(expires_at, '')",
@@ -65,18 +64,16 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("api_keys")
 		if search != "" {
 			like := "%" + escapeLike(search) + "%"
-			countQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 			selectQ.Where("(name LIKE ? ESCAPE '\\' OR key_prefix LIKE ? ESCAPE '\\')", like, like)
 		}
+
+		var total int
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "name", "created_at", "last_used_at", "request_count"},
 			"id", "DESC")
-
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
 		sql, args = selectQ.
 			OrderBy(sortCol, sortDir).
 			Limit(pg.Limit).

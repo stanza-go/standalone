@@ -44,41 +44,26 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		pg := http.ParsePagination(r, 20, 100)
 
-		// Build count query.
-		cb := sqlite.Count("audit_log").
-			Where("entity_type = 'user'").
-			Where("entity_id = ?", claims.UID)
-
-		q := r.URL.Query()
-		if action := q.Get("action"); action != "" {
-			cb = cb.Where("action = ?", action)
-		}
-		if from := q.Get("from"); from != "" {
-			cb = cb.Where("created_at >= ?", from)
-		}
-		if to := q.Get("to"); to != "" {
-			cb = cb.Where("created_at <= ?", to)
-		}
-
-		var total int
-		countSQL, countArgs := cb.Build()
-		_ = db.QueryRow(countSQL, countArgs...).Scan(&total)
-
 		// Build select query — no LEFT JOIN on admins, users don't see admin identity.
 		sb := sqlite.Select("id", "action", "details", "ip_address", "created_at").
 			From("audit_log").
 			Where("entity_type = 'user'").
 			Where("entity_id = ?", claims.UID)
 
+		q := r.URL.Query()
 		if action := q.Get("action"); action != "" {
-			sb = sb.Where("action = ?", action)
+			sb.Where("action = ?", action)
 		}
 		if from := q.Get("from"); from != "" {
-			sb = sb.Where("created_at >= ?", from)
+			sb.Where("created_at >= ?", from)
 		}
 		if to := q.Get("to"); to != "" {
-			sb = sb.Where("created_at <= ?", to)
+			sb.Where("created_at <= ?", to)
 		}
+
+		var total int
+		countSQL, countArgs := sqlite.CountFrom(sb).Build()
+		_ = db.QueryRow(countSQL, countArgs...).Scan(&total)
 
 		selectSQL, selectArgs := sb.OrderBy("created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).

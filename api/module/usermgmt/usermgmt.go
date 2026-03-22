@@ -60,24 +60,21 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		search := r.URL.Query().Get("search")
 
-		countQ := sqlite.Count("users").Where("deleted_at IS NULL")
 		selectQ := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
 			From("users").
 			Where("deleted_at IS NULL")
 		if search != "" {
 			like := "%" + escapeLike(search) + "%"
-			countQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 			selectQ.Where("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')", like, like)
 		}
+
+		var total int
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "email", "name", "is_active", "created_at", "updated_at"},
 			"id", "DESC")
-
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
 		sql, args = selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
@@ -487,20 +484,19 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 20, 100)
 		idStr := strconv.FormatInt(id, 10)
 
-		countQ := sqlite.Count("audit_log").
-			Where("entity_type = 'user'").
-			Where("entity_id = ?", idStr)
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		sql, args = sqlite.Select(
+		selectQ := sqlite.Select(
 			"al.id", "al.admin_id", "COALESCE(a.email, '')", "COALESCE(a.name, '')",
 			"al.action", "al.details", "al.ip_address", "al.created_at",
 		).From("audit_log al").
 			LeftJoin("admins a", "a.id = CAST(al.admin_id AS INTEGER)").
 			Where("al.entity_type = 'user'").
-			Where("al.entity_id = ?", idStr).
+			Where("al.entity_id = ?", idStr)
+
+		var total int
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = selectQ.
 			OrderBy("al.created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
@@ -596,21 +592,19 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 20, 100)
 		idStr := strconv.FormatInt(id, 10)
 
-		countQ := sqlite.Count("uploads").
-			Where("entity_type = 'user'").
-			Where("entity_id = ?", idStr).
-			Where("deleted_at IS NULL")
-		var total int
-		sql, args := countQ.Build()
-		_ = db.QueryRow(sql, args...).Scan(&total)
-
-		sql, args = sqlite.Select(
+		selectQ := sqlite.Select(
 			"id", "uuid", "original_name", "content_type",
 			"size_bytes", "has_thumbnail", "created_at",
 		).From("uploads").
 			Where("entity_type = 'user'").
 			Where("entity_id = ?", idStr).
-			Where("deleted_at IS NULL").
+			Where("deleted_at IS NULL")
+
+		var total int
+		sql, args := sqlite.CountFrom(selectQ).Build()
+		_ = db.QueryRow(sql, args...).Scan(&total)
+
+		sql, args = selectQ.
 			OrderBy("created_at", "DESC").
 			Limit(pg.Limit).Offset(pg.Offset).
 			Build()

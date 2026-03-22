@@ -48,33 +48,22 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		pg := http.ParsePagination(r, 50, 100)
 		unreadOnly := r.URL.Query().Get("unread") == "true"
 
-		// Count total.
-		countQ := sqlite.Count("notifications").
+		q := sqlite.Select("id", "type", "title", "message", "data", "COALESCE(read_at, '')", "created_at").
+			From("notifications").
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID)
 		if unreadOnly {
-			countQ.Where("read_at IS NULL")
+			q.Where("read_at IS NULL")
 		}
-		sql, args := countQ.Build()
+
 		var total int
+		sql, args := sqlite.CountFrom(q).Build()
 		_ = db.QueryRow(sql, args...).Scan(&total)
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"id", "type", "created_at"},
 			"id", "DESC")
-
-		// Fetch page.
-		q := sqlite.Select("id", "type", "title", "message", "data", "COALESCE(read_at, '')", "created_at").
-			From("notifications").
-			Where("entity_type = ?", notifications.EntityAdmin).
-			Where("entity_id = ?", adminID).
-			OrderBy(sortCol, sortDir).
-			Limit(pg.Limit).
-			Offset(pg.Offset)
-		if unreadOnly {
-			q.Where("read_at IS NULL")
-		}
-		sql, args = q.Build()
+		sql, args = q.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
