@@ -138,7 +138,9 @@ func provideLogger(dir *datadir.Dir, cfg *config.Config) (*log.Logger, error) {
 }
 
 func provideDB(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) (*sqlite.DB, error) {
-	db := sqlite.New(dir.DB)
+	db := sqlite.New(dir.DB,
+		sqlite.WithLogger(logger.With(log.String("pkg", "sqlite"))),
+	)
 
 	lc.Append(lifecycle.Hook{
 		OnStart: func(ctx context.Context) error {
