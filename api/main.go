@@ -256,6 +256,7 @@ func provideQueue(lc *lifecycle.Lifecycle, db *sqlite.DB, logger *log.Logger) *q
 func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *datadir.Dir, logger *log.Logger) (*cron.Scheduler, error) {
 	s := cron.NewScheduler(
 		cron.WithLogger(logger),
+		cron.WithDefaultTimeout(10*time.Minute),
 		cron.WithOnComplete(func(r cron.CompletedRun) {
 			errMsg := ""
 			status := "success"
@@ -404,7 +405,8 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	}
 
 	// Automated daily backup at 2:00 AM — uses VACUUM INTO for a consistent,
-	// compacted copy that includes all WAL data.
+	// compacted copy that includes all WAL data. 30-minute timeout because
+	// VACUUM INTO can be slow on large databases.
 	if err := s.Add("daily-backup", "0 2 * * *", func(ctx context.Context) error {
 		ts := time.Now().UTC().Format("20060102T150405Z")
 		backupName := fmt.Sprintf("database.sqlite.%s.bak", ts)
@@ -424,7 +426,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 			log.Int64("size_bytes", info.Size()),
 		)
 		return nil
-	}); err != nil {
+	}, cron.Timeout(30*time.Minute)); err != nil {
 		return nil, fmt.Errorf("cron add daily-backup: %w", err)
 	}
 

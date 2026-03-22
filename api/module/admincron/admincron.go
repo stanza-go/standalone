@@ -34,13 +34,14 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 		entries := s.Entries()
 
 		type entryJSON struct {
-			Name     string `json:"name"`
-			Schedule string `json:"schedule"`
-			Enabled  bool   `json:"enabled"`
-			Running  bool   `json:"running"`
-			LastRun  string `json:"last_run"`
-			NextRun  string `json:"next_run"`
-			LastErr  string `json:"last_err"`
+			Name           string `json:"name"`
+			Schedule       string `json:"schedule"`
+			Enabled        bool   `json:"enabled"`
+			Running        bool   `json:"running"`
+			LastRun        string `json:"last_run"`
+			NextRun        string `json:"next_run"`
+			LastErr        string `json:"last_err"`
+			TimeoutSeconds int64  `json:"timeout_seconds"`
 		}
 
 		result := make([]entryJSON, len(entries))
@@ -57,13 +58,14 @@ func listHandler(s *cron.Scheduler) func(http.ResponseWriter, *http.Request) {
 				nextRun = e.NextRun.Format(time.RFC3339)
 			}
 			result[i] = entryJSON{
-				Name:     e.Name,
-				Schedule: e.Schedule,
-				Enabled:  e.Enabled,
-				Running:  e.Running,
-				LastRun:  lastRun,
-				NextRun:  nextRun,
-				LastErr:  lastErr,
+				Name:           e.Name,
+				Schedule:       e.Schedule,
+				Enabled:        e.Enabled,
+				Running:        e.Running,
+				LastRun:        lastRun,
+				NextRun:        nextRun,
+				LastErr:        lastErr,
+				TimeoutSeconds: int64(e.Timeout.Seconds()),
 			}
 		}
 
