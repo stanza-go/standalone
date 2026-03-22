@@ -452,6 +452,7 @@ func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
 	router.Use(http.Compress(http.CompressConfig{}))
 	router.Use(http.ETag(http.ETagConfig{}))
 	router.Use(http.SecureHeaders(http.SecureHeadersConfig{}))
+	router.Use(http.MaxBody(2 << 20)) // 2 MB — multipart uploads exempt
 
 	// CORS: allow cross-origin requests from admin and UI dev servers.
 	// Configure via STANZA_CORS_ORIGINS (comma-separated) or cors.origins
