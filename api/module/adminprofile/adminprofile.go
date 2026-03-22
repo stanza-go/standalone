@@ -55,7 +55,7 @@ func getProfile(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		// Get scopes from the admin's role.
-		var scopes []string
+		scopes := make([]string, 0)
 		scopeSQL, scopeArgs := sqlite.Select("rs.scope").
 			From("role_scopes rs").
 			Join("roles r", "r.id = rs.role_id").

@@ -91,7 +91,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 			Name      string `json:"name"`
 			AppliedAt string `json:"applied_at"`
 		}
-		var migrations []migrationInfo
+		migrations := make([]migrationInfo, 0)
 		mrows, err := db.Query("SELECT version, name, applied_at FROM _migrations ORDER BY version ASC")
 		if err == nil {
 			for mrows.Next() {
@@ -110,7 +110,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 			SizeBytes int64  `json:"size_bytes"`
 			CreatedAt string `json:"created_at"`
 		}
-		var backups []backupInfo
+		backups := make([]backupInfo, 0)
 		entries, err := os.ReadDir(backupsDir)
 		if err == nil {
 			for _, e := range entries {

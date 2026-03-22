@@ -55,3 +55,70 @@ jobs:
       - name: Build
         working-directory: admin
         run: bun run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: standalone
+
+      - uses: actions/checkout@v4
+        with:
+          repository: stanza-go/framework
+          path: framework
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.1"
+          cache-dependency-path: standalone/api/go.sum
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Build UI
+        working-directory: standalone/ui
+        run: bun install --frozen-lockfile && bun run build
+
+      - name: Build admin
+        working-directory: standalone/admin
+        run: bun install --frozen-lockfile && bun run build
+
+      - name: Build binary
+        working-directory: standalone
+        run: |
+          mkdir -p api/ui api/admin
+          cp -r ui/dist api/ui/dist
+          cp -r admin/dist api/admin/dist
+          cd api && go build -tags prod -o bin/standalone .
+
+      - name: Start server
+        working-directory: standalone
+        run: |
+          DATA_DIR=/tmp/stanza-e2e api/bin/standalone &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:23710/api/health > /dev/null 2>&1; then
+              echo "Server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start within 30s"
+          exit 1
+
+      - name: Install Playwright
+        working-directory: standalone/e2e
+        run: bun install --frozen-lockfile && npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        working-directory: standalone/e2e
+        run: BASE_URL=http://localhost:23710 bun run test
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: standalone/e2e/test-results/
+          retention-days: 7

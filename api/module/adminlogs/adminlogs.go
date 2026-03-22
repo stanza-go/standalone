@@ -266,7 +266,7 @@ func filesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 			Size int64  `json:"size"`
 		}
 
-		var files []fileInfo
+		files := make([]fileInfo, 0)
 		for _, e := range dirEntries {
 			if e.IsDir() {
 				continue
