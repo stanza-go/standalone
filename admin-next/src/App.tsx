@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { Center, Loader } from "@mantine/core";
 import { AuthProvider } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ProtectedRoute } from "@/components/protected-route";
 import Shell from "@/components/layout/shell";
 import LoginPage from "@/pages/login";
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <BrowserRouter basename={basename}>
       <AuthProvider>
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -65,6 +67,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

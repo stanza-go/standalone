@@ -4,6 +4,7 @@ import { MantineProvider } from "@mantine/core";
 import { DatesProvider } from "@mantine/dates";
 import { Notifications } from "@mantine/notifications";
 import { theme } from "@/lib/theme";
+import { ConnectionStatus } from "@/components/connection-status";
 import App from "@/App";
 
 import "@mantine/core/styles.css";
@@ -17,6 +18,7 @@ createRoot(document.getElementById("root")!).render(
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <DatesProvider settings={{ locale: "en" }}>
         <Notifications position="top-right" />
+        <ConnectionStatus />
         <App />
       </DatesProvider>
     </MantineProvider>

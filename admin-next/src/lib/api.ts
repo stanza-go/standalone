@@ -1,5 +1,9 @@
 const BASE = "/api";
 
+const RETRY_STATUSES = new Set([429, 502, 503, 504]);
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 1000;
+
 export class ApiError extends Error {
   status: number;
   fields: Record<string, string>;
@@ -11,6 +15,14 @@ export class ApiError extends Error {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isRetryable(method: string, status: number): boolean {
+  return method === "GET" && RETRY_STATUSES.has(status);
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
     method,
@@ -20,16 +32,40 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (body !== undefined) {
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(`${BASE}${path}`, opts);
-  const data = await res.json();
-  if (!res.ok) {
-    if (res.status === 401 && !path.startsWith("/admin/auth")) {
-      const base = import.meta.env.BASE_URL.replace(/\/+$/, "") || "";
-      window.location.href = base + "/login";
+
+  let lastError: unknown;
+  const attempts = method === "GET" ? MAX_RETRIES + 1 : 1;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await fetch(`${BASE}${path}`, opts);
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401 && !path.startsWith("/admin/auth")) {
+          const base = import.meta.env.BASE_URL.replace(/\/+$/, "") || "";
+          window.location.href = base + "/login";
+        }
+        if (isRetryable(method, res.status) && attempt < MAX_RETRIES) {
+          await sleep(RETRY_BASE_MS * 2 ** attempt);
+          continue;
+        }
+        throw new ApiError(res.status, data.error ?? "Unknown error", data.fields);
+      }
+      return data as T;
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      // Network error (fetch throws TypeError when offline)
+      lastError = err;
+      if (method === "GET" && attempt < MAX_RETRIES) {
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
+        continue;
+      }
     }
-    throw new ApiError(res.status, data.error ?? "Unknown error", data.fields);
   }
-  return data as T;
+
+  throw lastError;
 }
 
 export function post<T>(path: string, body?: unknown): Promise<T> {
