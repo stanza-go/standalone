@@ -40,7 +40,7 @@ type dbStats struct {
 //
 //	GET /api/admin/dashboard        — system, database, queue, cron, and app stats
 //	GET /api/admin/dashboard/charts — time-series data for dashboard charts
-func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) {
+func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics) {
 	statsCache := cache.New[*dbStats](
 		cache.WithTTL[*dbStats](30 * time.Second),
 		cache.WithMaxSize[*dbStats](1),
@@ -49,7 +49,7 @@ func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Schedule
 		cache.WithTTL[*chartsData](5 * time.Minute),
 		cache.WithMaxSize[*chartsData](3),
 	)
-	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, statsCache, chartsCache))
+	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, m, statsCache, chartsCache))
 	admin.HandleFunc("GET /dashboard/charts", chartsHandler(db, chartsCache))
 }
 
@@ -84,7 +84,7 @@ func queryDBStats(db *sqlite.DB) (*dbStats, error) {
 	return st, nil
 }
 
-func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *cache.Cache[*dbStats], chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
+func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, statsCache *cache.Cache[*dbStats], chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
@@ -171,6 +171,7 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 				"misses":    sc.Misses + cc.Misses,
 				"evictions": sc.Evictions + cc.Evictions,
 			},
+			"http": m.Stats(),
 			"stats": map[string]any{
 				"total_admins":    st.TotalAdmins,
 				"total_users":     st.TotalUsers,

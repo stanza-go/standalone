@@ -85,6 +85,7 @@ func main() {
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideWebhookDispatcher),
 		lifecycle.Provide(provideCron),
+		lifecycle.Provide(provideMetrics),
 		lifecycle.Provide(provideRouter),
 		lifecycle.Provide(provideServer),
 		lifecycle.Invoke(registerModules),
@@ -460,10 +461,15 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	return s, nil
 }
 
-func provideRouter(logger *log.Logger, cfg *config.Config) *http.Router {
+func provideMetrics() *http.Metrics {
+	return http.NewMetrics()
+}
+
+func provideRouter(logger *log.Logger, cfg *config.Config, m *http.Metrics) *http.Router {
 	router := http.NewRouter()
 
 	router.Use(http.RequestID(http.RequestIDConfig{}))
+	router.Use(m.Middleware())
 	router.Use(http.RequestLogger(logger))
 	router.Use(http.Compress(http.CompressConfig{}))
 	router.Use(http.ETag(http.ETagConfig{}))
@@ -532,7 +538,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -561,7 +567,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	admin.Use(auth.RequireScope("admin"))
 
 	// Dashboard and profile: base admin scope only.
-	dashboard.Register(admin, db, q, s)
+	dashboard.Register(admin, db, q, s, m)
 	adminprofile.Register(admin, db, logger)
 
 	// Scoped admin sub-groups — each module gets its specific scope.
