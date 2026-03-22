@@ -134,6 +134,7 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 			return backups[i].CreatedAt > backups[j].CreatedAt
 		})
 
+		stats := db.Stats()
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"files": map[string]any{
 				"db_size_bytes":  dbSizeBytes,
@@ -146,6 +147,15 @@ func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *ht
 				"page_size":      pageSize,
 				"freelist_count": freelistCount,
 				"journal_mode":   journalMode,
+			},
+			"pool": map[string]any{
+				"read_pool_size":      stats.ReadPoolSize,
+				"read_pool_available": stats.ReadPoolAvailable,
+				"read_pool_in_use":    stats.ReadPoolInUse,
+				"total_reads":         stats.TotalReads,
+				"total_writes":        stats.TotalWrites,
+				"pool_waits":          stats.PoolWaits,
+				"pool_wait_time_ms":   stats.PoolWaitTime.Milliseconds(),
 			},
 			"tables":     tables,
 			"migrations": migrations,

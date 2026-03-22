@@ -49,6 +49,7 @@ func Register(api *http.Group, db *sqlite.DB, bi BuildInfo) {
 			status = http.StatusServiceUnavailable
 		}
 
+		stats := db.Stats()
 		resp := map[string]any{
 			"status":     statusText(dbOK),
 			"version":    ver,
@@ -58,8 +59,13 @@ func Register(api *http.Group, db *sqlite.DB, bi BuildInfo) {
 			"goroutines": runtime.NumGoroutine(),
 			"memory_mb":  mem.Alloc / 1024 / 1024,
 			"database": map[string]any{
-				"ok":    dbOK,
-				"error": dbErr,
+				"ok":            dbOK,
+				"error":         dbErr,
+				"total_reads":   stats.TotalReads,
+				"total_writes":  stats.TotalWrites,
+				"pool_size":     stats.ReadPoolSize,
+				"pool_in_use":   stats.ReadPoolInUse,
+				"pool_waits":    stats.PoolWaits,
 			},
 		}
 		if bi.BuildTime != "" {
