@@ -106,26 +106,15 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "action", "entity_type", "created_at", "admin_id"},
 			"id", "DESC")
 		sql, args := selectQ.OrderBy("audit_log."+sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
+		entries, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (entryJSON, error) {
+			var e entryJSON
+			err := rows.Scan(&e.ID, &e.AdminID, &e.AdminEmail, &e.AdminName,
+				&e.Action, &e.EntityType, &e.EntityID,
+				&e.Details, &e.IPAddress, &e.CreatedAt)
+			return e, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list audit entries")
-			return
-		}
-		defer rows.Close()
-
-		entries := make([]entryJSON, 0)
-		for rows.Next() {
-			var e entryJSON
-			if err := rows.Scan(&e.ID, &e.AdminID, &e.AdminEmail, &e.AdminName,
-				&e.Action, &e.EntityType, &e.EntityID,
-				&e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan audit entry")
-				return
-			}
-			entries = append(entries, e)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate audit entries")
 			return
 		}
 
@@ -176,26 +165,15 @@ func recentHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			OrderBy("audit_log.id", "DESC").
 			Limit(10).
 			Build()
-		rows, err := db.Query(sql, args...)
+		entries, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (entryJSON, error) {
+			var e entryJSON
+			err := rows.Scan(&e.ID, &e.AdminID, &e.AdminEmail, &e.AdminName,
+				&e.Action, &e.EntityType, &e.EntityID,
+				&e.Details, &e.IPAddress, &e.CreatedAt)
+			return e, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to list recent activity")
-			return
-		}
-		defer rows.Close()
-
-		entries := make([]entryJSON, 0)
-		for rows.Next() {
-			var e entryJSON
-			if err := rows.Scan(&e.ID, &e.AdminID, &e.AdminEmail, &e.AdminName,
-				&e.Action, &e.EntityType, &e.EntityID,
-				&e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan audit entry")
-				return
-			}
-			entries = append(entries, e)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate recent entries")
 			return
 		}
 

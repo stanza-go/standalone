@@ -93,28 +93,19 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "original_name", "content_type", "size_bytes", "created_at"},
 			"id", "DESC")
 		sql, args := q.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")
-			return
-		}
-		defer rows.Close()
-
-		uploads := make([]uploadJSON, 0)
-		for rows.Next() {
+		uploads, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (uploadJSON, error) {
 			var u uploadJSON
 			var hasThumbnail int
 			if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
 				&u.SizeBytes, &hasThumbnail, &u.UploadedBy,
 				&u.EntityType, &u.EntityID, &u.CreatedAt, &u.DeletedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan upload")
-				return
+				return u, err
 			}
 			u.HasThumbnail = hasThumbnail == 1
-			uploads = append(uploads, u)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate uploads")
+			return u, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")
 			return
 		}
 

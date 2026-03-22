@@ -72,31 +72,18 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("roles").
 			OrderBy("id", "ASC").
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list roles")
-			return
-		}
-		defer rows.Close()
-
-		var roles []roleJSON
-		for rows.Next() {
+		roles, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (roleJSON, error) {
 			var role roleJSON
 			var isSystem int
 			if err := rows.Scan(&role.ID, &role.Name, &role.Description, &isSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan role")
-				return
+				return role, err
 			}
 			role.IsSystem = isSystem == 1
-			roles = append(roles, role)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate roles")
+			return role, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list roles")
 			return
-		}
-
-		if roles == nil {
-			roles = []roleJSON{}
 		}
 
 		// Load scopes and admin counts for each role.

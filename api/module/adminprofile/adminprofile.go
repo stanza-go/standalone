@@ -55,22 +55,16 @@ func getProfile(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		// Get scopes from the admin's role.
-		scopes := make([]string, 0)
 		scopeSQL, scopeArgs := sqlite.Select("rs.scope").
 			From("role_scopes rs").
 			Join("roles r", "r.id = rs.role_id").
 			Where("r.name = ?", role).
 			Build()
-		if scopeRows, err := db.Query(scopeSQL, scopeArgs...); err == nil {
-			defer scopeRows.Close()
-			for scopeRows.Next() {
-				var scope string
-				if err := scopeRows.Scan(&scope); err == nil {
-					scopes = append(scopes, scope)
-				}
-			}
-			_ = scopeRows.Err()
-		}
+		scopes, _ := sqlite.QueryAll(db, scopeSQL, scopeArgs, func(rows *sqlite.Rows) (string, error) {
+			var scope string
+			err := rows.Scan(&scope)
+			return scope, err
+		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"admin": map[string]any{
@@ -285,36 +279,24 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("expires_at > ?", now).
 			OrderBy("created_at", "DESC").
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		defer rows.Close()
-
 		currentTokenHash := ""
 		refreshToken, _ := auth.ReadRefreshToken(r)
 		if refreshToken != "" {
 			currentTokenHash = auth.HashToken(refreshToken)
 		}
 
-		var sessions []ActiveSession
-		for rows.Next() {
+		sessions, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (ActiveSession, error) {
 			var s ActiveSession
 			var tokenHash string
 			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt, &tokenHash); err != nil {
-				continue
+				return s, err
 			}
 			s.Current = tokenHash == currentTokenHash
-			sessions = append(sessions, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			return s, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
 			return
-		}
-
-		if sessions == nil {
-			sessions = []ActiveSession{}
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{

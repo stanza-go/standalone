@@ -80,31 +80,22 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			[]string{"id", "url", "is_active", "created_at", "updated_at"},
 			"created_at", "DESC")
 		sql, args := qb.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")
-			return
-		}
-		defer rows.Close()
-
-		items := make([]webhookJSON, 0)
-		for rows.Next() {
+		items, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (webhookJSON, error) {
 			var wh webhookJSON
 			var eventsStr string
 			var active int
 			if err := rows.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan webhook")
-				return
+				return wh, err
 			}
 			wh.IsActive = active == 1
 			_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
 			if wh.Events == nil {
 				wh.Events = []string{}
 			}
-			items = append(items, wh)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate webhooks")
+			return wh, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")
 			return
 		}
 
@@ -428,24 +419,13 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		total, _ := db.Count(qb)
 
 		sql, args := qb.OrderBy("created_at", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
+		items, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (deliveryJSON, error) {
+			var d deliveryJSON
+			err := rows.Scan(&d.ID, &d.WebhookID, &d.DeliveryID, &d.Event, &d.Payload, &d.Status, &d.StatusCode, &d.ResponseBody, &d.Attempts, &d.CreatedAt, &d.CompletedAt)
+			return d, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query deliveries")
-			return
-		}
-		defer rows.Close()
-
-		items := make([]deliveryJSON, 0)
-		for rows.Next() {
-			var d deliveryJSON
-			if err := rows.Scan(&d.ID, &d.WebhookID, &d.DeliveryID, &d.Event, &d.Payload, &d.Status, &d.StatusCode, &d.ResponseBody, &d.Attempts, &d.CreatedAt, &d.CompletedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan delivery")
-				return
-			}
-			items = append(items, d)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate deliveries")
 			return
 		}
 

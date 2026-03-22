@@ -67,24 +67,13 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
 
-		rows, err := db.Query(selectSQL, selectArgs...)
+		entries, err := sqlite.QueryAll(db, selectSQL, selectArgs, func(rows *sqlite.Rows) (activityEntry, error) {
+			var e activityEntry
+			err := rows.Scan(&e.ID, &e.Action, &e.Details, &e.IPAddress, &e.CreatedAt)
+			return e, err
+		})
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
-			return
-		}
-		defer rows.Close()
-
-		entries := make([]activityEntry, 0)
-		for rows.Next() {
-			var e activityEntry
-			if err := rows.Scan(&e.ID, &e.Action, &e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan activity")
-				return
-			}
-			entries = append(entries, e)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate activity")
 			return
 		}
 

@@ -47,33 +47,20 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		total, _ := db.Count(q)
 
 		sql, args := q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
-			return
-		}
-		defer rows.Close()
-
-		var items []notifications.Notification
-		for rows.Next() {
+		items, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (notifications.Notification, error) {
 			var n notifications.Notification
 			var readAt string
 			if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Message, &n.Data, &readAt, &n.CreatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan notification")
-				return
+				return n, err
 			}
 			n.ReadAt = readAt
 			n.EntityType = notifications.EntityUser
 			n.EntityID = userID
-			items = append(items, n)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate notifications")
+			return n, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
 			return
-		}
-
-		if items == nil {
-			items = []notifications.Notification{}
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{

@@ -41,13 +41,6 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("rt.expires_at > ?", now).
 			OrderBy("rt."+sortCol, sortDir).
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
-			return
-		}
-		defer rows.Close()
-
 		type sessionJSON struct {
 			ID         string `json:"id"`
 			EntityType string `json:"entity_type"`
@@ -57,18 +50,13 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			CreatedAt  string `json:"created_at"`
 			ExpiresAt  string `json:"expires_at"`
 		}
-
-		sessions := make([]sessionJSON, 0)
-		for rows.Next() {
+		sessions, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (sessionJSON, error) {
 			var s sessionJSON
-			if err := rows.Scan(&s.ID, &s.EntityType, &s.EntityID, &s.CreatedAt, &s.ExpiresAt, &s.Email, &s.Name); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan session")
-				return
-			}
-			sessions = append(sessions, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			err := rows.Scan(&s.ID, &s.EntityType, &s.EntityID, &s.CreatedAt, &s.ExpiresAt, &s.Email, &s.Name)
+			return s, err
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
 			return
 		}
 

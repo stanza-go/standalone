@@ -69,26 +69,17 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Limit(pg.Limit).
 			Offset(pg.Offset).
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list admins")
-			return
-		}
-		defer rows.Close()
-
-		admins := make([]adminJSON, 0)
-		for rows.Next() {
+		admins, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (adminJSON, error) {
 			var a adminJSON
 			var isActive int
 			if err := rows.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan admin")
-				return
+				return a, err
 			}
 			a.IsActive = isActive == 1
-			admins = append(admins, a)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate admins")
+			return a, nil
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to list admins")
 			return
 		}
 
@@ -442,13 +433,6 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			OrderBy("created_at", "DESC").
 			Limit(limit).Offset(offset).
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
-			return
-		}
-		defer rows.Close()
-
 		type entry struct {
 			ID         int64  `json:"id"`
 			Action     string `json:"action"`
@@ -458,18 +442,14 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			IPAddress  string `json:"ip_address"`
 			CreatedAt  string `json:"created_at"`
 		}
-		entries := make([]entry, 0)
-		for rows.Next() {
+		entries, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (entry, error) {
 			var e entry
-			if err := rows.Scan(&e.ID, &e.Action, &e.EntityType, &e.EntityID,
-				&e.Details, &e.IPAddress, &e.CreatedAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan activity")
-				return
-			}
-			entries = append(entries, e)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate activity")
+			err := rows.Scan(&e.ID, &e.Action, &e.EntityType, &e.EntityID,
+				&e.Details, &e.IPAddress, &e.CreatedAt)
+			return e, err
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
 			return
 		}
 
@@ -498,29 +478,18 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("expires_at > ?", now).
 			OrderBy("created_at", "DESC").
 			Build()
-		rows, err := db.Query(sql, args...)
-		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query sessions")
-			return
-		}
-		defer rows.Close()
-
 		type session struct {
 			ID        string `json:"id"`
 			CreatedAt string `json:"created_at"`
 			ExpiresAt string `json:"expires_at"`
 		}
-		sessions := make([]session, 0)
-		for rows.Next() {
+		sessions, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (session, error) {
 			var s session
-			if err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to scan session")
-				return
-			}
-			sessions = append(sessions, s)
-		}
-		if err := rows.Err(); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to iterate sessions")
+			err := rows.Scan(&s.ID, &s.CreatedAt, &s.ExpiresAt)
+			return s, err
+		})
+		if err != nil {
+			http.WriteError(w, http.StatusInternalServerError, "failed to query sessions")
 			return
 		}
 
