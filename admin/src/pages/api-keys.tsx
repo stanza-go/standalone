@@ -26,7 +26,9 @@ import {
   IconArrowDown,
   IconArrowUp,
   IconArrowsSort,
+  IconBan,
   IconCheck,
+  IconClock,
   IconCopy,
   IconDownload,
   IconPencil,
@@ -39,6 +41,7 @@ import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface ApiKey {
   id: number;
@@ -73,10 +76,10 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
-function keyStatus(key: ApiKey): { label: string; color: string } {
-  if (key.revoked_at) return { label: "Revoked", color: "red" };
-  if (key.expires_at && new Date(key.expires_at) < new Date()) return { label: "Expired", color: "gray" };
-  return { label: "Active", color: "green" };
+function keyStatus(key: ApiKey): { label: string; color: string; icon: React.ReactNode } {
+  if (key.revoked_at) return { label: "Revoked", color: "red", icon: <IconBan size={10} /> };
+  if (key.expires_at && new Date(key.expires_at) < new Date()) return { label: "Expired", color: "gray", icon: <IconClock size={10} /> };
+  return { label: "Active", color: "green", icon: <IconCheck size={10} /> };
 }
 
 export default function ApiKeysPage() {
@@ -220,6 +223,11 @@ export default function ApiKeysPage() {
 
   const keyIds = keys.map((k) => k.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: keys.length,
+    onSelect: (i) => { const k = keys[i]; if (k) selection.toggle(k.id); },
+  });
+
   return (
     <Stack>
       <Group justify="space-between" wrap="wrap">
@@ -282,7 +290,7 @@ export default function ApiKeysPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {keys.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={9}>
@@ -290,10 +298,10 @@ export default function ApiKeysPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  keys.map((key) => {
+                  keys.map((key, idx) => {
                     const status = keyStatus(key);
                     return (
-                      <Table.Tr key={key.id} bg={selection.isSelected(key.id) ? "var(--mantine-primary-color-light)" : undefined}>
+                      <Table.Tr key={key.id} bg={selection.isSelected(key.id) ? "var(--mantine-primary-color-light)" : undefined} style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}>
                         <Table.Td>
                           <Checkbox checked={selection.isSelected(key.id)} onChange={() => selection.toggle(key.id)} aria-label={`Select ${key.name}`} />
                         </Table.Td>
@@ -315,7 +323,7 @@ export default function ApiKeysPage() {
                         </Table.Td>
                         <Table.Td><Text size="sm">{key.request_count}</Text></Table.Td>
                         <Table.Td>
-                          <Badge variant="light" color={status.color} size="sm">{status.label}</Badge>
+                          <Badge variant="light" color={status.color} size="sm" leftSection={status.icon}>{status.label}</Badge>
                         </Table.Td>
                         <Table.Td>
                           <Tooltip label={new Date(key.created_at).toLocaleString()}>

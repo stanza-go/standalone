@@ -28,8 +28,10 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronRight,
+  IconClock,
   IconCopy,
   IconSend,
+  IconX,
 } from "@tabler/icons-react";
 import { get, post } from "@/lib/api";
 
@@ -86,6 +88,12 @@ function deliveryStatusColor(status: string): string {
   if (status === "success") return "green";
   if (status === "failed") return "red";
   return "yellow";
+}
+
+function deliveryStatusIcon(status: string): React.ReactNode {
+  if (status === "success") return <IconCheck size={10} />;
+  if (status === "failed") return <IconX size={10} />;
+  return <IconClock size={10} />;
 }
 
 export default function WebhookDetailPage() {
@@ -297,7 +305,7 @@ export default function WebhookDetailPage() {
                       <Badge color="blue" variant="light" size="sm">{d.event}</Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={deliveryStatusColor(d.status)} variant="light" size="sm">
+                      <Badge color={deliveryStatusColor(d.status)} variant="light" size="sm" leftSection={deliveryStatusIcon(d.status)}>
                         {d.status.charAt(0).toUpperCase() + d.status.slice(1)}
                       </Badge>
                     </Table.Td>

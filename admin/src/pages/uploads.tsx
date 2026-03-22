@@ -40,6 +40,7 @@ import {
 import { get, del, post, upload as uploadFile, downloadCSV } from "@/lib/api";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface UploadItem {
   id: number;
@@ -226,6 +227,11 @@ export default function UploadsPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const uploadIds = uploads.map((u) => u.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: uploads.length,
+    onSelect: (i) => { const u = uploads[i]; if (u) selection.toggle(u.id); },
+  });
+
   return (
     <Stack>
       {/* Header */}
@@ -303,7 +309,7 @@ export default function UploadsPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {uploads.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={8}>
@@ -313,11 +319,11 @@ export default function UploadsPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  uploads.map((u) => (
+                  uploads.map((u, idx) => (
                     <Table.Tr
                       key={u.id}
                       bg={selection.isSelected(u.id) ? "var(--mantine-primary-color-light)" : undefined}
-                      style={u.deleted_at ? { opacity: 0.5 } : undefined}
+                      style={{ ...(u.deleted_at ? { opacity: 0.5 } : {}), ...(tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : {}) }}
                     >
                       <Table.Td>
                         <Checkbox

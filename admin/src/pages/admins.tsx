@@ -39,6 +39,7 @@ import { useAuth } from "@/lib/auth";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface Admin {
   id: number;
@@ -248,6 +249,12 @@ export default function AdminsPage() {
 
   const adminIds = admins.map((a) => a.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: admins.length,
+    onActivate: (i) => { const a = admins[i]; if (a) navigate(`/admins/${a.id}`); },
+    onSelect: (i) => { const a = admins[i]; if (a) selection.toggle(a.id); },
+  });
+
   return (
     <Stack>
       <Group justify="space-between" wrap="wrap">
@@ -323,7 +330,7 @@ export default function AdminsPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {admins.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={8}>
@@ -333,10 +340,11 @@ export default function AdminsPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  admins.map((admin) => (
+                  admins.map((admin, idx) => (
                     <Table.Tr
                       key={admin.id}
                       bg={selection.isSelected(admin.id) ? "var(--mantine-primary-color-light)" : undefined}
+                      style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}
                     >
                       <Table.Td>
                         <Checkbox
@@ -372,6 +380,7 @@ export default function AdminsPage() {
                         <Badge
                           variant="light"
                           color={admin.is_active ? "green" : "red"}
+                          leftSection={admin.is_active ? <IconCheck size={10} /> : <IconX size={10} />}
                           style={{ cursor: admin.id !== currentAdmin?.id ? "pointer" : undefined }}
                           onClick={() => handleToggleActive(admin)}
                         >

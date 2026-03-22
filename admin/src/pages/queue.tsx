@@ -41,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 import { get, post } from "@/lib/api";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface QueueStats {
   pending: number;
@@ -111,6 +112,15 @@ const statusColors: Record<string, string> = {
   cancelled: "gray",
 };
 
+const statusIcons: Record<string, React.ReactNode> = {
+  pending: <IconInbox size={10} />,
+  running: <IconPlayerPlay size={10} />,
+  completed: <IconCircleCheck size={10} />,
+  failed: <IconCircleX size={10} />,
+  dead: <IconSkull size={10} />,
+  cancelled: <IconBan size={10} />,
+};
+
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
     <Paper withBorder p="md" radius="md">
@@ -135,7 +145,7 @@ function JobDetail({ job }: { job: QueueJob }) {
             <Group gap="sm"><Text size="sm" c="dimmed" w={90}>ID</Text><Text size="sm" ff="monospace">{job.id}</Text></Group>
             <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Queue</Text><Text size="sm" ff="monospace">{job.queue}</Text></Group>
             <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Type</Text><Text size="sm" ff="monospace">{job.type}</Text></Group>
-            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Status</Text><Badge variant="light" color={statusColors[job.status] || "gray"} size="sm">{job.status}</Badge></Group>
+            <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Status</Text><Badge variant="light" color={statusColors[job.status] || "gray"} size="sm" leftSection={statusIcons[job.status]}>{job.status}</Badge></Group>
             <Group gap="sm"><Text size="sm" c="dimmed" w={90}>Attempts</Text><Text size="sm">{job.attempts}/{job.max_attempts}</Text></Group>
           </Stack>
         </div>
@@ -298,6 +308,12 @@ export default function QueuePage() {
   const jobIds = jobs.map((j) => j.id);
   const hasActiveFilters = typeFilter !== "" || queueFilter !== "";
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: jobs.length,
+    onActivate: (i) => { const j = jobs[i]; if (j) setExpanded((prev) => (prev === j.id ? null : j.id)); },
+    onSelect: (i) => { const j = jobs[i]; if (j) selection.toggle(j.id); },
+  });
+
   const statCards = stats
     ? [
         { label: "Pending", value: stats.pending, icon: <IconInbox size={20} /> },
@@ -414,7 +430,7 @@ export default function QueuePage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {jobs.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={8}>
@@ -424,11 +440,11 @@ export default function QueuePage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  jobs.map((job) => (
+                  jobs.map((job, idx) => (
                     <Box key={job.id} component="tbody">
                       <Table.Tr
                         bg={selection.isSelected(job.id) ? "var(--mantine-primary-color-light)" : undefined}
-                        style={{ cursor: "pointer" }}
+                        style={{ cursor: "pointer", ...(tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : {}) }}
                         onClick={() => setExpanded((prev) => (prev === job.id ? null : job.id))}
                       >
                         <Table.Td onClick={(e) => e.stopPropagation()}>
@@ -449,7 +465,7 @@ export default function QueuePage() {
                           <Text size="xs" ff="monospace">{job.type}</Text>
                         </Table.Td>
                         <Table.Td>
-                          <Badge variant="light" color={statusColors[job.status] || "gray"} size="sm">
+                          <Badge variant="light" color={statusColors[job.status] || "gray"} size="sm" leftSection={statusIcons[job.status]}>
                             {job.status}
                           </Badge>
                         </Table.Td>

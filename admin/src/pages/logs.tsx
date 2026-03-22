@@ -18,8 +18,11 @@ import {
 } from "@mantine/core";
 import {
   IconAlertCircle,
+  IconAlertTriangle,
+  IconBug,
   IconChevronDown,
   IconChevronRight,
+  IconInfoCircle,
   IconPlayerPause,
   IconPlayerPlay,
   IconRefresh,
@@ -80,6 +83,13 @@ const levelColors: Record<string, string> = {
   info: "blue",
   warn: "yellow",
   error: "red",
+};
+
+const levelIcons: Record<string, React.ReactNode> = {
+  debug: <IconBug size={10} />,
+  info: <IconInfoCircle size={10} />,
+  warn: <IconAlertTriangle size={10} />,
+  error: <IconAlertCircle size={10} />,
 };
 
 function ExtraFields({ entry }: { entry: LogEntry }) {
@@ -445,7 +455,8 @@ export default function LogsPage() {
                             variant="light"
                             color={levelColors[entry.level] || "gray"}
                             size="xs"
-                            w={50}
+                            w={60}
+                            leftSection={levelIcons[entry.level]}
                             style={{ textAlign: "center" }}
                           >
                             {entry.level}

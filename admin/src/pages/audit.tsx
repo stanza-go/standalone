@@ -34,6 +34,7 @@ import {
 import { get, downloadCSV } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface AuditEntry {
   id: number;
@@ -184,6 +185,19 @@ export default function AuditPage() {
   const hasFilters = !!search || !!actionFilter || dateFrom !== null || dateTo !== null;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: entries.length,
+    onActivate: (i) => {
+      const entry = entries[i];
+      if (!entry) return;
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id);
+        return next;
+      });
+    },
+  });
+
   return (
     <Stack>
       {/* Header */}
@@ -291,7 +305,7 @@ export default function AuditPage() {
                   <Table.Th>IP</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {entries.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={7}>
@@ -301,12 +315,12 @@ export default function AuditPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  entries.map((entry) => {
+                  entries.map((entry, idx) => {
                     const isExpanded = expanded.has(entry.id);
                     return (
                       <Table.Tr
                         key={entry.id}
-                        style={{ cursor: "pointer" }}
+                        style={{ cursor: "pointer", ...(tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : {}) }}
                         onClick={() => toggleExpand(entry.id)}
                       >
                         <Table.Td>

@@ -336,9 +336,9 @@ export default function CronPage() {
                         Running
                       </Badge>
                     ) : entry.enabled ? (
-                      <Badge variant="light" color="green" size="xs">Enabled</Badge>
+                      <Badge variant="light" color="green" size="xs" leftSection={<IconCheck size={10} />}>Enabled</Badge>
                     ) : (
-                      <Badge variant="light" color="gray" size="xs">Disabled</Badge>
+                      <Badge variant="light" color="gray" size="xs" leftSection={<IconX size={10} />}>Disabled</Badge>
                     )}
                   </div>
                   <div>

@@ -41,6 +41,7 @@ import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface User {
   id: number;
@@ -251,6 +252,12 @@ export default function UsersPage() {
 
   const userIds = users.map((u) => u.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: users.length,
+    onActivate: (i) => { const u = users[i]; if (u) navigate(`/users/${u.id}`); },
+    onSelect: (i) => { const u = users[i]; if (u) selection.toggle(u.id); },
+  });
+
   return (
     <Stack>
       {/* Header */}
@@ -329,7 +336,7 @@ export default function UsersPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {users.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={7}>
@@ -339,10 +346,11 @@ export default function UsersPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  users.map((user) => (
+                  users.map((user, idx) => (
                     <Table.Tr
                       key={user.id}
                       bg={selection.isSelected(user.id) ? "var(--mantine-primary-color-light)" : undefined}
+                      style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}
                     >
                       <Table.Td>
                         <Checkbox
@@ -372,6 +380,7 @@ export default function UsersPage() {
                         <Badge
                           variant="light"
                           color={user.is_active ? "green" : "red"}
+                          leftSection={user.is_active ? <IconCheck size={10} /> : <IconX size={10} />}
                           style={{ cursor: "pointer" }}
                           onClick={() => handleToggleActive(user)}
                         >

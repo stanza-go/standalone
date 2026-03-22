@@ -28,6 +28,7 @@ import {
 } from "@tabler/icons-react";
 import { del, downloadCSV, get, post } from "@/lib/api";
 import { useSort } from "@/hooks/use-sort";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface Session {
   id: string;
@@ -149,6 +150,11 @@ export default function SessionsPage() {
   const sessionIds = sessions.map((s) => s.id);
   const allSelected = sessionIds.length > 0 && sessionIds.every((id) => selected.has(id));
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: sessions.length,
+    onSelect: (i) => { const s = sessions[i]; if (s) toggleSelect(s.id); },
+  });
+
   return (
     <Stack>
       <Group justify="space-between" wrap="wrap">
@@ -197,7 +203,7 @@ export default function SessionsPage() {
                 <Table.Th ta="right">Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
-            <Table.Tbody>
+            <Table.Tbody {...tableKeyboard.tbodyProps}>
               {sessions.length === 0 ? (
                 <Table.Tr>
                   <Table.Td colSpan={7}>
@@ -205,10 +211,11 @@ export default function SessionsPage() {
                   </Table.Td>
                 </Table.Tr>
               ) : (
-                sessions.map((session) => (
+                sessions.map((session, idx) => (
                   <Table.Tr
                     key={session.id}
                     bg={selected.has(session.id) ? "var(--mantine-primary-color-light)" : undefined}
+                    style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}
                   >
                     <Table.Td>
                       <Checkbox

@@ -33,6 +33,7 @@ import {
   IconDownload,
   IconExternalLink,
   IconPencil,
+  IconPlayerPause,
   IconPlus,
   IconSearch,
   IconTrash,
@@ -42,6 +43,7 @@ import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface Webhook {
   id: number;
@@ -251,6 +253,12 @@ export default function WebhooksPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const webhookIds = webhooks.map((w) => w.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: webhooks.length,
+    onActivate: (i) => { const w = webhooks[i]; if (w) navigate(`/webhooks/${w.id}`); },
+    onSelect: (i) => { const w = webhooks[i]; if (w) selection.toggle(w.id); },
+  });
+
   return (
     <Stack>
       {/* Header */}
@@ -353,7 +361,7 @@ export default function WebhooksPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {webhooks.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={7}>
@@ -363,11 +371,11 @@ export default function WebhooksPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  webhooks.map((wh) => (
+                  webhooks.map((wh, idx) => (
                     <Table.Tr
                       key={wh.id}
                       bg={selection.isSelected(wh.id) ? "var(--mantine-primary-color-light)" : undefined}
-                      style={{ cursor: "pointer" }}
+                      style={{ cursor: "pointer", ...(tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : {}) }}
                       onClick={() => navigate(`/webhooks/${wh.id}`)}
                     >
                       <Table.Td onClick={(e) => e.stopPropagation()}>
@@ -401,7 +409,7 @@ export default function WebhooksPage() {
                         </Group>
                       </Table.Td>
                       <Table.Td>
-                        <Badge variant="light" color={wh.is_active ? "green" : "yellow"} size="sm">
+                        <Badge variant="light" color={wh.is_active ? "green" : "yellow"} size="sm" leftSection={wh.is_active ? <IconCheck size={10} /> : <IconPlayerPause size={10} />}>
                           {wh.is_active ? "Active" : "Paused"}
                         </Badge>
                       </Table.Td>

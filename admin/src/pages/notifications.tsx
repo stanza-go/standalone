@@ -21,6 +21,7 @@ import {
 import { notifications as notify } from "@mantine/notifications";
 import {
   IconAlertCircle,
+  IconAlertTriangle,
   IconArrowDown,
   IconArrowUp,
   IconArrowsSort,
@@ -29,12 +30,14 @@ import {
   IconChecks,
   IconDownload,
   IconFilter,
+  IconInfoCircle,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
 import { get, post, del, downloadCSV } from "@/lib/api";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
+import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
 interface Notification {
   id: number;
@@ -61,6 +64,13 @@ const TYPE_COLORS: Record<string, string> = {
   success: "green",
   warning: "yellow",
   error: "red",
+};
+
+const TYPE_ICONS: Record<string, React.ReactNode> = {
+  info: <IconInfoCircle size={10} />,
+  success: <IconCheck size={10} />,
+  warning: <IconAlertTriangle size={10} />,
+  error: <IconAlertCircle size={10} />,
 };
 
 function SortIcon({ column, sort }: { column: string; sort: { column: string; direction: string } }) {
@@ -209,6 +219,11 @@ export default function NotificationsPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const itemIds = items.map((n) => n.id);
 
+  const tableKeyboard = useTableKeyboard({
+    rowCount: items.length,
+    onSelect: (i) => { const n = items[i]; if (n) selection.toggle(n.id); },
+  });
+
   return (
     <Stack>
       {/* Header */}
@@ -297,7 +312,7 @@ export default function NotificationsPage() {
                   <Table.Th ta="right">Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
-              <Table.Tbody>
+              <Table.Tbody {...tableKeyboard.tbodyProps}>
                 {items.length === 0 ? (
                   <Table.Tr>
                     <Table.Td colSpan={6}>
@@ -307,7 +322,7 @@ export default function NotificationsPage() {
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  items.map((n) => (
+                  items.map((n, idx) => (
                     <Table.Tr
                       key={n.id}
                       bg={
@@ -317,6 +332,7 @@ export default function NotificationsPage() {
                           ? "var(--mantine-color-default-hover)"
                           : undefined
                       }
+                      style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}
                     >
                       <Table.Td>
                         <Checkbox
@@ -339,7 +355,7 @@ export default function NotificationsPage() {
                         <Text size="xs" c="dimmed" lineClamp={2}>{n.message}</Text>
                       </Table.Td>
                       <Table.Td>
-                        <Badge variant="light" color={TYPE_COLORS[n.type] || "gray"} size="sm">{n.type}</Badge>
+                        <Badge variant="light" color={TYPE_COLORS[n.type] || "gray"} size="sm" leftSection={TYPE_ICONS[n.type]}>{n.type}</Badge>
                       </Table.Td>
                       <Table.Td>
                         <Tooltip label={new Date(n.created_at).toLocaleString()}>
