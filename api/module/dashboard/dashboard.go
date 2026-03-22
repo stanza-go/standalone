@@ -34,12 +34,23 @@ type dbStats struct {
 // Routes:
 //
 //	GET /api/admin/dashboard — system, database, queue, cron, and app stats
+// Register mounts the dashboard routes on the given admin group.
+// The group should already have auth middleware applied.
+// Routes:
+//
+//	GET /api/admin/dashboard        — system, database, queue, cron, and app stats
+//	GET /api/admin/dashboard/charts — time-series data for dashboard charts
 func Register(admin *http.Group, db *sqlite.DB, q *queue.Queue, s *cron.Scheduler) {
 	statsCache := cache.New[*dbStats](
 		cache.WithTTL[*dbStats](30 * time.Second),
 		cache.WithMaxSize[*dbStats](1),
 	)
+	chartsCache := cache.New[*chartsData](
+		cache.WithTTL[*chartsData](5 * time.Minute),
+		cache.WithMaxSize[*chartsData](3),
+	)
 	admin.HandleFunc("GET /dashboard", statsHandler(db, q, s, statsCache))
+	admin.HandleFunc("GET /dashboard/charts", chartsHandler(db, chartsCache))
 }
 
 func queryDBStats(db *sqlite.DB) (*dbStats, error) {
@@ -154,4 +165,138 @@ func statsHandler(db *sqlite.DB, q *queue.Queue, s *cron.Scheduler, statsCache *
 			},
 		})
 	}
+}
+
+// chartsData holds time-series data for dashboard charts.
+type chartsData struct {
+	Users    []dayCount    `json:"users"`
+	Activity []dayCount    `json:"activity"`
+	Jobs     []dayJobCount `json:"jobs"`
+}
+
+type dayCount struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+type dayJobCount struct {
+	Date      string `json:"date"`
+	Completed int    `json:"completed"`
+	Failed    int    `json:"failed"`
+}
+
+func chartsHandler(db *sqlite.DB, chartsCache *cache.Cache[*chartsData]) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		period := r.URL.Query().Get("period")
+		days := 7
+		switch period {
+		case "30d":
+			days = 30
+		case "90d":
+			days = 90
+		default:
+			period = "7d"
+		}
+
+		data, _ := chartsCache.GetOrSet(period, func() (*chartsData, error) {
+			return queryCharts(db, days)
+		})
+		if data == nil {
+			data = &chartsData{}
+		}
+
+		http.WriteJSON(w, http.StatusOK, data)
+	}
+}
+
+func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
+	since := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	result := &chartsData{}
+
+	// Generate all dates in range for gap-filling.
+	dateMap := make(map[string]bool, days+1)
+	var dates []string
+	for i := days; i >= 0; i-- {
+		d := time.Now().UTC().AddDate(0, 0, -i).Format("2006-01-02")
+		dates = append(dates, d)
+		dateMap[d] = true
+	}
+
+	// Users created per day.
+	userCounts := make(map[string]int, days+1)
+	rows, err := db.Query(
+		`SELECT date(created_at) as day, COUNT(*) as cnt
+		 FROM users
+		 WHERE created_at >= ? AND deleted_at IS NULL
+		 GROUP BY day ORDER BY day`, since)
+	if err == nil {
+		for rows.Next() {
+			var day string
+			var cnt int
+			if err := rows.Scan(&day, &cnt); err != nil {
+				break
+			}
+			userCounts[day] = cnt
+		}
+		rows.Close()
+	}
+	for _, d := range dates {
+		result.Users = append(result.Users, dayCount{Date: d, Count: userCounts[d]})
+	}
+
+	// Audit log activity per day.
+	activityCounts := make(map[string]int, days+1)
+	rows, err = db.Query(
+		`SELECT date(created_at) as day, COUNT(*) as cnt
+		 FROM audit_log
+		 WHERE created_at >= ?
+		 GROUP BY day ORDER BY day`, since)
+	if err == nil {
+		for rows.Next() {
+			var day string
+			var cnt int
+			if err := rows.Scan(&day, &cnt); err != nil {
+				break
+			}
+			activityCounts[day] = cnt
+		}
+		rows.Close()
+	}
+	for _, d := range dates {
+		result.Activity = append(result.Activity, dayCount{Date: d, Count: activityCounts[d]})
+	}
+
+	// Queue jobs per day (completed vs failed).
+	type jobDay struct {
+		completed int
+		failed    int
+	}
+	jobCounts := make(map[string]*jobDay, days+1)
+	rows, err = db.Query(
+		`SELECT date(created_at) as day,
+		        SUM(CASE WHEN status IN ('completed') THEN 1 ELSE 0 END) as completed,
+		        SUM(CASE WHEN status IN ('failed','dead') THEN 1 ELSE 0 END) as failed
+		 FROM _queue_jobs
+		 WHERE created_at >= ?
+		 GROUP BY day ORDER BY day`, since)
+	if err == nil {
+		for rows.Next() {
+			var day string
+			var completed, failed int
+			if err := rows.Scan(&day, &completed, &failed); err != nil {
+				break
+			}
+			jobCounts[day] = &jobDay{completed: completed, failed: failed}
+		}
+		rows.Close()
+	}
+	for _, d := range dates {
+		jd := jobCounts[d]
+		if jd == nil {
+			jd = &jobDay{}
+		}
+		result.Jobs = append(result.Jobs, dayJobCount{Date: d, Completed: jd.completed, Failed: jd.failed})
+	}
+
+	return result, nil
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { get } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,6 +21,17 @@ import {
 import { Link } from "react-router";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface DashboardStats {
   system: {
@@ -71,6 +82,14 @@ interface AuditEntry {
   ip_address: string;
   created_at: string;
 }
+
+interface ChartsData {
+  users: { date: string; count: number }[];
+  activity: { date: string; count: number }[];
+  jobs: { date: string; completed: number; failed: number }[];
+}
+
+type ChartPeriod = "7d" | "30d" | "90d";
 
 const ACTION_LABELS: Record<string, string> = {
   "admin.create": "Created admin",
@@ -128,6 +147,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [charts, setCharts] = useState<ChartsData | null>(null);
+  const [chartsPeriod, setChartsPeriod] = useState<ChartPeriod>("7d");
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +178,19 @@ export default function DashboardPage() {
       clearInterval(interval);
     };
   }, []);
+
+  const loadCharts = useCallback(async (period: ChartPeriod) => {
+    try {
+      const data = await get<ChartsData>(`/admin/dashboard/charts?period=${period}`);
+      setCharts(data);
+    } catch {
+      // Charts are non-critical — fail silently.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCharts(chartsPeriod);
+  }, [chartsPeriod, loadCharts]);
 
   return (
     <div className="p-6">
@@ -311,6 +345,37 @@ export default function DashboardPage() {
             </div>
           </section>
 
+          {/* Trend Charts */}
+          {charts && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  Trends
+                </h2>
+                <div className="flex gap-1">
+                  {(["7d", "30d", "90d"] as ChartPeriod[]).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setChartsPeriod(p)}
+                      className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                        chartsPeriod === p
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <ChartCard title="User Signups" data={charts.users} color="#2563eb" />
+                <ChartCard title="Admin Activity" data={charts.activity} color="#8b5cf6" />
+                <JobsChartCard title="Job Throughput" data={charts.jobs} />
+              </div>
+            </section>
+          )}
+
           {/* Recent Activity */}
           {recentActivity.length > 0 && (
             <section>
@@ -388,6 +453,140 @@ function StatCard({
         {description && (
           <p className="text-xs text-muted-foreground mt-1">{description}</p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatChartDate(value: string | number | React.ReactNode): string {
+  const dateStr = String(value);
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function ChartCard({
+  title,
+  data,
+  color,
+}: {
+  title: string;
+  data: { date: string; count: number }[];
+  color: string;
+}) {
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <span className="text-xs text-muted-foreground">{total} total</span>
+        </div>
+      </CardHeader>
+      <CardContent className="pb-4">
+        <ResponsiveContainer width="100%" height={160}>
+          <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`grad-${title}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatChartDate}
+              tick={{ fontSize: 10 }}
+              className="fill-muted-foreground"
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 10 }}
+              className="fill-muted-foreground"
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+            />
+            <Tooltip
+              labelFormatter={formatChartDate}
+              contentStyle={{
+                backgroundColor: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "var(--foreground)",
+              }}
+              labelStyle={{ color: "var(--foreground)" }}
+            />
+            <Area
+              type="monotone"
+              dataKey="count"
+              stroke={color}
+              strokeWidth={2}
+              fill={`url(#grad-${title})`}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobsChartCard({
+  title,
+  data,
+}: {
+  title: string;
+  data: { date: string; completed: number; failed: number }[];
+}) {
+  const totalCompleted = data.reduce((sum, d) => sum + d.completed, 0);
+  const totalFailed = data.reduce((sum, d) => sum + d.failed, 0);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <span className="text-xs text-muted-foreground">
+            {totalCompleted} done, {totalFailed} failed
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="pb-4">
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatChartDate}
+              tick={{ fontSize: 10 }}
+              className="fill-muted-foreground"
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 10 }}
+              className="fill-muted-foreground"
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+            />
+            <Tooltip
+              labelFormatter={formatChartDate}
+              contentStyle={{
+                backgroundColor: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "var(--foreground)",
+              }}
+              labelStyle={{ color: "var(--foreground)" }}
+            />
+            <Bar dataKey="completed" fill="#22c55e" radius={[2, 2, 0, 0]} stackId="jobs" />
+            <Bar dataKey="failed" fill="#ef4444" radius={[2, 2, 0, 0]} stackId="jobs" />
+          </BarChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );
