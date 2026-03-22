@@ -33,9 +33,12 @@ import {
   IconSun,
   IconMoon,
   IconDeviceDesktop,
+  IconSearch,
 } from "@tabler/icons-react";
 import { useAuth } from "@/lib/auth";
 import { NotificationBell } from "@/components/notification-bell";
+import { spotlight } from "@mantine/spotlight";
+import { CommandPalette } from "@/components/command-palette";
 
 interface NavItem {
   label: string;
@@ -157,6 +160,11 @@ export default function Shell() {
             </Text>
           </Group>
           <Group gap="xs">
+            <Tooltip label="Search (⌘K)">
+              <ActionIcon variant="default" size="lg" onClick={() => spotlight.open()}>
+                <IconSearch size={18} stroke={1.5} />
+              </ActionIcon>
+            </Tooltip>
             <NotificationBell />
             <ThemeToggle />
           </Group>
@@ -231,6 +239,8 @@ export default function Shell() {
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
+
+      <CommandPalette />
     </AppShell>
   );
 }
