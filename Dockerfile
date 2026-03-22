@@ -34,9 +34,11 @@ COPY standalone/admin-next/ standalone/admin-next/
 RUN cd standalone/admin-next && bun run build
 
 # ---------------------------------------------------------------------------
-# Stage 2: Build Go binary with embedded frontend assets
+# Stage 2: Build Go binary with embedded frontend assets (Alpine for musl)
 # ---------------------------------------------------------------------------
-FROM golang:1.26.1 AS backend
+FROM golang:1.26.1-alpine AS backend
+
+RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build
 
@@ -58,13 +60,12 @@ COPY --from=frontend /build/standalone/admin-next/dist standalone/api/admin/dist
 RUN cd standalone/api && CGO_ENABLED=1 go build -tags prod -ldflags="-s -w" -o /standalone .
 
 # ---------------------------------------------------------------------------
-# Stage 3: Minimal runtime
+# Stage 3: Minimal Alpine runtime (~7MB base vs ~74MB debian-slim)
 # ---------------------------------------------------------------------------
-FROM debian:bookworm-slim
+FROM alpine:3.21
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd -r -s /usr/sbin/nologin stanza
+RUN apk add --no-cache ca-certificates su-exec \
+    && adduser -D -s /sbin/nologin stanza
 
 COPY --from=backend /standalone /usr/local/bin/standalone
 
@@ -74,4 +75,4 @@ ENV DATA_DIR=/data
 
 EXPOSE 23710
 
-ENTRYPOINT ["sh", "-c", "chown -R stanza:stanza /data && exec gosu stanza standalone"]
+ENTRYPOINT ["sh", "-c", "chown -R stanza:stanza /data && exec su-exec stanza standalone"]
