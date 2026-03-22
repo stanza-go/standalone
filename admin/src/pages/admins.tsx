@@ -250,7 +250,7 @@ export default function AdminsPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Admin Users</Title>
           {!loading && <Badge variant="light" size="lg">{total}</Badge>}

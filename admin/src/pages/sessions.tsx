@@ -151,7 +151,7 @@ export default function SessionsPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Active Sessions</Title>
           {!loading && <Badge variant="light" size="lg">{sessions.length}</Badge>}
@@ -171,7 +171,7 @@ export default function SessionsPage() {
       {loading ? (
         <Group justify="center" pt="xl"><Loader /></Group>
       ) : (
-        <Table.ScrollContainer minWidth={600}>
+        <Table.ScrollContainer minWidth={700}>
           <Table>
             <Table.Thead>
               <Table.Tr>

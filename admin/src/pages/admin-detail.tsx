@@ -273,7 +273,7 @@ export default function AdminDetailPage() {
             <Stack align="center" py="xl"><Loader size="sm" /></Stack>
           ) : (
             <Stack gap="sm">
-              <Table.ScrollContainer minWidth={500}>
+              <Table.ScrollContainer minWidth={600}>
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>

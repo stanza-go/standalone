@@ -177,7 +177,7 @@ export default function RolesPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Roles</Title>
           {!loading && <Badge variant="light" size="lg">{roles.length}</Badge>}
@@ -197,7 +197,7 @@ export default function RolesPage() {
       {loading ? (
         <Group justify="center" pt="xl"><Loader /></Group>
       ) : (
-        <Table.ScrollContainer minWidth={600}>
+        <Table.ScrollContainer minWidth={700}>
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -228,7 +228,7 @@ export default function RolesPage() {
                       <Text size="sm" c="dimmed">{role.description || "—"}</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Group gap={4}>
+                      <Group gap={4} wrap="wrap">
                         {role.scopes.map((scope) => (
                           <Tooltip key={scope} label={scope}>
                             <Badge variant="light" size="xs">{SCOPE_LABELS[scope] ?? scope}</Badge>

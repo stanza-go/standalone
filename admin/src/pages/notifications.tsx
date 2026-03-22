@@ -212,7 +212,7 @@ export default function NotificationsPage() {
   return (
     <Stack>
       {/* Header */}
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Notifications</Title>
           {!loading && (

@@ -187,7 +187,7 @@ export default function AuditPage() {
   return (
     <Stack>
       {/* Header */}
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Audit Log</Title>
           {!loading && <Badge variant="light" size="lg">{total}</Badge>}
@@ -198,7 +198,7 @@ export default function AuditPage() {
       </Group>
 
       {/* Filters */}
-      <Group gap="sm" wrap="wrap">
+      <Stack gap="sm">
         <TextInput
           placeholder="Search actions or details..."
           leftSection={<IconSearch size={16} />}
@@ -211,50 +211,51 @@ export default function AuditPage() {
               </ActionIcon>
             ) : null
           }
-          style={{ flex: 1, minWidth: 200, maxWidth: 350 }}
         />
-        <NativeSelect
-          leftSection={<IconFilter size={16} />}
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.currentTarget.value)}
-          data={[
-            { value: "", label: "All actions" },
-            ...Object.entries(ACTION_LABELS).map(([key, label]) => ({ value: key, label })),
-          ]}
-          w={200}
-        />
-        <DateInput
-          placeholder="From"
-          value={dateFrom}
-          onChange={setDateFrom}
-          clearable
-          w={150}
-          size="sm"
-        />
-        <DateInput
-          placeholder="To"
-          value={dateTo}
-          onChange={setDateTo}
-          clearable
-          w={150}
-          size="sm"
-        />
-        {hasFilters && (
-          <Button
-            variant="subtle"
-            size="xs"
-            leftSection={<IconX size={14} />}
-            onClick={() => {
-              setSearchInput("");
-              setActionFilter("");
-              setDateFrom(null);
-              setDateTo(null);
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </Group>
+        <Group gap="sm" wrap="wrap">
+          <NativeSelect
+            leftSection={<IconFilter size={16} />}
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.currentTarget.value)}
+            data={[
+              { value: "", label: "All actions" },
+              ...Object.entries(ACTION_LABELS).map(([key, label]) => ({ value: key, label })),
+            ]}
+            style={{ flex: 1, minWidth: 150 }}
+          />
+          <DateInput
+            placeholder="From"
+            value={dateFrom}
+            onChange={setDateFrom}
+            clearable
+            style={{ flex: 1, minWidth: 120 }}
+            size="sm"
+          />
+          <DateInput
+            placeholder="To"
+            value={dateTo}
+            onChange={setDateTo}
+            clearable
+            style={{ flex: 1, minWidth: 120 }}
+            size="sm"
+          />
+          {hasFilters && (
+            <Button
+              variant="subtle"
+              size="xs"
+              leftSection={<IconX size={14} />}
+              onClick={() => {
+                setSearchInput("");
+                setActionFilter("");
+                setDateFrom(null);
+                setDateTo(null);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </Group>
+      </Stack>
 
       {/* Error */}
       {error && (
@@ -271,7 +272,7 @@ export default function AuditPage() {
         </Group>
       ) : (
         <>
-          <Table.ScrollContainer minWidth={600}>
+          <Table.ScrollContainer minWidth={800}>
             <Table>
               <Table.Thead>
                 <Table.Tr>

@@ -254,7 +254,7 @@ export default function UsersPage() {
   return (
     <Stack>
       {/* Header */}
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Users</Title>
           {!loading && <Badge variant="light" size="lg">{total}</Badge>}
@@ -299,7 +299,7 @@ export default function UsersPage() {
         </Group>
       ) : (
         <>
-          <Table.ScrollContainer minWidth={600}>
+          <Table.ScrollContainer minWidth={700}>
             <Table>
               <Table.Thead>
                 <Table.Tr>

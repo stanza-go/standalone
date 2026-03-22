@@ -229,7 +229,7 @@ export default function UploadsPage() {
   return (
     <Stack>
       {/* Header */}
-      <Group justify="space-between">
+      <Group justify="space-between" wrap="wrap">
         <Group gap="xs">
           <Title order={3}>Uploads</Title>
           {!loading && <Badge variant="light" size="lg">{total}</Badge>}
