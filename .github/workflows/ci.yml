@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: standalone
+
+      - uses: actions/checkout@v4
+        with:
+          repository: stanza-go/framework
+          path: framework
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.1"
+          cache-dependency-path: standalone/api/go.sum
+
+      - name: Vet
+        working-directory: standalone/api
+        run: go vet ./...
+
+      - name: Build
+        working-directory: standalone/api
+        run: go build -o /dev/null .
+
+  admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install
+        working-directory: admin
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        working-directory: admin
+        run: bun run build
