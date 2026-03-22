@@ -35,6 +35,7 @@ import {
   IconDeviceDesktop,
 } from "@tabler/icons-react";
 import { useAuth } from "@/lib/auth";
+import { NotificationBell } from "@/components/notification-bell";
 
 interface NavItem {
   label: string;
@@ -156,6 +157,7 @@ export default function Shell() {
             </Text>
           </Group>
           <Group gap="xs">
+            <NotificationBell />
             <ThemeToggle />
           </Group>
         </Group>
