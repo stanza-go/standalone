@@ -169,6 +169,11 @@ func provideDB(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) (*
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			// PRAGMA optimize updates query planner statistics before
+			// shutdown. Lightweight — only analyzes tables that need it.
+			if err := db.Optimize(); err != nil {
+				logger.Warn("pragma optimize failed", log.Err(err))
+			}
 			return db.Stop(ctx)
 		},
 	})
@@ -682,6 +687,8 @@ func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.S
 			http.PrometheusMetric{Name: "stanza_sqlite_pool_waits_total", Help: "Total read pool wait events", Type: "counter", Value: float64(ds.PoolWaits)},
 			http.PrometheusMetric{Name: "stanza_sqlite_read_pool_size", Help: "Read pool total connections", Type: "gauge", Value: float64(ds.ReadPoolSize)},
 			http.PrometheusMetric{Name: "stanza_sqlite_read_pool_in_use", Help: "Read pool connections currently in use", Type: "gauge", Value: float64(ds.ReadPoolInUse)},
+			http.PrometheusMetric{Name: "stanza_sqlite_file_size_bytes", Help: "Main database file size in bytes", Type: "gauge", Value: float64(ds.FileSize)},
+			http.PrometheusMetric{Name: "stanza_sqlite_wal_size_bytes", Help: "WAL file size in bytes", Type: "gauge", Value: float64(ds.WALSize)},
 		)
 
 		// HTTP.
