@@ -402,14 +402,15 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		}
 
 		// Revoke sessions for deleted users.
-		for _, id := range req.IDs {
-			idStr := strconv.FormatInt(id, 10)
-			sql, a := sqlite.Delete("refresh_tokens").
-				Where("entity_type = 'user'").
-				Where("entity_id = ?", idStr).
-				Build()
-			_, _ = db.Exec(sql, a...)
+		idStrs := make([]any, len(req.IDs))
+		for i, id := range req.IDs {
+			idStrs[i] = strconv.FormatInt(id, 10)
 		}
+		query, args = sqlite.Delete("refresh_tokens").
+			Where("entity_type = 'user'").
+			WhereIn("entity_id", idStrs...).
+			Build()
+		_, _ = db.Exec(query, args...)
 
 		// Audit log each deletion.
 		for _, id := range req.IDs {

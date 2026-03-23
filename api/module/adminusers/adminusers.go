@@ -410,8 +410,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		limit := http.QueryParamInt(r, "limit", 20)
-		offset := http.QueryParamInt(r, "offset", 0)
+		pg := http.ParsePagination(r, 20, 100)
 		idStr := strconv.FormatInt(id, 10)
 
 		selectQ := sqlite.Select(
@@ -423,7 +422,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		sql, args := selectQ.
 			OrderBy("created_at", "DESC").
-			Limit(limit).Offset(offset).
+			Limit(pg.Limit).Offset(pg.Offset).
 			Build()
 		type entry struct {
 			ID         int64  `json:"id"`
@@ -445,10 +444,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		http.WriteJSON(w, http.StatusOK, map[string]any{
-			"entries": entries,
-			"total":   total,
-		})
+		http.PaginatedResponse(w, "entries", entries, total)
 	}
 }
 
@@ -536,14 +532,15 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		}
 
 		// Revoke sessions for deleted admins.
-		for _, id := range req.IDs {
-			idStr := strconv.FormatInt(id, 10)
-			sql, a := sqlite.Delete("refresh_tokens").
-				Where("entity_type = 'admin'").
-				Where("entity_id = ?", idStr).
-				Build()
-			_, _ = db.Exec(sql, a...)
+		idStrs := make([]any, len(req.IDs))
+		for i, id := range req.IDs {
+			idStrs[i] = strconv.FormatInt(id, 10)
 		}
+		query, args = sqlite.Delete("refresh_tokens").
+			Where("entity_type = 'admin'").
+			WhereIn("entity_id", idStrs...).
+			Build()
+		_, _ = db.Exec(query, args...)
 
 		for _, id := range req.IDs {
 			adminaudit.Log(db, r, "admin.delete", "admin", strconv.FormatInt(id, 10), "bulk")
