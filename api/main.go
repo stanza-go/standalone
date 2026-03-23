@@ -393,6 +393,75 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 		return nil, fmt.Errorf("cron add purge-old-notifications: %w", err)
 	}
 
+	// Purge webhook deliveries older than 30 days, daily at 5:30 AM.
+	if err := s.Add("purge-old-webhook-deliveries", "30 5 * * *", func(ctx context.Context) error {
+		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
+		n, err := db.Delete(sqlite.Delete("webhook_deliveries").Where("created_at < ?", cutoff))
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			logger.Info("purged old webhook deliveries", log.Int64("count", n))
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-old-webhook-deliveries: %w", err)
+	}
+
+	// Purge soft-deleted uploads older than 30 days (DB records + files on disk),
+	// daily at 6:00 AM. Queries storage paths first to remove files, then
+	// hard-deletes the records.
+	if err := s.Add("purge-deleted-uploads", "0 6 * * *", func(ctx context.Context) error {
+		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
+
+		// Get storage paths of soft-deleted uploads to remove files from disk.
+		sql, args := sqlite.Select("storage_path").From("uploads").
+			WhereNotNull("deleted_at").
+			Where("deleted_at < ?", cutoff).
+			Build()
+		paths, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (string, error) {
+			var p string
+			err := rows.Scan(&p)
+			return p, err
+		})
+		if err != nil {
+			return err
+		}
+		if len(paths) == 0 {
+			return nil
+		}
+
+		// Remove upload directories from disk. Each storage_path is
+		// "YYYY/MM/DD/uuid/filename" — removing the parent (uuid dir)
+		// deletes both the file and its thumbnail.
+		var filesRemoved int
+		for _, p := range paths {
+			if p == "" {
+				continue
+			}
+			uuidDir := filepath.Join(dir.Uploads, filepath.Dir(p))
+			if err := os.RemoveAll(uuidDir); err == nil {
+				filesRemoved++
+			}
+		}
+
+		// Hard-delete DB records.
+		n, err := db.Delete(sqlite.Delete("uploads").
+			WhereNotNull("deleted_at").
+			Where("deleted_at < ?", cutoff))
+		if err != nil {
+			return err
+		}
+
+		logger.Info("purged deleted uploads",
+			log.Int64("records", n),
+			log.Int("directories", filesRemoved),
+		)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("cron add purge-deleted-uploads: %w", err)
+	}
+
 	// Automated daily backup at 2:00 AM — uses VACUUM INTO for a consistent,
 	// compacted copy that includes all WAL data. 30-minute timeout because
 	// VACUUM INTO can be slow on large databases.
