@@ -153,7 +153,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		v := validate.Fields(
 			validate.Required("url", req.URL),
-			validate.URL("url", req.URL),
+			validate.PublicURL("url", req.URL),
 		)
 		if v.HasErrors() {
 			v.WriteError(w)
@@ -253,7 +253,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		ub := sqlite.Update("webhooks").Set("updated_at", now).Where("id = ?", id)
 
 		if req.URL != nil {
-			if fe := validate.URL("url", *req.URL); fe != nil {
+			if fe := validate.PublicURL("url", *req.URL); fe != nil {
 				http.WriteError(w, http.StatusBadRequest, fe.Message)
 				return
 			}
