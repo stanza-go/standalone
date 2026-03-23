@@ -1,10 +1,10 @@
 # Multi-stage Dockerfile for Stanza standalone application.
 #
-# Build context: workspace root (parent of standalone/).
+# Build context: the project root (where this Dockerfile lives).
 # The framework is fetched from the Go module proxy (github.com/stanza-go/framework).
 #
 # Build:
-#   docker build -t stanza -f standalone/Dockerfile .
+#   docker build -t stanza .
 #
 # Run:
 #   docker run -p 23710:23710 -v stanza-data:/data stanza
@@ -17,21 +17,21 @@ FROM oven/bun:1 AS frontend
 WORKDIR /build
 
 # Install UI dependencies
-COPY standalone/ui/package.json standalone/ui/bun.lock standalone/ui/
-RUN cd standalone/ui && bun install --frozen-lockfile
+COPY ui/package.json ui/bun.lock ui/
+RUN cd ui && bun install --frozen-lockfile
 
 # Install admin dependencies
-COPY standalone/admin/package.json standalone/admin/bun.lock standalone/admin/
-RUN cd standalone/admin && bun install --frozen-lockfile
+COPY admin/package.json admin/bun.lock admin/
+RUN cd admin && bun install --frozen-lockfile
 
 # Build UI
-COPY standalone/ui/ standalone/ui/
-RUN cd standalone/ui && bun run build
+COPY ui/ ui/
+RUN cd ui && bun run build
 
 # Build admin (ARG busts Docker cache when source changes)
 ARG CACHE_BUST_ADMIN=1
-COPY standalone/admin/ standalone/admin/
-RUN cd standalone/admin && bun run build
+COPY admin/ admin/
+RUN cd admin && bun run build
 
 # ---------------------------------------------------------------------------
 # Stage 2: Build Go binary with embedded frontend assets (Alpine for musl)
@@ -43,15 +43,15 @@ RUN apk add --no-cache gcc musl-dev
 WORKDIR /build
 
 # Download Go dependencies (framework fetched from Go module proxy)
-COPY standalone/api/go.mod standalone/api/go.sum* standalone/api/
-RUN cd standalone/api && go mod download
+COPY api/go.mod api/go.sum* api/
+RUN cd api && go mod download
 
 # Copy application source
-COPY standalone/api/ standalone/api/
+COPY api/ api/
 
 # Copy built frontend assets into embed directories
-COPY --from=frontend /build/standalone/ui/dist standalone/api/ui/dist
-COPY --from=frontend /build/standalone/admin/dist standalone/api/admin/dist
+COPY --from=frontend /build/ui/dist api/ui/dist
+COPY --from=frontend /build/admin/dist api/admin/dist
 
 # Build metadata — explicit args or auto-detected from Railway env.
 # Railway injects RAILWAY_GIT_COMMIT_SHA automatically during builds.
@@ -69,7 +69,7 @@ RUN COMMIT="${BUILD_COMMIT}"; \
     if [ "${BUILD_TS}" = "unknown" ]; then \
         BUILD_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ); \
     fi; \
-    cd standalone/api && GOWORK=off CGO_ENABLED=1 go build -tags prod \
+    cd api && GOWORK=off CGO_ENABLED=1 go build -tags prod \
         -ldflags="-s -w \
             -X main.version=${BUILD_VERSION} \
             -X main.commit=${COMMIT} \

@@ -5,11 +5,11 @@
 **/node_modules
 
 # Build artifacts
-standalone/api/bin
-standalone/api/ui
-standalone/api/admin
-standalone/ui/dist
-standalone/admin/dist
+api/bin
+api/ui
+api/admin
+ui/dist
+admin/dist
 
 # Data and state
 **/.stanza
@@ -25,9 +25,9 @@ standalone/admin/dist
 # Playwright
 **/.playwright-cli
 
-# Docs and CLI (not needed for standalone build)
-docs/
-cli/
+# E2E tests and load test (not needed for production build)
+e2e/
+loadtest/
 
 # Images
 **/*.png

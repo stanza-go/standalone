@@ -38,13 +38,13 @@ build-api:
 			-X main.buildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		-o bin/standalone .
 
-# Docker — build production image from workspace root
+# Docker — build production image
 docker:
-	docker build -t stanza -f Dockerfile \
-		--build-arg BUILD_VERSION=$$(cd .. && git -C standalone describe --tags --always --dirty 2>/dev/null || echo dev) \
-		--build-arg BUILD_COMMIT=$$(cd .. && git -C standalone rev-parse --short HEAD 2>/dev/null || echo unknown) \
+	docker build -t stanza \
+		--build-arg BUILD_VERSION=$$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
+		--build-arg BUILD_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
 		--build-arg BUILD_TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-		..
+		.
 
 # Code quality
 vet:
