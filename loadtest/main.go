@@ -45,7 +45,7 @@ func main() {
 	baseURL := flag.String("base", "http://localhost:23710", "base URL of the standalone server")
 	duration := flag.Duration("duration", 30*time.Second, "test duration")
 	concurrency := flag.Int("concurrency", 50, "number of concurrent workers")
-	scenario := flag.String("scenario", "all", "test scenario: health, auth, crud, dashboard, all")
+	scenario := flag.String("scenario", "all", "test scenario: health, auth, crud, dashboard, metrics-write, metrics-query, metrics-mixed, all")
 	adminEmail := flag.String("admin-email", "admin@stanza.dev", "admin email for auth")
 	adminPass := flag.String("admin-pass", "admin", "admin password for auth")
 	flag.Parse()
@@ -77,7 +77,7 @@ func main() {
 			}
 		}
 		if len(selected) == 0 {
-			fmt.Fprintf(os.Stderr, "Unknown scenario: %s\nAvailable: health, auth, crud, dashboard, all\n", *scenario)
+			fmt.Fprintf(os.Stderr, "Unknown scenario: %s\nAvailable: health, auth, crud, dashboard, metrics-write, metrics-query, metrics-mixed, all\n", *scenario)
 			os.Exit(1)
 		}
 	}
@@ -103,6 +103,14 @@ type requestDef struct {
 }
 
 func buildScenarios(base string, cookies []*http.Cookie) []testScenario {
+	// Time range for metrics queries (last hour).
+	now := time.Now().UTC()
+	start := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	end := now.Format(time.RFC3339)
+	q := func(name, step, fn string) string {
+		return base + "/api/admin/metrics/query?name=" + name + "&start=" + start + "&end=" + end + "&step=" + step + "&fn=" + fn
+	}
+
 	return []testScenario{
 		{
 			name: "health",
@@ -133,6 +141,46 @@ func buildScenarios(base string, cookies []*http.Cookie) []testScenario {
 				{name: "GET /admin/sessions", method: "GET", path: base + "/api/admin/sessions", cookies: cookies},
 				{name: "GET /admin/queue/stats", method: "GET", path: base + "/api/admin/queue/stats", cookies: cookies},
 				{name: "GET /admin/cron", method: "GET", path: base + "/api/admin/cron", cookies: cookies},
+			},
+		},
+		{
+			name: "metrics-write",
+			requests: []requestDef{
+				{name: "POST /metrics (pageview-home)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_pageviews","value":1,"labels":{"page":"/home","source":"organic"}}`},
+				{name: "POST /metrics (pageview-about)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_pageviews","value":1,"labels":{"page":"/about","source":"direct"}}`},
+				{name: "POST /metrics (click-signup)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_clicks","value":1,"labels":{"button":"signup","variant":"blue"}}`},
+				{name: "POST /metrics (click-login)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_clicks","value":1,"labels":{"button":"login","variant":"default"}}`},
+				{name: "POST /metrics (timing-fast)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_page_load","value":150,"labels":{"page":"/home"}}`},
+				{name: "POST /metrics (timing-slow)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_page_load","value":2500,"labels":{"page":"/search"}}`},
+				{name: "POST /metrics (batch-3)", method: "POST", path: base + "/api/metrics",
+					body: `{"metrics":[{"name":"loadtest_events","value":1,"labels":{"event":"scroll"}},{"name":"loadtest_events","value":1,"labels":{"event":"click"}},{"name":"loadtest_events","value":1,"labels":{"event":"hover"}}]}`},
+			},
+		},
+		{
+			name: "metrics-query",
+			requests: []requestDef{
+				{name: "GET /metrics/query (http-1m)", method: "GET", path: q("http_requests", "1m", "sum"), cookies: cookies},
+				{name: "GET /metrics/query (http-5m)", method: "GET", path: q("http_requests", "5m", "sum"), cookies: cookies},
+				{name: "GET /metrics/query (goroutines)", method: "GET", path: q("go_goroutines", "1m", "last"), cookies: cookies},
+				{name: "GET /metrics/query (heap)", method: "GET", path: q("go_heap_alloc_bytes", "1m", "last"), cookies: cookies},
+				{name: "GET /metrics/query (loadtest)", method: "GET", path: q("client_loadtest_pageviews", "1m", "sum"), cookies: cookies},
+			},
+		},
+		{
+			name: "metrics-mixed",
+			requests: []requestDef{
+				{name: "POST /metrics (write)", method: "POST", path: base + "/api/metrics",
+					body: `{"name":"loadtest_mixed","value":1,"labels":{"op":"write"}}`},
+				{name: "GET /metrics/query (read-http)", method: "GET", path: q("http_requests", "1m", "sum"), cookies: cookies},
+				{name: "POST /metrics (write-batch)", method: "POST", path: base + "/api/metrics",
+					body: `{"metrics":[{"name":"loadtest_mixed","value":1,"labels":{"op":"batch_a"}},{"name":"loadtest_mixed","value":1,"labels":{"op":"batch_b"}}]}`},
+				{name: "GET /metrics/query (read-mixed)", method: "GET", path: q("client_loadtest_mixed", "1m", "count"), cookies: cookies},
 			},
 		},
 	}
@@ -226,6 +274,9 @@ func executeRequest(client *http.Client, rd requestDef) result {
 	req, err := http.NewRequest(rd.method, rd.path, body)
 	if err != nil {
 		return result{endpoint: rd.name, err: err}
+	}
+	if rd.body != "" {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	for _, c := range rd.cookies {
 		req.AddCookie(c)
