@@ -37,9 +37,11 @@ import {
   IconPlus,
   IconSearch,
   IconTrash,
+  IconWebhook,
   IconX,
 } from "@tabler/icons-react";
 import { get, post, put, del, downloadCSV, ApiError } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
@@ -333,6 +335,13 @@ export default function WebhooksPage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : webhooks.length === 0 ? (
+        <EmptyState
+          icon={<IconWebhook size={24} />}
+          title={search ? "No webhooks match your search" : "No webhooks configured"}
+          description={search ? "Try a different search term." : "Set up webhooks to notify external services of events."}
+          action={!search ? <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>Create Webhook</Button> : undefined}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={600}>
@@ -362,16 +371,7 @@ export default function WebhooksPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {webhooks.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={7}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {search ? "No webhooks match your search" : "No webhooks configured"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  webhooks.map((wh, idx) => (
+                {webhooks.map((wh, idx) => (
                     <Table.Tr
                       key={wh.id}
                       bg={selection.isSelected(wh.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -433,8 +433,7 @@ export default function WebhooksPage() {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

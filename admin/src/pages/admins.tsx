@@ -32,9 +32,11 @@ import {
   IconPlus,
   IconSearch,
   IconTrash,
+  IconShield,
   IconX,
 } from "@tabler/icons-react";
 import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useAuth } from "@/lib/auth";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
@@ -295,6 +297,13 @@ export default function AdminsPage() {
 
       {loading && admins.length === 0 ? (
         <Group justify="center" pt="xl"><Loader /></Group>
+      ) : admins.length === 0 ? (
+        <EmptyState
+          icon={<IconShield size={24} />}
+          title={search ? "No admins match your search" : "No admin users yet"}
+          description={search ? "Try a different search term." : "Create an admin to manage your application."}
+          action={!search ? <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>Create Admin</Button> : undefined}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={700}>
@@ -331,16 +340,7 @@ export default function AdminsPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {admins.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={8}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {search ? "No admins match your search" : "No admins yet"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  admins.map((admin, idx) => (
+                {admins.map((admin, idx) => (
                     <Table.Tr
                       key={admin.id}
                       bg={selection.isSelected(admin.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -409,8 +409,7 @@ export default function AdminsPage() {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

@@ -35,9 +35,11 @@ import {
   IconPlus,
   IconSearch,
   IconTrash,
+  IconKey,
   IconX,
 } from "@tabler/icons-react";
 import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
@@ -258,6 +260,13 @@ export default function ApiKeysPage() {
 
       {loading && keys.length === 0 ? (
         <Group justify="center" pt="xl"><Loader /></Group>
+      ) : keys.length === 0 ? (
+        <EmptyState
+          icon={<IconKey size={24} />}
+          title={search ? "No keys match your search" : "No API keys yet"}
+          description={search ? "Try a different search term." : "Create an API key to authenticate external services."}
+          action={!search ? <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>Create API Key</Button> : undefined}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={800}>
@@ -291,14 +300,7 @@ export default function ApiKeysPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {keys.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={9}>
-                      <Text ta="center" c="dimmed" py="lg">{search ? "No keys match your search" : "No API keys yet"}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  keys.map((key, idx) => {
+                {keys.map((key, idx) => {
                     const status = keyStatus(key);
                     return (
                       <Table.Tr key={key.id} bg={selection.isSelected(key.id) ? "var(--mantine-primary-color-light)" : undefined} style={tableKeyboard.isFocused(idx) ? { outline: "2px solid var(--mantine-primary-color-filled)", outlineOffset: -2 } : undefined}>
@@ -346,8 +348,7 @@ export default function ApiKeysPage() {
                         </Table.Td>
                       </Table.Tr>
                     );
-                  })
-                )}
+                  })}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

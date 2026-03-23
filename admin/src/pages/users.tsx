@@ -35,9 +35,11 @@ import {
   IconSearch,
   IconTrash,
   IconUserCheck,
+  IconUsers,
   IconX,
 } from "@tabler/icons-react";
 import { del, downloadCSV, get, post, put, ApiError } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
@@ -304,6 +306,13 @@ export default function UsersPage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : users.length === 0 ? (
+        <EmptyState
+          icon={<IconUsers size={24} />}
+          title={search ? "No users match your search" : "No users yet"}
+          description={search ? "Try a different search term." : "Create your first user to get started."}
+          action={!search ? <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>Create User</Button> : undefined}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={700}>
@@ -337,16 +346,7 @@ export default function UsersPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {users.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={7}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {search ? "No users match your search" : "No users yet"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  users.map((user, idx) => (
+                {users.map((user, idx) => (
                     <Table.Tr
                       key={user.id}
                       bg={selection.isSelected(user.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -412,8 +412,7 @@ export default function UsersPage() {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

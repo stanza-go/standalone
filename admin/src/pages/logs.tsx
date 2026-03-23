@@ -29,9 +29,11 @@ import {
   IconSearch,
   IconWifi,
   IconWifiOff,
+  IconFileText,
   IconX,
 } from "@tabler/icons-react";
 import { get } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 
 interface LogEntry {
   time: string;
@@ -372,7 +374,11 @@ export default function LogsPage() {
             <Loader />
           </Group>
         ) : entries.length === 0 ? (
-          <Text ta="center" c="dimmed" py="xl">No log entries found</Text>
+          <EmptyState
+            icon={<IconFileText size={24} />}
+            title="No log entries"
+            description="Log entries will stream here in real-time."
+          />
         ) : (
           <Table.ScrollContainer minWidth={500}>
             <Table fz="sm">

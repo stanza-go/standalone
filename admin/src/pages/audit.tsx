@@ -29,9 +29,11 @@ import {
   IconDownload,
   IconFilter,
   IconSearch,
+  IconHistory,
   IconX,
 } from "@tabler/icons-react";
 import { get, downloadCSV } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSort } from "@/hooks/use-sort";
 import { useTableKeyboard } from "@/hooks/use-table-keyboard";
@@ -284,6 +286,12 @@ export default function AuditPage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : entries.length === 0 ? (
+        <EmptyState
+          icon={<IconHistory size={24} />}
+          title={hasFilters ? "No events match your filters" : "No audit events recorded yet"}
+          description={hasFilters ? "Try adjusting your filters." : "Audit events will appear here as actions are performed."}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={800}>
@@ -306,16 +314,7 @@ export default function AuditPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {entries.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={7}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {hasFilters ? "No events match your filters" : "No audit events recorded yet"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  entries.map((entry, idx) => {
+                {entries.map((entry, idx) => {
                     const isExpanded = expanded.has(entry.id);
                     return (
                       <Table.Tr
@@ -357,8 +356,7 @@ export default function AuditPage() {
                         </Table.Td>
                       </Table.Tr>
                     );
-                  })
-                )}
+                  })}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

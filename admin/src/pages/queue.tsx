@@ -40,6 +40,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { get, post } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useSelection } from "@/hooks/use-selection";
 import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
@@ -407,6 +408,12 @@ export default function QueuePage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          icon={<IconInbox size={24} />}
+          title={statusFilter || typeFilter || queueFilter ? "No jobs match your filters" : "No jobs found"}
+          description={statusFilter || typeFilter || queueFilter ? "Try adjusting your filters." : "Jobs will appear here when dispatched."}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={600}>
@@ -431,16 +438,7 @@ export default function QueuePage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {jobs.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={8}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {statusFilter || typeFilter || queueFilter ? "No jobs match your filters" : "No jobs found"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  jobs.map((job, idx) => (
+                {jobs.map((job, idx) => (
                     <Box key={job.id} component="tbody">
                       <Table.Tr
                         bg={selection.isSelected(job.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -517,8 +515,7 @@ export default function QueuePage() {
                         </Table.Tr>
                       )}
                     </Box>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

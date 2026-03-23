@@ -24,9 +24,11 @@ import {
   IconCheck,
   IconDownload,
   IconTrash,
+  IconLock,
   IconX,
 } from "@tabler/icons-react";
 import { del, downloadCSV, get, post } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useSort } from "@/hooks/use-sort";
 import { useTableKeyboard } from "@/hooks/use-table-keyboard";
 
@@ -176,6 +178,12 @@ export default function SessionsPage() {
 
       {loading ? (
         <Group justify="center" pt="xl"><Loader /></Group>
+      ) : sessions.length === 0 ? (
+        <EmptyState
+          icon={<IconLock size={24} />}
+          title="No active sessions"
+          description="Sessions will appear here when users log in."
+        />
       ) : (
         <Table.ScrollContainer minWidth={700}>
           <Table>
@@ -204,14 +212,7 @@ export default function SessionsPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody {...tableKeyboard.tbodyProps}>
-              {sessions.length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={7}>
-                    <Text ta="center" c="dimmed" py="lg">No active sessions</Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                sessions.map((session, idx) => (
+              {sessions.map((session, idx) => (
                   <Table.Tr
                     key={session.id}
                     bg={selected.has(session.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -255,8 +256,7 @@ export default function SessionsPage() {
                       </Group>
                     </Table.Td>
                   </Table.Tr>
-                ))
-              )}
+                ))}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>

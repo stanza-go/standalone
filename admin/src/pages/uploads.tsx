@@ -38,6 +38,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { get, del, post, upload as uploadFile, downloadCSV } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
 import { useTableKeyboard } from "@/hooks/use-table-keyboard";
@@ -278,6 +279,12 @@ export default function UploadsPage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : uploads.length === 0 ? (
+        <EmptyState
+          icon={<IconUpload size={24} />}
+          title={typeFilter ? "No uploads match this filter" : "No files uploaded"}
+          description={typeFilter ? "Try a different filter." : "Uploaded files will appear here."}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={600}>
@@ -310,16 +317,7 @@ export default function UploadsPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {uploads.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={8}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {typeFilter ? "No uploads match this filter" : "No uploads found"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  uploads.map((u, idx) => (
+                {uploads.map((u, idx) => (
                     <Table.Tr
                       key={u.id}
                       bg={selection.isSelected(u.id) ? "var(--mantine-primary-color-light)" : undefined}
@@ -405,8 +403,7 @@ export default function UploadsPage() {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>

@@ -23,9 +23,11 @@ import {
   IconCheck,
   IconPencil,
   IconPlus,
+  IconShieldLock,
   IconTrash,
 } from "@tabler/icons-react";
 import { del, get, post, put, ApiError } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 
 interface Role {
   id: number;
@@ -188,6 +190,13 @@ export default function RolesPage() {
 
       {loading ? (
         <Group justify="center" pt="xl"><Loader /></Group>
+      ) : roles.length === 0 ? (
+        <EmptyState
+          icon={<IconShieldLock size={24} />}
+          title="No roles defined"
+          description="Create roles to manage admin permissions."
+          action={<Button leftSection={<IconPlus size={16} />} onClick={() => { createForm.reset(); createForm.setFieldValue("scopes", ["admin"]); setCreateOpen(true); }}>Create Role</Button>}
+        />
       ) : (
         <Table.ScrollContainer minWidth={700}>
           <Table>
@@ -201,14 +210,7 @@ export default function RolesPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {roles.length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={5}>
-                    <Text ta="center" c="dimmed" py="lg">No roles yet</Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                roles.map((role) => (
+              {roles.map((role) => (
                   <Table.Tr key={role.id}>
                     <Table.Td>
                       <Group gap={6}>
@@ -251,8 +253,7 @@ export default function RolesPage() {
                       </Group>
                     </Table.Td>
                   </Table.Tr>
-                ))
-              )}
+                ))}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>

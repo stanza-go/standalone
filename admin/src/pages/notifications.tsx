@@ -35,6 +35,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { get, post, del, downloadCSV } from "@/lib/api";
+import { EmptyState } from "@/components/empty-state";
 import { useSort } from "@/hooks/use-sort";
 import { useSelection } from "@/hooks/use-selection";
 import { useTableKeyboard } from "@/hooks/use-table-keyboard";
@@ -287,6 +288,12 @@ export default function NotificationsPage() {
         <Group justify="center" pt="xl">
           <Loader />
         </Group>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={<IconBell size={24} />}
+          title={unreadOnly === "unread" ? "No unread notifications" : "No notifications yet"}
+          description={unreadOnly === "unread" ? "You're all caught up!" : "Notifications will appear here."}
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={500}>
@@ -313,16 +320,7 @@ export default function NotificationsPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody {...tableKeyboard.tbodyProps}>
-                {items.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Text ta="center" c="dimmed" py="lg">
-                        {unreadOnly === "unread" ? "No unread notifications" : "No notifications yet"}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  items.map((n, idx) => (
+                {items.map((n, idx) => (
                     <Table.Tr
                       key={n.id}
                       bg={
@@ -382,8 +380,7 @@ export default function NotificationsPage() {
                         </Group>
                       </Table.Td>
                     </Table.Tr>
-                  ))
-                )}
+                  ))}
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
