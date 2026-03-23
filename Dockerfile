@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Stanza standalone application.
 #
-# Build context must be the workspace root (parent of standalone/ and framework/)
-# because go.mod uses a replace directive pointing to ../../framework.
+# Build context: workspace root (parent of standalone/).
+# The framework is fetched from the Go module proxy (github.com/stanza-go/framework).
 #
 # Build:
 #   docker build -t stanza -f standalone/Dockerfile .
@@ -42,10 +42,7 @@ RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build
 
-# Copy framework source (required by replace directive in go.mod)
-COPY framework/ framework/
-
-# Download Go dependencies
+# Download Go dependencies (framework fetched from Go module proxy)
 COPY standalone/api/go.mod standalone/api/go.sum* standalone/api/
 RUN cd standalone/api && go mod download
 
@@ -72,7 +69,7 @@ RUN COMMIT="${BUILD_COMMIT}"; \
     if [ "${BUILD_TS}" = "unknown" ]; then \
         BUILD_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ); \
     fi; \
-    cd standalone/api && CGO_ENABLED=1 go build -tags prod \
+    cd standalone/api && GOWORK=off CGO_ENABLED=1 go build -tags prod \
         -ldflags="-s -w \
             -X main.version=${BUILD_VERSION} \
             -X main.commit=${COMMIT} \
