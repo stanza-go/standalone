@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
+	"github.com/stanza-go/framework/pkg/cmd"
 	"github.com/stanza-go/framework/pkg/config"
 	"github.com/stanza-go/framework/pkg/cron"
 	"github.com/stanza-go/framework/pkg/email"
@@ -72,6 +74,28 @@ type signingKey struct{ key []byte }
 type userAuth struct{ *auth.Auth }
 
 func main() {
+	v := version
+	if v == "" {
+		v = "dev"
+	}
+
+	cli := cmd.New("standalone",
+		cmd.WithVersion(v),
+		cmd.WithDescription("Stanza standalone application server"),
+		cmd.WithDefaultCommand("serve"),
+	)
+
+	cli.Command("serve", "Start the application server", serveCmd)
+	cli.Command("version", "Print version and build information", versionCmd)
+	cli.Command("check", "Validate configuration and database connectivity", checkCmd)
+
+	if err := cli.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func serveCmd(_ *cmd.Context) error {
 	app := lifecycle.New(
 		lifecycle.Provide(provideDataDir),
 		lifecycle.Provide(provideConfig),
@@ -91,11 +115,116 @@ func main() {
 		lifecycle.Invoke(registerModules),
 	)
 
-	if err := app.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
-		os.Exit(1)
-	}
+	return app.Run()
 }
+
+func versionCmd(_ *cmd.Context) error {
+	v := version
+	if v == "" {
+		v = "dev"
+	}
+	c := commit
+	if c == "" {
+		c = "unknown"
+	}
+	bt := buildTime
+	if bt == "" {
+		bt = "unknown"
+	}
+
+	fmt.Printf("standalone %s\n", v)
+	fmt.Printf("  commit:     %s\n", c)
+	fmt.Printf("  built at:   %s\n", bt)
+	fmt.Printf("  go version: %s\n", runtime.Version())
+	return nil
+}
+
+func checkCmd(_ *cmd.Context) error {
+	// 1. Data directory.
+	dir, err := datadir.Resolve()
+	if err != nil {
+		return fmt.Errorf("data directory: %w", err)
+	}
+	fmt.Printf("data dir:    %s\n", dir.Root)
+
+	// 2. Config.
+	cfg, err := config.Load(dir.Config,
+		config.WithEnvPrefix("STANZA"),
+		config.WithDefaults(map[string]string{
+			"server.addr": ":23710",
+			"log.level":   "info",
+		}),
+	)
+	if err != nil {
+		fmt.Printf("config:      %s (defaults only)\n", dir.Config)
+		cfg = config.New(
+			config.WithEnvPrefix("STANZA"),
+			config.WithDefaults(map[string]string{
+				"server.addr": ":23710",
+				"log.level":   "info",
+			}),
+		)
+	} else {
+		fmt.Printf("config:      %s\n", dir.Config)
+	}
+	fmt.Printf("server addr: %s\n", cfg.GetStringOr("server.addr", ":23710"))
+	fmt.Printf("log level:   %s\n", cfg.GetStringOr("log.level", "info"))
+
+	// 3. Database connectivity.
+	db := sqlite.New(dir.DB)
+	if err := db.Start(context.Background()); err != nil {
+		return fmt.Errorf("database: %w", err)
+	}
+
+	if info, err := os.Stat(dir.DB); err == nil {
+		fmt.Printf("database:    %s (%s)\n", dir.DB, formatBytes(info.Size()))
+	} else {
+		fmt.Printf("database:    %s (new)\n", dir.DB)
+	}
+
+	// Count applied migrations.
+	var migrationCount int
+	row := db.QueryRow("SELECT count(*) FROM _migrations")
+	if err := row.Scan(&migrationCount); err != nil {
+		fmt.Printf("migrations:  unknown (table may not exist yet)\n")
+	} else {
+		fmt.Printf("migrations:  %d applied\n", migrationCount)
+	}
+
+	if err := db.Stop(context.Background()); err != nil {
+		return fmt.Errorf("database close: %w", err)
+	}
+
+	// 4. Optional services.
+	if cfg.GetString("auth.signing_key") != "" {
+		fmt.Printf("signing key: configured\n")
+	} else {
+		fmt.Printf("signing key: not set (random key on each start)\n")
+	}
+
+	if cfg.GetString("email.resend_api_key") != "" {
+		fmt.Printf("email:       configured\n")
+	} else {
+		fmt.Printf("email:       not configured (emails disabled)\n")
+	}
+
+	fmt.Printf("\nAll checks passed.\n")
+	return nil
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
 
 func provideDataDir() (*datadir.Dir, error) {
 	return datadir.Resolve()
