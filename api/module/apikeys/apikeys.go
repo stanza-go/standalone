@@ -116,7 +116,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if err := rows.Scan(&id, &name, &keyPrefix, &scopes, &entityType, &entityID, &requestCount, &lastUsedAt, &expiresAt, &createdAt, &revokedAt); err != nil {
 				return nil
 			}
-			return []string{strconv.FormatInt(id, 10), name, keyPrefix, scopes, entityType, entityID, strconv.FormatInt(requestCount, 10), lastUsedAt, expiresAt, createdAt, revokedAt}
+			return []string{sqlite.FormatID(id), name, keyPrefix, scopes, entityType, entityID, strconv.FormatInt(requestCount, 10), lastUsedAt, expiresAt, createdAt, revokedAt}
 		})
 	}
 }
@@ -171,7 +171,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		entityID := strconv.FormatInt(createdBy, 10)
+		entityID := sqlite.FormatID(createdBy)
 		q := sqlite.Insert("api_keys").
 			Set("name", req.Name).
 			Set("key_prefix", prefix).
@@ -185,18 +185,17 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			q.Set("expires_at", req.ExpiresAt)
 		}
 
-		sql, args := q.Build()
-		result, err := db.Exec(sql, args...)
+		id, err := db.Insert(q)
 		if err != nil {
 			http.WriteServerError(w, r, "failed to create api key", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "api_key.create", "api_key", strconv.FormatInt(result.LastInsertID, 10), req.Name)
+		adminaudit.Log(db, r, "api_key.create", "api_key", sqlite.FormatID(id), req.Name)
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"api_key": map[string]any{
-				"id":          result.LastInsertID,
+				"id":          id,
 				"name":        req.Name,
 				"key":         fullKey,
 				"key_prefix":  prefix,
@@ -261,12 +260,10 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			scopes = req.Scopes
 		}
 
-		sql, args = sqlite.Update("api_keys").
+		if _, err := db.Update(sqlite.Update("api_keys").
 			Set("name", name).
 			Set("scopes", scopes).
-			Where("id = ?", id).
-			Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+			Where("id = ?", id)); err != nil {
 			http.WriteServerError(w, r, "failed to update api key", err)
 			return
 		}
@@ -275,7 +272,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		current.Name = name
 		current.Scopes = scopes
 
-		adminaudit.Log(db, r, "api_key.update", "api_key", strconv.FormatInt(id, 10), name)
+		adminaudit.Log(db, r, "api_key.update", "api_key", sqlite.FormatID(id), name)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"api_key": current,
@@ -291,22 +288,20 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("api_keys").
+		n, err := db.Update(sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).
-			Where("revoked_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("revoked_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to revoke api key", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "api key not found or already revoked")
 			return
 		}
 
-		adminaudit.Log(db, r, "api_key.revoke", "api_key", strconv.FormatInt(id, 10), "")
+		adminaudit.Log(db, r, "api_key.revoke", "api_key", sqlite.FormatID(id), "")
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
@@ -333,24 +328,22 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			ids[i] = id
 		}
 
-		query, args := sqlite.Update("api_keys").
+		n, err := db.Update(sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("revoked_at IS NULL").
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(query, args...)
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk revoke api keys", err)
 			return
 		}
 
 		for _, id := range req.IDs {
-			adminaudit.Log(db, r, "api_key.revoke", "api_key", strconv.FormatInt(id, 10), "bulk")
+			adminaudit.Log(db, r, "api_key.revoke", "api_key", sqlite.FormatID(id), "bulk")
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }

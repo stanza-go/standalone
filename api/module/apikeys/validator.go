@@ -2,7 +2,6 @@ package apikeys
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -77,7 +76,7 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 		}
 
 		return auth.Claims{
-			UID:    "apikey:" + strconv.FormatInt(id, 10),
+			UID:    "apikey:" + sqlite.FormatID(id),
 			Scopes: scopeList,
 		}, nil
 	}

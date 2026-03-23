@@ -6,7 +6,6 @@ package adminnotifications
 
 import (
 	"encoding/json"
-	"strconv"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -120,7 +119,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if err := rows.Scan(&id, &typ, &title, &message, &readAt, &createdAt); err != nil {
 				return nil
 			}
-			return []string{strconv.FormatInt(id, 10), typ, title, message, readAt, createdAt}
+			return []string{sqlite.FormatID(id), typ, title, message, readAt, createdAt}
 		})
 	}
 }
@@ -148,20 +147,18 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("notifications").
+		n, err := db.Update(sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("id = ?", id).
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID).
-			Where("read_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("read_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notification as read", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "notification not found or already read")
 			return
 		}
@@ -176,13 +173,11 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 		adminID := claims.IntUID()
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("notifications").
+		n, err := db.Update(sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID).
-			Where("read_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("read_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notifications as read", err)
 			return
@@ -190,7 +185,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
-			"marked":  result.RowsAffected,
+			"marked":  n,
 		})
 	}
 }
@@ -351,12 +346,10 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			ids[i] = id
 		}
 
-		query, args := sqlite.Delete("notifications").
+		n, err := db.Delete(sqlite.Delete("notifications").
 			Where("entity_type = ?", notifications.EntityAdmin).
 			Where("entity_id = ?", adminID).
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(query, args...)
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk delete notifications", err)
 			return
@@ -364,7 +357,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }
@@ -379,18 +372,16 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		sql, args := sqlite.Delete("notifications").
+		n, err := db.Delete(sqlite.Delete("notifications").
 			Where("id = ?", id).
 			Where("entity_type = ?", notifications.EntityAdmin).
-			Where("entity_id = ?", adminID).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("entity_id = ?", adminID))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete notification", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "notification not found")
 			return
 		}

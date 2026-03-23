@@ -159,7 +159,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if hasThumbnail {
 				thumb = "Yes"
 			}
-			return []string{strconv.FormatInt(id, 10), uuid, originalName, ct, strconv.FormatInt(sizeBytes, 10), thumb, uploadedBy, et, entityID, createdAt, deletedAt}
+			return []string{sqlite.FormatID(id), uuid, originalName, ct, strconv.FormatInt(sizeBytes, 10), thumb, uploadedBy, et, entityID, createdAt, deletedAt}
 		})
 	}
 }
@@ -248,7 +248,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		entityID := r.FormValue("entity_id")
 
 		// Insert into DB.
-		sql, args := sqlite.Insert("uploads").
+		id, err := db.Insert(sqlite.Insert("uploads").
 			Set("uuid", uploadUUID).
 			Set("original_name", originalName).
 			Set("stored_name", storedName).
@@ -258,21 +258,19 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 			Set("has_thumbnail", hasThumbnail).
 			Set("uploaded_by", uploadedBy).
 			Set("entity_type", entityType).
-			Set("entity_id", entityID).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Set("entity_id", entityID))
 		if err != nil {
 			_ = os.RemoveAll(dirPath)
 			http.WriteServerError(w, r, "failed to save upload record", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "upload.create", "upload", strconv.FormatInt(result.LastInsertID, 10),
+		adminaudit.Log(db, r, "upload.create", "upload", sqlite.FormatID(id),
 			fmt.Sprintf("file=%s size=%d type=%s", originalName, written, contentType))
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"upload": uploadJSON{
-				ID:           result.LastInsertID,
+				ID:           id,
 				UUID:         uploadUUID,
 				OriginalName: originalName,
 				ContentType:  contentType,
@@ -314,22 +312,20 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("uploads").
+		n, err := db.Update(sqlite.Update("uploads").
 			Set("deleted_at", now).
 			Where("id = ?", id).
-			WhereNull("deleted_at").
-			Build()
-		result, err := db.Exec(sql, args...)
+			WhereNull("deleted_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete upload", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "upload not found or already deleted")
 			return
 		}
 
-		adminaudit.Log(db, r, "upload.delete", "upload", strconv.FormatInt(id, 10), "")
+		adminaudit.Log(db, r, "upload.delete", "upload", sqlite.FormatID(id), "")
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
@@ -449,24 +445,22 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			ids[i] = id
 		}
 
-		query, args := sqlite.Update("uploads").
+		n, err := db.Update(sqlite.Update("uploads").
 			Set("deleted_at", now).
 			WhereNull("deleted_at").
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(query, args...)
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk delete uploads", err)
 			return
 		}
 
 		for _, id := range req.IDs {
-			adminaudit.Log(db, r, "upload.delete", "upload", strconv.FormatInt(id, 10), "bulk")
+			adminaudit.Log(db, r, "upload.delete", "upload", sqlite.FormatID(id), "bulk")
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }

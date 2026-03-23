@@ -5,7 +5,6 @@ package adminwebhooks
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -136,7 +135,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if active {
 				isActive = "Yes"
 			}
-			return []string{strconv.FormatInt(id, 10), url, description, eventsStr, isActive, strconv.FormatInt(createdBy, 10), createdAt, updatedAt}
+			return []string{sqlite.FormatID(id), url, description, eventsStr, isActive, sqlite.FormatID(createdBy), createdAt, updatedAt}
 		})
 	}
 }
@@ -173,7 +172,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		createdBy := claims.IntUID()
 
-		sql, args := sqlite.Insert("webhooks").
+		id, err := db.Insert(sqlite.Insert("webhooks").
 			Set("url", req.URL).
 			Set("secret", secret).
 			Set("description", req.Description).
@@ -181,18 +180,16 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Set("is_active", true).
 			Set("created_by", createdBy).
 			Set("created_at", now).
-			Set("updated_at", now).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Set("updated_at", now))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to create webhook", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "webhook.create", "webhook", strconv.FormatInt(result.LastInsertID, 10), req.URL)
+		adminaudit.Log(db, r, "webhook.create", "webhook", sqlite.FormatID(id), req.URL)
 
 		http.WriteJSON(w, http.StatusCreated, webhookJSON{
-			ID:          result.LastInsertID,
+			ID:          id,
 			URL:         req.URL,
 			Secret:      secret,
 			Description: req.Description,
@@ -275,13 +272,12 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			ub = ub.Set("is_active", *req.IsActive)
 		}
 
-		sql, args := ub.Build()
-		result, err := db.Exec(sql, args...)
+		n, err := db.Update(ub)
 		if err != nil {
 			http.WriteServerError(w, r, "failed to update webhook", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "webhook not found")
 			return
 		}
@@ -289,7 +285,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		adminaudit.Log(db, r, "webhook.update", "webhook", id, "")
 
 		// Return updated webhook.
-		sql, args = sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
+		sql, args := sqlite.Select("id", "url", "secret", "description", "events", "is_active", "created_by", "created_at", "updated_at").
 			From("webhooks").
 			Where("id = ?", id).
 			Build()
@@ -322,27 +318,23 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		// Delete deliveries first (FK constraint).
-		dq, da := sqlite.Delete("webhook_deliveries").
-			WhereIn("webhook_id", ids...).
-			Build()
-		_, _ = db.Exec(dq, da...)
+		_, _ = db.Delete(sqlite.Delete("webhook_deliveries").
+			WhereIn("webhook_id", ids...))
 
-		dq, da = sqlite.Delete("webhooks").
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(dq, da...)
+		n, err := db.Delete(sqlite.Delete("webhooks").
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk delete webhooks", err)
 			return
 		}
 
 		for _, id := range req.IDs {
-			adminaudit.Log(db, r, "webhook.delete", "webhook", strconv.FormatInt(id, 10), "bulk")
+			adminaudit.Log(db, r, "webhook.delete", "webhook", sqlite.FormatID(id), "bulk")
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }
@@ -352,16 +344,14 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		id := r.PathValue("id")
 
 		// Delete deliveries first (FK constraint).
-		dq, da := sqlite.Delete("webhook_deliveries").Where("webhook_id = ?", id).Build()
-		_, _ = db.Exec(dq, da...)
+		_, _ = db.Delete(sqlite.Delete("webhook_deliveries").Where("webhook_id = ?", id))
 
-		dq, da = sqlite.Delete("webhooks").Where("id = ?", id).Build()
-		result, err := db.Exec(dq, da...)
+		n, err := db.Delete(sqlite.Delete("webhooks").Where("id = ?", id))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete webhook", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "webhook not found")
 			return
 		}

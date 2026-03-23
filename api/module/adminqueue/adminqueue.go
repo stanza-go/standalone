@@ -4,7 +4,6 @@
 package adminqueue
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -146,7 +145,7 @@ func bulkRetryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *
 		for _, id := range req.IDs {
 			if err := q.Retry(id); err == nil {
 				affected++
-				adminaudit.Log(db, r, "job.retry", "job", strconv.FormatInt(id, 10), "bulk")
+				adminaudit.Log(db, r, "job.retry", "job", sqlite.FormatID(id), "bulk")
 			}
 		}
 
@@ -174,7 +173,7 @@ func bulkCancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, 
 		for _, id := range req.IDs {
 			if err := q.Cancel(id); err == nil {
 				affected++
-				adminaudit.Log(db, r, "job.cancel", "job", strconv.FormatInt(id, 10), "bulk")
+				adminaudit.Log(db, r, "job.cancel", "job", sqlite.FormatID(id), "bulk")
 			}
 		}
 
@@ -195,7 +194,7 @@ func retryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *http
 			http.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		adminaudit.Log(db, r, "job.retry", "job", strconv.FormatInt(id, 10), "")
+		adminaudit.Log(db, r, "job.retry", "job", sqlite.FormatID(id), "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})
@@ -212,7 +211,7 @@ func cancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *htt
 			http.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		adminaudit.Log(db, r, "job.cancel", "job", strconv.FormatInt(id, 10), "")
+		adminaudit.Log(db, r, "job.cancel", "job", sqlite.FormatID(id), "")
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok": true,
 		})

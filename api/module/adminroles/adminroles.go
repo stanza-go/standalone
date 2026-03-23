@@ -139,13 +139,11 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		req.Scopes = ensureBaseScope(req.Scopes)
 
 		now := sqlite.Now()
-		sql, args := sqlite.Insert("roles").
+		roleID, err := db.Insert(sqlite.Insert("roles").
 			Set("name", req.Name).
 			Set("description", req.Description).
 			Set("created_at", now).
-			Set("updated_at", now).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Set("updated_at", now))
 		if err != nil {
 			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "role name already exists")
@@ -154,14 +152,12 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			http.WriteServerError(w, r, "failed to create role", err)
 			return
 		}
-
-		roleID := result.LastInsertID
 		if err := saveScopes(db, roleID, req.Scopes); err != nil {
 			http.WriteServerError(w, r, "failed to save scopes", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "role.create", "role", strconv.FormatInt(roleID, 10), req.Name)
+		adminaudit.Log(db, r, "role.create", "role", sqlite.FormatID(roleID), req.Name)
 
 		_ = wh.Dispatch(r.Context(), "role.created", map[string]any{
 			"id":     roleID,
@@ -248,8 +244,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		if !isSystem {
 			q.Set("name", name)
 		}
-		sql, args = q.Where("id = ?", id).Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+		if _, err := db.Update(q.Where("id = ?", id)); err != nil {
 			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "role name already exists")
 				return
@@ -261,8 +256,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		// Update scopes if provided.
 		if req.Scopes != nil {
 			// Delete existing scopes.
-			sql, args = sqlite.Delete("role_scopes").Where("role_id = ?", id).Build()
-			if _, err := db.Exec(sql, args...); err != nil {
+			if _, err := db.Delete(sqlite.Delete("role_scopes").Where("role_id = ?", id)); err != nil {
 				http.WriteServerError(w, r, "failed to update scopes", err)
 				return
 			}
@@ -274,16 +268,14 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// If role was renamed and it's not a system role, update admins.
 		if !isSystem && name != currentName {
-			sql, args = sqlite.Update("admins").
+			_, _ = db.Update(sqlite.Update("admins").
 				Set("role", name).
-				Where("role = ?", currentName).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("role = ?", currentName))
 		}
 
 		scopes := loadScopes(db, id)
 
-		adminaudit.Log(db, r, "role.update", "role", strconv.FormatInt(id, 10), name)
+		adminaudit.Log(db, r, "role.update", "role", sqlite.FormatID(id), name)
 
 		_ = wh.Dispatch(r.Context(), "role.updated", map[string]any{
 			"id":     id,
@@ -340,16 +332,14 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 
 		// Delete scopes first (FK cascade should handle this, but be explicit).
-		sql, args = sqlite.Delete("role_scopes").Where("role_id = ?", id).Build()
-		_, _ = db.Exec(sql, args...)
+		_, _ = db.Delete(sqlite.Delete("role_scopes").Where("role_id = ?", id))
 
-		sql, args = sqlite.Delete("roles").Where("id = ?", id).Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+		if _, err := db.Delete(sqlite.Delete("roles").Where("id = ?", id)); err != nil {
 			http.WriteServerError(w, r, "failed to delete role", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "role.delete", "role", strconv.FormatInt(id, 10), name)
+		adminaudit.Log(db, r, "role.delete", "role", sqlite.FormatID(id), name)
 
 		_ = wh.Dispatch(r.Context(), "role.deleted", map[string]any{
 			"id":   id,
@@ -399,11 +389,9 @@ func loadScopes(db *sqlite.DB, roleID int64) []string {
 // saveScopes inserts scope rows for a role.
 func saveScopes(db *sqlite.DB, roleID int64, scopes []string) error {
 	for _, s := range scopes {
-		sql, args := sqlite.Insert("role_scopes").
+		if _, err := db.Insert(sqlite.Insert("role_scopes").
 			Set("role_id", roleID).
-			Set("scope", s).
-			Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+			Set("scope", s)); err != nil {
 			return err
 		}
 	}

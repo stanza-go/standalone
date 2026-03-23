@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -76,16 +75,13 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Insert("users").
+		id, err := db.Insert(sqlite.Insert("users").
 			Set("email", req.Email).
 			Set("password", passwordHash).
 			Set("name", req.Name).
 			Set("is_active", true).
 			Set("created_at", now).
-			Set("updated_at", now).
-			Build()
-
-		result, err := db.Exec(sql, args...)
+			Set("updated_at", now))
 		if err != nil {
 			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already registered")
@@ -94,9 +90,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
-
-		id := result.LastInsertID
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 
 		// Auto-login: issue tokens.
 		if err := issueSession(w, a, db, l, uid); err != nil {
@@ -166,7 +160,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 			return
 		}
 
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 
 		if err := issueSession(w, a, db, l, uid); err != nil {
 			return
@@ -211,8 +205,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 
 		expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 		if err != nil || time.Now().After(expiresAt) {
-			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "session expired")
 			return
@@ -228,14 +221,13 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 			Build()
 		row = db.QueryRow(sql, args...)
 		if err := row.Scan(&id, &email, &name); err != nil {
-			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "account deactivated")
 			return
 		}
 
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 
 		accessToken, err := a.IssueAccessToken(uid, []string{"user"})
 		if err != nil {
@@ -261,8 +253,7 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err == nil {
 			tokenHash := auth.HashToken(refreshToken)
-			sql, args := sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 		}
 
 		a.ClearAllCookies(w)
@@ -299,14 +290,12 @@ func issueSession(w http.ResponseWriter, a *auth.Auth, db *sqlite.DB, logger *lo
 	}
 
 	expiresAt := sqlite.FormatTime(time.Now().Add(a.RefreshTokenTTL()))
-	sql, args := sqlite.Insert("refresh_tokens").
+	_, err = db.Insert(sqlite.Insert("refresh_tokens").
 		Set("id", tokenID).
 		Set("entity_type", "user").
 		Set("entity_id", uid).
 		Set("token_hash", auth.HashToken(refreshToken)).
-		Set("expires_at", expiresAt).
-		Build()
-	_, err = db.Exec(sql, args...)
+		Set("expires_at", expiresAt))
 	if err != nil {
 		logger.Error("store refresh token", log.String("error", err.Error()))
 		http.WriteError(w, http.StatusInternalServerError, "internal error")

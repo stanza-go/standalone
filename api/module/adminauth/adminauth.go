@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -78,7 +77,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 			return
 		}
 
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 		scopes := scopesForRole(db, role)
 
 		// Issue access token.
@@ -102,14 +101,12 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		}
 
 		expiresAt := sqlite.FormatTime(time.Now().Add(a.RefreshTokenTTL()))
-		sql, args = sqlite.Insert("refresh_tokens").
+		_, err = db.Insert(sqlite.Insert("refresh_tokens").
 			Set("id", tokenID).
 			Set("entity_type", "admin").
 			Set("entity_id", uid).
 			Set("token_hash", auth.HashToken(refreshToken)).
-			Set("expires_at", expiresAt).
-			Build()
-		_, err = db.Exec(sql, args...)
+			Set("expires_at", expiresAt))
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
@@ -161,8 +158,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 		if err != nil || time.Now().After(expiresAt) {
 			// Expired — clean up.
-			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "session expired")
 			return
@@ -180,14 +176,13 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		row = db.QueryRow(sql, args...)
 		if err := row.Scan(&id, &email, &name, &role); err != nil {
 			// Admin deactivated or deleted — revoke session.
-			sql, args = sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 			a.ClearAllCookies(w)
 			http.WriteError(w, http.StatusUnauthorized, "account deactivated")
 			return
 		}
 
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 		scopes := scopesForRole(db, role)
 
 		// Issue fresh access token with current scopes.
@@ -216,8 +211,7 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err == nil {
 			tokenHash := auth.HashToken(refreshToken)
-			sql, args := sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash).Build()
-			_, _ = db.Exec(sql, args...)
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").Where("token_hash = ?", tokenHash))
 		}
 
 		a.ClearAllCookies(w)

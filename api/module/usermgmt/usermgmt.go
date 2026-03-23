@@ -5,8 +5,6 @@
 package usermgmt
 
 import (
-	"strconv"
-
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -120,7 +118,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if isActive {
 				active = "Yes"
 			}
-			return []string{strconv.FormatInt(id, 10), email, name, active, createdAt, updatedAt}
+			return []string{sqlite.FormatID(id), email, name, active, createdAt, updatedAt}
 		})
 	}
 }
@@ -157,14 +155,12 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Insert("users").
+		id, err := db.Insert(sqlite.Insert("users").
 			Set("email", req.Email).
 			Set("password", hash).
 			Set("name", req.Name).
 			Set("created_at", now).
-			Set("updated_at", now).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Set("updated_at", now))
 		if err != nil {
 			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already exists")
@@ -174,17 +170,17 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		adminaudit.Log(db, r, "user.create", "user", strconv.FormatInt(result.LastInsertID, 10), req.Email)
+		adminaudit.Log(db, r, "user.create", "user", sqlite.FormatID(id), req.Email)
 
 		_ = wh.Dispatch(r.Context(), "user.created", map[string]any{
-			"id":    result.LastInsertID,
+			"id":    id,
 			"email": req.Email,
 			"name":  req.Name,
 		})
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"user": userJSON{
-				ID:        result.LastInsertID,
+				ID:        id,
 				Email:     req.Email,
 				Name:      req.Name,
 				IsActive:  true,
@@ -217,7 +213,7 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		var sessionCount int
 		sql, args = sqlite.Count("refresh_tokens").
 			Where("entity_type = 'user'").
-			Where("entity_id = ?", strconv.FormatInt(id, 10)).
+			Where("entity_id = ?", sqlite.FormatID(id)).
 			Where("expires_at > ?", sqlite.Now()).
 			Build()
 		_ = db.QueryRow(sql, args...).Scan(&sessionCount)
@@ -285,25 +281,21 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			}
 			q.Set("password", hash)
 		}
-		sql, args = q.Set("updated_at", now).
+		if _, err := db.Update(q.Set("updated_at", now).
 			Where("id = ?", id).
-			WhereNull("deleted_at").
-			Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+			WhereNull("deleted_at")); err != nil {
 			http.WriteServerError(w, r, "failed to update user", err)
 			return
 		}
 
 		// If deactivated, revoke all sessions.
 		if req.IsActive != nil && !*req.IsActive {
-			sql, args = sqlite.Delete("refresh_tokens").
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 				Where("entity_type = 'user'").
-				Where("entity_id = ?", strconv.FormatInt(id, 10)).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("entity_id = ?", sqlite.FormatID(id)))
 		}
 
-		adminaudit.Log(db, r, "user.update", "user", strconv.FormatInt(id, 10), currentEmail)
+		adminaudit.Log(db, r, "user.update", "user", sqlite.FormatID(id), currentEmail)
 
 		_ = wh.Dispatch(r.Context(), "user.updated", map[string]any{
 			"id":        id,
@@ -333,31 +325,27 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("users").
+		n, err := db.Update(sqlite.Update("users").
 			Set("deleted_at", now).
 			Set("is_active", false).
 			Set("updated_at", now).
 			Where("id = ?", id).
-			WhereNull("deleted_at").
-			Build()
-		result, err := db.Exec(sql, args...)
+			WhereNull("deleted_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete user", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
 		}
 
 		// Revoke all sessions for this user.
-		sql, args = sqlite.Delete("refresh_tokens").
+		_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 			Where("entity_type = 'user'").
-			Where("entity_id = ?", strconv.FormatInt(id, 10)).
-			Build()
-		_, _ = db.Exec(sql, args...)
+			Where("entity_id = ?", sqlite.FormatID(id)))
 
-		adminaudit.Log(db, r, "user.delete", "user", strconv.FormatInt(id, 10), "")
+		adminaudit.Log(db, r, "user.delete", "user", sqlite.FormatID(id), "")
 
 		_ = wh.Dispatch(r.Context(), "user.deleted", map[string]any{
 			"id": id,
@@ -388,14 +376,12 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			ids[i] = id
 		}
 
-		query, args := sqlite.Update("users").
+		n, err := db.Update(sqlite.Update("users").
 			Set("deleted_at", now).
 			Set("is_active", false).
 			Set("updated_at", now).
 			WhereNull("deleted_at").
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(query, args...)
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk delete users", err)
 			return
@@ -404,27 +390,25 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		// Revoke sessions for deleted users.
 		idStrs := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
-			idStrs[i] = strconv.FormatInt(id, 10)
+			idStrs[i] = sqlite.FormatID(id)
 		}
-		query, args = sqlite.Delete("refresh_tokens").
+		_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 			Where("entity_type = 'user'").
-			WhereIn("entity_id", idStrs...).
-			Build()
-		_, _ = db.Exec(query, args...)
+			WhereIn("entity_id", idStrs...))
 
 		// Audit log each deletion.
 		for _, id := range req.IDs {
-			adminaudit.Log(db, r, "user.delete", "user", strconv.FormatInt(id, 10), "bulk")
+			adminaudit.Log(db, r, "user.delete", "user", sqlite.FormatID(id), "bulk")
 		}
 
 		_ = wh.Dispatch(r.Context(), "user.bulk_deleted", map[string]any{
 			"ids":      req.IDs,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }
@@ -438,7 +422,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		pg := http.ParsePagination(r, 20, 100)
-		idStr := strconv.FormatInt(id, 10)
+		idStr := sqlite.FormatID(id)
 
 		selectQ := sqlite.Select(
 			"al.id", "al.admin_id", sqlite.CoalesceEmpty("a.email"), sqlite.CoalesceEmpty("a.name"),
@@ -487,7 +471,7 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		idStr := strconv.FormatInt(id, 10)
+		idStr := sqlite.FormatID(id)
 		now := sqlite.Now()
 
 		sql, args := sqlite.Select("id", "created_at", "expires_at").
@@ -528,7 +512,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		pg := http.ParsePagination(r, 20, 100)
-		idStr := strconv.FormatInt(id, 10)
+		idStr := sqlite.FormatID(id)
 
 		selectQ := sqlite.Select(
 			"id", "uuid", "original_name", "content_type",
@@ -599,14 +583,14 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 			return
 		}
 
-		uid := strconv.FormatInt(id, 10)
+		uid := sqlite.FormatID(id)
 		token, err := a.IssueAccessToken(uid, []string{"user"})
 		if err != nil {
 			http.WriteServerError(w, r, "failed to issue token", err)
 			return
 		}
 
-		adminaudit.Log(db, r, "user.impersonate", "user", strconv.FormatInt(id, 10), email)
+		adminaudit.Log(db, r, "user.impersonate", "user", sqlite.FormatID(id), email)
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"token": token,

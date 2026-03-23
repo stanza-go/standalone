@@ -5,7 +5,6 @@ package adminaudit
 
 import (
 	nethttp "net/http"
-	"strconv"
 	"strings"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -39,16 +38,14 @@ func Log(db *sqlite.DB, r *nethttp.Request, action, entityType, entityID, detail
 	}
 
 	now := sqlite.Now()
-	sql, args := sqlite.Insert("audit_log").
+	_, _ = db.Insert(sqlite.Insert("audit_log").
 		Set("admin_id", claims.UID).
 		Set("action", action).
 		Set("entity_type", entityType).
 		Set("entity_id", entityID).
 		Set("details", details).
 		Set("ip_address", ip).
-		Set("created_at", now).
-		Build()
-	_, _ = db.Exec(sql, args...)
+		Set("created_at", now))
 }
 
 type entryJSON struct {
@@ -145,7 +142,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			if err := rows.Scan(&id, &adminIDVal, &adminEmail, &adminName, &actionVal, &entityType, &entityID, &details, &ipAddress, &createdAt); err != nil {
 				return nil
 			}
-			return []string{strconv.FormatInt(id, 10), adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt}
+			return []string{sqlite.FormatID(id), adminIDVal, adminEmail, adminName, actionVal, entityType, entityID, details, ipAddress, createdAt}
 		})
 	}
 }
