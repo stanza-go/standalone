@@ -49,8 +49,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 		l := log.FromContext(r.Context())
 
 		var req registerRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 
@@ -128,8 +127,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		l := log.FromContext(r.Context())
 
 		var req loginRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		v := validate.Fields(

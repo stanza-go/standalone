@@ -134,8 +134,7 @@ type createRequest struct {
 func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req createRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 
@@ -219,8 +218,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 
 		var req updateRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 
@@ -483,8 +481,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		var req struct {
 			IDs []int64 `json:"ids"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if !http.CheckBulkIDs(w, req.IDs, 100) {

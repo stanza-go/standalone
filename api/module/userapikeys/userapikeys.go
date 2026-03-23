@@ -88,8 +88,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		userID := claims.UID
 
 		var req createRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 
@@ -159,8 +158,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		var req updateRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 

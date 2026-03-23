@@ -105,8 +105,7 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 		var req struct {
 			IDs []string `json:"ids"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if len(req.IDs) == 0 {

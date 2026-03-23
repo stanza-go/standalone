@@ -43,8 +43,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		l := log.FromContext(r.Context())
 
 		var req loginRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		v := validate.Fields(

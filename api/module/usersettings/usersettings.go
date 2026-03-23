@@ -108,8 +108,7 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		var req batchRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 

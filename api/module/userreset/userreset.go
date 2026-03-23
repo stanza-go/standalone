@@ -48,8 +48,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		l := log.FromContext(r.Context())
 
 		var req forgotPasswordRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 
@@ -154,8 +153,7 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		l := log.FromContext(r.Context())
 
 		var req resetPasswordRequest
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 

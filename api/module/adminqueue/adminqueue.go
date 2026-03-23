@@ -133,8 +133,7 @@ func bulkRetryHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, *
 		var req struct {
 			IDs []int64 `json:"ids"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if !http.CheckBulkIDs(w, req.IDs, 100) {
@@ -161,8 +160,7 @@ func bulkCancelHandler(q *queue.Queue, db *sqlite.DB) func(http.ResponseWriter, 
 		var req struct {
 			IDs []int64 `json:"ids"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if !http.CheckBulkIDs(w, req.IDs, 100) {

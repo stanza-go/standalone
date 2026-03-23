@@ -211,8 +211,7 @@ func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Req
 			Message    string `json:"message"`
 			SendEmail  bool   `json:"send_email"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if req.Type == "" {
@@ -333,8 +332,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		var req struct {
 			IDs []int64 `json:"ids"`
 		}
-		if err := http.ReadJSON(r, &req); err != nil {
-			http.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if !http.BindJSON(w, r, &req) {
 			return
 		}
 		if !http.CheckBulkIDs(w, req.IDs, 100) {
