@@ -111,14 +111,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 
 	for _, t := range targets {
 		// Create delivery record.
-		isql, iargs := sqlite.Insert("webhook_deliveries").
+		deliveryID, err := d.db.Insert(sqlite.Insert("webhook_deliveries").
 			Set("webhook_id", t.id).
 			Set("event", event).
 			Set("payload", string(body)).
 			Set("status", "pending").
-			Set("created_at", now).
-			Build()
-		res, err := d.db.Exec(isql, iargs...)
+			Set("created_at", now))
 		if err != nil {
 			d.logger.Error("webhook: create delivery record",
 				log.Int64("webhook_id", t.id),
@@ -128,7 +126,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		}
 
 		job := deliveryJob{
-			DeliveryID: res.LastInsertID,
+			DeliveryID: deliveryID,
 			WebhookID:  t.id,
 			URL:        t.url,
 			Secret:     t.secret,
@@ -170,14 +168,12 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 
 	if err != nil {
 		// Update delivery record as failed.
-		usql, uargs := sqlite.Update("webhook_deliveries").
+		_, _ = d.db.Update(sqlite.Update("webhook_deliveries").
 			Set("status", "failed").
 			Set("response_body", err.Error()).
 			SetExpr("attempts", "attempts + 1").
 			Set("completed_at", now).
-			Where("id = ?", job.DeliveryID).
-			Build()
-		_, _ = d.db.Exec(usql, uargs...)
+			Where("id = ?", job.DeliveryID))
 		return err
 	}
 
@@ -191,16 +187,14 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 		respBody = respBody[:4096]
 	}
 
-	usql, uargs := sqlite.Update("webhook_deliveries").
+	_, _ = d.db.Update(sqlite.Update("webhook_deliveries").
 		Set("status", status).
 		Set("status_code", result.StatusCode).
 		Set("response_body", respBody).
 		Set("delivery_id", result.DeliveryID).
 		SetExpr("attempts", "attempts + 1").
 		Set("completed_at", now).
-		Where("id = ?", job.DeliveryID).
-		Build()
-	_, _ = d.db.Exec(usql, uargs...)
+		Where("id = ?", job.DeliveryID))
 
 	if status == "failed" {
 		return &DeliveryError{StatusCode: result.StatusCode}

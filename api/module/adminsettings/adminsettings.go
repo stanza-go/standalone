@@ -69,24 +69,22 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		now := sqlite.Now()
 
-		sql, args := sqlite.Update("settings").
+		n, err := db.Update(sqlite.Update("settings").
 			Set("value", req.Value).
 			Set("updated_at", now).
-			Where("key = ?", key).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("key = ?", key))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to update setting", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "setting not found")
 			return
 		}
 
 		var s setting
-		sql, args = sqlite.Select("key", "value", "group_name", "updated_at").
+		sql, args := sqlite.Select("key", "value", "group_name", "updated_at").
 			From("settings").
 			Where("key = ?", key).
 			Build()

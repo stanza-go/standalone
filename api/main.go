@@ -264,14 +264,12 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 				errMsg = r.Err.Error()
 				status = "error"
 			}
-			sql, args := sqlite.Insert("cron_runs").
+			_, err := db.Insert(sqlite.Insert("cron_runs").
 				Set("name", r.Name).
 				Set("started_at", sqlite.FormatTime(r.Started)).
 				Set("duration_ms", r.Duration.Milliseconds()).
 				Set("status", status).
-				Set("error", errMsg).
-				Build()
-			_, err := db.Exec(sql, args...)
+				Set("error", errMsg))
 			if err != nil {
 				logger.Error("failed to persist cron run",
 					log.String("job", r.Name),
@@ -298,13 +296,12 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge expired refresh tokens every hour at :30.
 	if err := s.Add("purge-expired-tokens", "30 * * * *", func(ctx context.Context) error {
 		now := sqlite.Now()
-		sql, args := sqlite.Delete("refresh_tokens").Where("expires_at < ?", now).Build()
-		res, err := db.Exec(sql, args...)
+		n, err := db.Delete(sqlite.Delete("refresh_tokens").Where("expires_at < ?", now))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged expired refresh tokens", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged expired refresh tokens", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {
@@ -314,18 +311,16 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge revoked/expired API keys older than 30 days, daily at 3:00 AM.
 	if err := s.Add("purge-stale-api-keys", "0 3 * * *", func(ctx context.Context) error {
 		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
-		sql, args := sqlite.Delete("api_keys").
+		n, err := db.Delete(sqlite.Delete("api_keys").
 			WhereOr(
 				sqlite.Cond("revoked_at IS NOT NULL AND revoked_at < ?", cutoff),
 				sqlite.Cond("expires_at IS NOT NULL AND expires_at < ?", cutoff),
-			).
-			Build()
-		res, err := db.Exec(sql, args...)
+			))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged stale API keys", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged stale API keys", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {
@@ -335,13 +330,12 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge cron run history older than 7 days, daily at 3:30 AM.
 	if err := s.Add("purge-old-cron-runs", "30 3 * * *", func(ctx context.Context) error {
 		cutoff := sqlite.FormatTime(time.Now().Add(-7 * 24 * time.Hour))
-		sql, args := sqlite.Delete("cron_runs").Where("started_at < ?", cutoff).Build()
-		res, err := db.Exec(sql, args...)
+		n, err := db.Delete(sqlite.Delete("cron_runs").Where("started_at < ?", cutoff))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged old cron runs", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged old cron runs", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {
@@ -351,13 +345,12 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge audit log entries older than 90 days, daily at 4:00 AM.
 	if err := s.Add("purge-old-audit-log", "0 4 * * *", func(ctx context.Context) error {
 		cutoff := sqlite.FormatTime(time.Now().Add(-90 * 24 * time.Hour))
-		sql, args := sqlite.Delete("audit_log").Where("created_at < ?", cutoff).Build()
-		res, err := db.Exec(sql, args...)
+		n, err := db.Delete(sqlite.Delete("audit_log").Where("created_at < ?", cutoff))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged old audit log entries", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged old audit log entries", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {
@@ -367,18 +360,16 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge used/expired password reset tokens older than 24h, daily at 4:30 AM.
 	if err := s.Add("purge-old-reset-tokens", "30 4 * * *", func(ctx context.Context) error {
 		cutoff := sqlite.FormatTime(time.Now().Add(-24 * time.Hour))
-		sql, args := sqlite.Delete("password_reset_tokens").
+		n, err := db.Delete(sqlite.Delete("password_reset_tokens").
 			WhereOr(
 				sqlite.Cond("used_at IS NOT NULL"),
 				sqlite.Cond("expires_at < ?", cutoff),
-			).
-			Build()
-		res, err := db.Exec(sql, args...)
+			))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged old password reset tokens", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged old password reset tokens", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {
@@ -388,16 +379,14 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	// Purge read notifications older than 30 days, daily at 5:00 AM.
 	if err := s.Add("purge-old-notifications", "0 5 * * *", func(ctx context.Context) error {
 		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
-		sql, args := sqlite.Delete("notifications").
+		n, err := db.Delete(sqlite.Delete("notifications").
 			WhereNotNull("read_at").
-			Where("created_at < ?", cutoff).
-			Build()
-		res, err := db.Exec(sql, args...)
+			Where("created_at < ?", cutoff))
 		if err != nil {
 			return err
 		}
-		if res.RowsAffected > 0 {
-			logger.Info("purged old read notifications", log.Int64("count", res.RowsAffected))
+		if n > 0 {
+			logger.Info("purged old read notifications", log.Int64("count", n))
 		}
 		return nil
 	}); err != nil {

@@ -92,20 +92,18 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("notifications").
+		n, err := db.Update(sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("id = ?", id).
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID).
-			Where("read_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("read_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notification as read", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "notification not found or already read")
 			return
 		}
@@ -120,13 +118,11 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 		userID := claims.IntUID()
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("notifications").
+		n, err := db.Update(sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID).
-			Where("read_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("read_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notifications as read", err)
 			return
@@ -134,7 +130,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
-			"marked":  result.RowsAffected,
+			"marked":  n,
 		})
 	}
 }
@@ -149,18 +145,16 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		sql, args := sqlite.Delete("notifications").
+		n, err := db.Delete(sqlite.Delete("notifications").
 			Where("id = ?", id).
 			Where("entity_type = ?", notifications.EntityUser).
-			Where("entity_id = ?", userID).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("entity_id = ?", userID))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete notification", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "notification not found")
 			return
 		}

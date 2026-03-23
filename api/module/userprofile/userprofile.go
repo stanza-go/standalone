@@ -113,8 +113,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			b = b.Set("email", req.Email)
 		}
 
-		sql, args := b.Build()
-		result, err := db.Exec(sql, args...)
+		n, err := db.Update(b)
 		if err != nil {
 			if sqlite.IsUniqueConstraintError(err) {
 				http.WriteError(w, http.StatusConflict, "email already in use")
@@ -124,7 +123,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
 		}
@@ -132,7 +131,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		// Return the updated profile.
 		var id int64
 		var email, name, createdAt, updatedAt string
-		sql, args = sqlite.Select("id", "email", "name", "created_at", "updated_at").
+		sql, args := sqlite.Select("id", "email", "name", "created_at", "updated_at").
 			From("users").
 			Where("id = ?", claims.UID).
 			Build()
@@ -218,12 +217,10 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args = sqlite.Update("users").
+		_, err = db.Update(sqlite.Update("users").
 			Set("password", newHash).
 			Set("updated_at", now).
-			Where("id = ?", claims.UID).
-			Build()
-		_, err = db.Exec(sql, args...)
+			Where("id = ?", claims.UID))
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
@@ -232,18 +229,14 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Revoke all other sessions for this user (keep current session).
 		refreshToken, _ := auth.ReadRefreshToken(r)
 		if refreshToken != "" {
-			sql, args := sqlite.Delete("refresh_tokens").
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 				Where("entity_type = 'user'").
 				Where("entity_id = ?", claims.UID).
-				Where("token_hash != ?", auth.HashToken(refreshToken)).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("token_hash != ?", auth.HashToken(refreshToken)))
 		} else {
-			sql, args := sqlite.Delete("refresh_tokens").
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 				Where("entity_type = 'user'").
-				Where("entity_id = ?", claims.UID).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("entity_id = ?", claims.UID))
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -326,18 +319,16 @@ func revokeSession(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		sql, args := sqlite.Delete("refresh_tokens").
+		n, err := db.Delete(sqlite.Delete("refresh_tokens").
 			Where("id = ?", sessionID).
 			Where("entity_type = 'user'").
-			Where("entity_id = ?", claims.UID).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("entity_id = ?", claims.UID))
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "session not found")
 			return
 		}

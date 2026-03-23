@@ -24,13 +24,11 @@ func Run(db *sqlite.DB, logger *log.Logger) error {
 			return err
 		}
 
-		iSQL, iArgs := sqlite.Insert("admins").
+		_, err = db.Insert(sqlite.Insert("admins").
 			Set("email", "admin@stanza.dev").
 			Set("password", password).
 			Set("name", "Admin").
-			Set("role", "superadmin").
-			Build()
-		_, err = db.Exec(iSQL, iArgs...)
+			Set("role", "superadmin"))
 		if err != nil {
 			return err
 		}

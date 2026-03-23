@@ -123,10 +123,8 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			ids[i] = id
 		}
 
-		sql, args := sqlite.Delete("refresh_tokens").
-			WhereIn("id", ids...).
-			Build()
-		result, err := db.Exec(sql, args...)
+		n, err := db.Delete(sqlite.Delete("refresh_tokens").
+			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk revoke sessions", err)
 			return
@@ -138,12 +136,12 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 
 		_ = wh.Dispatch(r.Context(), "session.bulk_revoked", map[string]any{
 			"ids":      req.IDs,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":       true,
-			"affected": result.RowsAffected,
+			"affected": n,
 		})
 	}
 }
@@ -156,14 +154,13 @@ func revokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		sql, args := sqlite.Delete("refresh_tokens").Where("id = ?", id).Build()
-		result, err := db.Exec(sql, args...)
+		n, err := db.Delete(sqlite.Delete("refresh_tokens").Where("id = ?", id))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to revoke session", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "session not found")
 			return
 		}

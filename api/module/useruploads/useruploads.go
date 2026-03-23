@@ -176,7 +176,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		}
 
 		// Insert into DB with entity_type="user" and entity_id=userID.
-		sql, args := sqlite.Insert("uploads").
+		id, err := db.Insert(sqlite.Insert("uploads").
 			Set("uuid", uploadUUID).
 			Set("original_name", originalName).
 			Set("stored_name", storedName).
@@ -186,9 +186,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 			Set("has_thumbnail", hasThumbnail).
 			Set("uploaded_by", userID).
 			Set("entity_type", entityType).
-			Set("entity_id", userID).
-			Build()
-		result, err := db.Exec(sql, args...)
+			Set("entity_id", userID))
 		if err != nil {
 			_ = os.RemoveAll(dirPath)
 			http.WriteServerError(w, r, "failed to save upload record", err)
@@ -197,7 +195,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"upload": uploadJSON{
-				ID:           result.LastInsertID,
+				ID:           id,
 				UUID:         uploadUUID,
 				OriginalName: originalName,
 				ContentType:  ct,
@@ -242,19 +240,17 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("uploads").
+		n, err := db.Update(sqlite.Update("uploads").
 			Set("deleted_at", now).
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			WhereNull("deleted_at").
-			Build()
-		result, err := db.Exec(sql, args...)
+			WhereNull("deleted_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete upload", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "upload not found or already deleted")
 			return
 		}

@@ -87,12 +87,10 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 
 		// Invalidate any existing unused reset tokens for this email.
 		now := sqlite.Now()
-		sql, args = sqlite.Update("password_reset_tokens").
+		_, _ = db.Update(sqlite.Update("password_reset_tokens").
 			Set("used_at", now).
 			Where("email = ?", req.Email).
-			Where("used_at IS NULL").
-			Build()
-		_, _ = db.Exec(sql, args...)
+			Where("used_at IS NULL"))
 
 		// Generate reset token (32 bytes = 64 hex chars).
 		token, err := generateToken()
@@ -110,13 +108,11 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		expiresAt := sqlite.FormatTime(time.Now().Add(tokenTTL))
 		tokenHash := auth.HashToken(token)
 
-		sql, args = sqlite.Insert("password_reset_tokens").
+		_, err = db.Insert(sqlite.Insert("password_reset_tokens").
 			Set("id", tokenID).
 			Set("email", req.Email).
 			Set("token_hash", tokenHash).
-			Set("expires_at", expiresAt).
-			Build()
-		_, err = db.Exec(sql, args...)
+			Set("expires_at", expiresAt))
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
@@ -193,11 +189,9 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		if err != nil || time.Now().After(expiresAt) {
 			// Mark expired token as used.
 			now := sqlite.Now()
-			sql, args = sqlite.Update("password_reset_tokens").
+			_, _ = db.Update(sqlite.Update("password_reset_tokens").
 				Set("used_at", now).
-				Where("id = ?", tokenID).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("id = ?", tokenID))
 
 			http.WriteError(w, http.StatusBadRequest, "reset token has expired")
 			return
@@ -212,29 +206,25 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 
 		// Update the user's password.
 		now := sqlite.Now()
-		sql, args = sqlite.Update("users").
+		n, err := db.Update(sqlite.Update("users").
 			Set("password", passwordHash).
 			Set("updated_at", now).
 			Where("email = ?", tokenEmail).
 			WhereNull("deleted_at").
-			Where("is_active = 1").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("is_active = 1"))
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusBadRequest, "account not found or deactivated")
 			return
 		}
 
 		// Mark the token as used.
-		sql, args = sqlite.Update("password_reset_tokens").
+		_, _ = db.Update(sqlite.Update("password_reset_tokens").
 			Set("used_at", now).
-			Where("id = ?", tokenID).
-			Build()
-		_, _ = db.Exec(sql, args...)
+			Where("id = ?", tokenID))
 
 		// Revoke all existing refresh tokens for this user so they must
 		// log in again with the new password.
@@ -245,11 +235,9 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 			Build()
 		row = db.QueryRow(sql, args...)
 		if err := row.Scan(&userID); err == nil {
-			sql, args = sqlite.Delete("refresh_tokens").
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").
 				Where("entity_type = 'user'").
-				Where("entity_id = ?", userID).
-				Build()
-			_, _ = db.Exec(sql, args...)
+				Where("entity_id = ?", userID))
 		}
 
 		l.Info("password reset completed", log.String("email", tokenEmail))

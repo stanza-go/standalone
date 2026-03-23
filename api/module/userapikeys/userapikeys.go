@@ -125,8 +125,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			q.Set("expires_at", req.ExpiresAt)
 		}
 
-		sql, args := q.Build()
-		result, err := db.Exec(sql, args...)
+		id, err := db.Insert(q)
 		if err != nil {
 			http.WriteServerError(w, r, "failed to create api key", err)
 			return
@@ -134,7 +133,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		http.WriteJSON(w, http.StatusCreated, map[string]any{
 			"api_key": map[string]any{
-				"id":         result.LastInsertID,
+				"id":         id,
 				"name":       req.Name,
 				"key":        fullKey,
 				"key_prefix": prefix,
@@ -193,13 +192,11 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			name = req.Name
 		}
 
-		sql, args = sqlite.Update("api_keys").
+		if _, err := db.Update(sqlite.Update("api_keys").
 			Set("name", name).
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
-			Where("entity_id = ?", userID).
-			Build()
-		if _, err := db.Exec(sql, args...); err != nil {
+			Where("entity_id = ?", userID)); err != nil {
 			http.WriteServerError(w, r, "failed to update api key", err)
 			return
 		}
@@ -224,19 +221,17 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		now := sqlite.Now()
-		sql, args := sqlite.Update("api_keys").
+		n, err := db.Update(sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("revoked_at IS NULL").
-			Build()
-		result, err := db.Exec(sql, args...)
+			Where("revoked_at IS NULL"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to revoke api key", err)
 			return
 		}
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "api key not found or already revoked")
 			return
 		}

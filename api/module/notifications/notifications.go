@@ -254,20 +254,18 @@ func applyOpts(options []Option) opts {
 // Notify creates a notification for a specific entity.
 func Notify(db *sqlite.DB, entityType string, entityID int64, notifType, title, message, data string) (int64, error) {
 	now := sqlite.Now()
-	sql, args := sqlite.Insert("notifications").
+	id, err := db.Insert(sqlite.Insert("notifications").
 		Set("entity_type", entityType).
 		Set("entity_id", entityID).
 		Set("type", notifType).
 		Set("title", title).
 		Set("message", message).
 		Set("data", data).
-		Set("created_at", now).
-		Build()
-	result, err := db.Exec(sql, args...)
+		Set("created_at", now))
 	if err != nil {
 		return 0, err
 	}
-	return result.LastInsertID, nil
+	return id, nil
 }
 
 // activeAdminIDs returns the IDs of all active, non-deleted admins.

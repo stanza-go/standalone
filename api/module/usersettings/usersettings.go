@@ -137,15 +137,13 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		// Upsert each setting.
 		for key, value := range req.Settings {
-			sql, args := sqlite.Insert("user_settings").
+			if _, err := db.Insert(sqlite.Insert("user_settings").
 				Set("user_id", claims.UID).
 				Set("key", key).
 				Set("value", value).
 				Set("created_at", now).
 				Set("updated_at", now).
-				OnConflict([]string{"user_id", "key"}, []string{"value", "updated_at"}).
-				Build()
-			if _, err := db.Exec(sql, args...); err != nil {
+				OnConflict([]string{"user_id", "key"}, []string{"value", "updated_at"})); err != nil {
 				http.WriteServerError(w, r, "failed to save setting", err)
 				return
 			}
@@ -188,17 +186,15 @@ func deleteSetting(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		dsql, dargs := sqlite.Delete("user_settings").
+		n, err := db.Delete(sqlite.Delete("user_settings").
 			Where("user_id = ?", claims.UID).
-			Where("key = ?", key).
-			Build()
-		result, err := db.Exec(dsql, dargs...)
+			Where("key = ?", key))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to delete setting", err)
 			return
 		}
 
-		if result.RowsAffected == 0 {
+		if n == 0 {
 			http.WriteError(w, http.StatusNotFound, "setting not found")
 			return
 		}
