@@ -26,6 +26,7 @@ import {
   IconDeviceDesktop,
   IconLogout,
   IconSearch,
+  IconChartLine,
 } from "@tabler/icons-react";
 import { useAuth } from "@/lib/auth";
 
@@ -136,6 +137,14 @@ export function CommandPalette() {
             keywords: "sqlite backup migration",
             leftSection: <IconDatabase size={20} stroke={1.5} />,
             onClick: go("/database"),
+          },
+          {
+            id: "metrics",
+            label: "Metrics",
+            description: "Time-series metrics explorer and charts",
+            keywords: "metrics chart graph monitoring analytics time series",
+            leftSection: <IconChartLine size={20} stroke={1.5} />,
+            onClick: go("/metrics"),
           },
           {
             id: "webhooks",

@@ -30,6 +30,7 @@ const SettingsPage = lazy(() => import("@/pages/settings"));
 const CronPage = lazy(() => import("@/pages/cron"));
 const QueuePage = lazy(() => import("@/pages/queue"));
 const LogsPage = lazy(() => import("@/pages/logs"));
+const MetricsPage = lazy(() => import("@/pages/metrics"));
 const ProfilePage = lazy(() => import("@/pages/profile"));
 
 const D = <DashboardSkeleton />;
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="queue" element={<Suspense fallback={C}><QueuePage /></Suspense>} />
             <Route path="logs" element={<Suspense fallback={C}><LogsPage /></Suspense>} />
             <Route path="database" element={<Suspense fallback={C}><DatabasePage /></Suspense>} />
+            <Route path="metrics" element={<Suspense fallback={C}><MetricsPage /></Suspense>} />
             <Route path="api-keys" element={<Suspense fallback={Li}><ApiKeysPage /></Suspense>} />
             <Route path="audit" element={<Suspense fallback={Li}><AuditPage /></Suspense>} />
             <Route path="notifications" element={<Suspense fallback={Li}><NotificationsPage /></Suspense>} />

@@ -34,6 +34,7 @@ import {
   IconMoon,
   IconDeviceDesktop,
   IconSearch,
+  IconChartLine,
 } from "@tabler/icons-react";
 import { useAuth } from "@/lib/auth";
 import { NotificationBell } from "@/components/notification-bell";
@@ -74,6 +75,7 @@ const sections: NavSection[] = [
       { label: "Job Queue", icon: IconStack2, path: "/queue" },
       { label: "Logs", icon: IconFileText, path: "/logs" },
       { label: "Database", icon: IconDatabase, path: "/database" },
+      { label: "Metrics", icon: IconChartLine, path: "/metrics" },
       { label: "Webhooks", icon: IconWebhook, path: "/webhooks" },
     ],
   },
