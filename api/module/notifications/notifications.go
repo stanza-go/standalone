@@ -74,7 +74,7 @@ func NewService(db *sqlite.DB, emailClient *email.Client, pool *task.Pool, logge
 	return &Service{db: db, email: emailClient, pool: pool, logger: logger, hub: NewHub()}
 }
 
-// Hub returns the notification broadcast hub for WebSocket subscriptions.
+// Hub returns the notification broadcast hub for stream subscriptions.
 func (s *Service) Hub() *Hub { return s.hub }
 
 // DB returns the underlying database handle so endpoint modules can query
@@ -82,7 +82,7 @@ func (s *Service) Hub() *Hub { return s.hub }
 func (s *Service) DB() *sqlite.DB { return s.db }
 
 // NotifyAdmin creates a notification for an admin and optionally sends an
-// email. Connected WebSocket clients for this admin receive the notification
+// email. Connected streaming clients for this admin receive the notification
 // in real-time.
 func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, options ...Option) (int64, error) {
 	id, err := Notify(s.db, EntityAdmin, adminID, notifType, title, message, "")
@@ -98,7 +98,7 @@ func (s *Service) NotifyAdmin(adminID int64, notifType, title, message string, o
 }
 
 // NotifyUser creates a notification for an end user and optionally sends an
-// email. (User-side WebSocket is not implemented — only admin hub is used.)
+// email. (User-side streaming is not implemented — only admin hub is used.)
 func (s *Service) NotifyUser(userID int64, notifType, title, message string, options ...Option) (int64, error) {
 	id, err := Notify(s.db, EntityUser, userID, notifType, title, message, "")
 	if err != nil {
@@ -112,7 +112,7 @@ func (s *Service) NotifyUser(userID int64, notifType, title, message string, opt
 }
 
 // NotifyAllAdmins creates a notification for every active admin and
-// optionally sends emails to each. Connected WebSocket clients for each
+// optionally sends emails to each. Connected streaming clients for each
 // admin receive the notification in real-time.
 func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...Option) error {
 	o := applyOpts(options)
@@ -291,7 +291,7 @@ func activeAdminIDs(db *sqlite.DB) ([]int64, error) {
 	})
 }
 
-// publishToAdmin broadcasts a notification event to connected WebSocket
+// publishToAdmin broadcasts a notification event to connected streaming
 // subscribers for the given admin. It also includes the updated unread count.
 func (s *Service) publishToAdmin(adminID, notifID int64, notifType, title, message string) {
 	unread := UnreadCount(s.db, EntityAdmin, adminID)

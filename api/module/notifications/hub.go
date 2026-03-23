@@ -2,14 +2,14 @@ package notifications
 
 import "sync"
 
-// Event is sent to WebSocket subscribers when a notification is created.
+// Event is sent to stream subscribers when a notification is created.
 type Event struct {
 	Type         string        `json:"type"`
 	Notification *Notification `json:"notification,omitempty"`
 	UnreadCount  int           `json:"unread_count"`
 }
 
-// Hub tracks active WebSocket connections and broadcasts notification events
+// Hub tracks active streaming connections and broadcasts notification events
 // to the relevant admin subscribers. Thread-safe for concurrent use.
 type Hub struct {
 	mu   sync.Mutex
@@ -27,7 +27,7 @@ func NewHub() *Hub {
 	}
 }
 
-// Subscribe registers a WebSocket connection for a specific admin.
+// Subscribe registers a streaming connection for a specific admin.
 // Returns a channel that receives events and an unsubscribe function.
 func (h *Hub) Subscribe(adminID int64) (<-chan Event, func()) {
 	s := &subscriber{ch: make(chan Event, 16)}

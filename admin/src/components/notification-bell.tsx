@@ -39,7 +39,7 @@ interface ListResponse {
   unread: number;
 }
 
-interface WsEvent {
+interface StreamEvent {
   type: "notification" | "unread_count";
   notification?: Notification;
   unread_count: number;
@@ -60,21 +60,14 @@ function formatRelativeTime(iso: string): string {
   return `${Math.round(diff / 86400)}d ago`;
 }
 
-function wsUrl(path: string): string {
-  const loc = window.location;
-  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${loc.host}/api${path}`;
-}
-
 export function NotificationBell() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
   const [opened, setOpened] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [connected, setConnected] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchCount = useCallback(async () => {
@@ -115,31 +108,27 @@ export function NotificationBell() {
     }, 30_000);
   }, [fetchCount, stopPolling]);
 
-  const closeWs = useCallback(() => {
-    if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
-      reconnectRef.current = null;
+  const closeStream = useCallback(() => {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
     }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    setWsConnected(false);
+    setConnected(false);
   }, []);
 
-  const connectWs = useCallback(() => {
-    closeWs();
-    const ws = new WebSocket(wsUrl("/admin/notifications/stream"));
-    wsRef.current = ws;
+  const connectStream = useCallback(() => {
+    closeStream();
+    const es = new EventSource("/api/admin/notifications/stream");
+    esRef.current = es;
 
-    ws.onopen = () => {
-      setWsConnected(true);
+    es.onopen = () => {
+      setConnected(true);
       stopPolling();
     };
 
-    ws.onmessage = (e) => {
+    es.addEventListener("notification", (e) => {
       try {
-        const evt: WsEvent = JSON.parse(e.data);
+        const evt: StreamEvent = JSON.parse(e.data);
         setUnreadCount(evt.unread_count);
 
         if (evt.type === "notification" && evt.notification) {
@@ -155,32 +144,24 @@ export function NotificationBell() {
       } catch {
         // Ignore malformed messages.
       }
-    };
+    });
 
-    ws.onclose = () => {
-      setWsConnected(false);
-      wsRef.current = null;
+    es.onerror = () => {
+      setConnected(false);
       startPolling();
-      reconnectRef.current = setTimeout(() => {
-        if (document.visibilityState === "visible") {
-          connectWs();
-        }
-      }, 5_000);
+      // EventSource automatically reconnects with the retry interval
+      // set by the server (5s). Polling covers the gap.
     };
-
-    ws.onerror = () => {
-      // onclose fires after this.
-    };
-  }, [closeWs, stopPolling, startPolling]);
+  }, [closeStream, stopPolling, startPolling]);
 
   useEffect(() => {
     fetchCount();
-    connectWs();
+    connectStream();
 
     function onVisibility() {
       if (document.visibilityState === "visible") {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          connectWs();
+        if (!esRef.current || esRef.current.readyState === EventSource.CLOSED) {
+          connectStream();
         }
       }
     }
@@ -188,10 +169,10 @@ export function NotificationBell() {
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      closeWs();
+      closeStream();
       stopPolling();
     };
-  }, [fetchCount, connectWs, closeWs, stopPolling]);
+  }, [fetchCount, connectStream, closeStream, stopPolling]);
 
   useEffect(() => {
     if (opened) fetchRecent();
@@ -247,14 +228,14 @@ export function NotificationBell() {
       arrowSize={10}
     >
       <Popover.Target>
-        <Tooltip label={wsConnected ? "Notifications (live)" : "Notifications"}>
+        <Tooltip label={connected ? "Notifications (live)" : "Notifications"}>
           <Indicator
             label={badgeLabel}
             size={18}
             disabled={unreadCount === 0}
             color="red"
             offset={4}
-            processing={wsConnected && unreadCount > 0}
+            processing={connected && unreadCount > 0}
           >
             <ActionIcon
               variant="default"
@@ -272,7 +253,7 @@ export function NotificationBell() {
         <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
           <Group gap={8}>
             <Text fw={600} size="sm">Notifications</Text>
-            {wsConnected ? (
+            {connected ? (
               <Tooltip label="Live updates">
                 <IconWifi size={14} color="var(--mantine-color-green-6)" />
               </Tooltip>

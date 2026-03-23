@@ -20,7 +20,7 @@ import (
 //
 //	GET    /api/admin/notifications              — list notifications (paginated)
 //	GET    /api/admin/notifications/unread-count  — count of unread notifications
-//	GET    /api/admin/notifications/stream        — WebSocket stream for real-time notifications
+//	GET    /api/admin/notifications/stream        — SSE stream for real-time notifications
 //	POST   /api/admin/notifications/send          — send a notification (with optional email)
 //	POST   /api/admin/notifications/{id}/read     — mark one notification as read
 //	POST   /api/admin/notifications/read-all      — mark all notifications as read
@@ -253,42 +253,28 @@ func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Req
 	}
 }
 
-// streamHandler upgrades to a WebSocket connection and streams real-time
-// notification events to the connected admin. Events include new notifications
-// and updated unread counts. The connection stays open until the client
+// streamHandler streams real-time notification events to the connected admin
+// using Server-Sent Events (SSE). Events include new notifications and
+// updated unread counts. The connection stays open until the client
 // disconnects or the server shuts down.
 //
-// Ping frames are sent every 30s to detect dead connections. The client can
-// close the connection at any time.
+// SSE is used instead of WebSocket because notifications are server-push
+// only (unidirectional). SSE also works over HTTP/2, which is required for
+// deployments behind HTTP/2 edge proxies like Railway where WebSocket
+// upgrade headers are stripped.
+//
+// Keepalive comments are sent every 30s to prevent proxy timeouts.
+// The retry directive tells the client to reconnect after 5s on failure.
 func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Request) {
-	upgrader := http.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		adminID := claims.IntUID()
 
-		conn, err := upgrader.Upgrade(w, r)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
 		eventCh, unsub := svc.Hub().Subscribe(adminID)
 		defer unsub()
 
-		// Read goroutine — detects client disconnection.
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			for {
-				_, _, err := conn.ReadMessage()
-				if err != nil {
-					return
-				}
-			}
-		}()
+		sse := http.NewSSEWriter(w)
+		_ = sse.Retry(5000)
 
 		// Send initial unread count so the client syncs immediately.
 		initialCount := notifications.UnreadCount(svc.DB(), notifications.EntityAdmin, adminID)
@@ -296,27 +282,27 @@ func streamHandler(svc *notifications.Service) func(http.ResponseWriter, *http.R
 			Type:        "unread_count",
 			UnreadCount: initialCount,
 		})
-		if err := conn.WriteMessage(http.TextMessage, initMsg); err != nil {
+		if err := sse.Event("notification", string(initMsg)); err != nil {
 			return
 		}
 
-		pingTicker := time.NewTicker(30 * time.Second)
-		defer pingTicker.Stop()
+		heartbeat := time.NewTicker(30 * time.Second)
+		defer heartbeat.Stop()
 
 		for {
 			select {
-			case <-done:
+			case <-r.Context().Done():
 				return
 			case evt, ok := <-eventCh:
 				if !ok {
 					return
 				}
 				msg, _ := json.Marshal(evt)
-				if err := conn.WriteMessage(http.TextMessage, msg); err != nil {
+				if err := sse.Event("notification", string(msg)); err != nil {
 					return
 				}
-			case <-pingTicker.C:
-				if err := conn.WritePing(nil); err != nil {
+			case <-heartbeat.C:
+				if err := sse.Comment("keepalive"); err != nil {
 					return
 				}
 			}
