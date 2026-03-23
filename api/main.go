@@ -266,7 +266,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 			}
 			sql, args := sqlite.Insert("cron_runs").
 				Set("name", r.Name).
-				Set("started_at", r.Started.UTC().Format(time.RFC3339)).
+				Set("started_at", sqlite.FormatTime(r.Started)).
 				Set("duration_ms", r.Duration.Milliseconds()).
 				Set("status", status).
 				Set("error", errMsg).
@@ -313,7 +313,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge revoked/expired API keys older than 30 days, daily at 3:00 AM.
 	if err := s.Add("purge-stale-api-keys", "0 3 * * *", func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
+		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
 		sql, args := sqlite.Delete("api_keys").
 			WhereOr(
 				sqlite.Cond("revoked_at IS NOT NULL AND revoked_at < ?", cutoff),
@@ -334,7 +334,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge cron run history older than 7 days, daily at 3:30 AM.
 	if err := s.Add("purge-old-cron-runs", "30 3 * * *", func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour).Format(time.RFC3339)
+		cutoff := sqlite.FormatTime(time.Now().Add(-7 * 24 * time.Hour))
 		sql, args := sqlite.Delete("cron_runs").Where("started_at < ?", cutoff).Build()
 		res, err := db.Exec(sql, args...)
 		if err != nil {
@@ -350,7 +350,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge audit log entries older than 90 days, daily at 4:00 AM.
 	if err := s.Add("purge-old-audit-log", "0 4 * * *", func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+		cutoff := sqlite.FormatTime(time.Now().Add(-90 * 24 * time.Hour))
 		sql, args := sqlite.Delete("audit_log").Where("created_at < ?", cutoff).Build()
 		res, err := db.Exec(sql, args...)
 		if err != nil {
@@ -366,7 +366,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge used/expired password reset tokens older than 24h, daily at 4:30 AM.
 	if err := s.Add("purge-old-reset-tokens", "30 4 * * *", func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+		cutoff := sqlite.FormatTime(time.Now().Add(-24 * time.Hour))
 		sql, args := sqlite.Delete("password_reset_tokens").
 			WhereOr(
 				sqlite.Cond("used_at IS NOT NULL"),
@@ -387,7 +387,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge read notifications older than 30 days, daily at 5:00 AM.
 	if err := s.Add("purge-old-notifications", "0 5 * * *", func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339)
+		cutoff := sqlite.FormatTime(time.Now().Add(-30 * 24 * time.Hour))
 		sql, args := sqlite.Delete("notifications").
 			WhereNotNull("read_at").
 			Where("created_at < ?", cutoff).

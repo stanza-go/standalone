@@ -303,7 +303,7 @@ func issueSession(w http.ResponseWriter, a *auth.Auth, db *sqlite.DB, logger *lo
 		return err
 	}
 
-	expiresAt := time.Now().Add(a.RefreshTokenTTL()).UTC().Format(time.RFC3339)
+	expiresAt := sqlite.FormatTime(time.Now().Add(a.RefreshTokenTTL()))
 	sql, args := sqlite.Insert("refresh_tokens").
 		Set("id", tokenID).
 		Set("entity_type", "user").

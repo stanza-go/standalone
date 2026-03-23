@@ -109,7 +109,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 			return
 		}
 
-		expiresAt := time.Now().Add(tokenTTL).UTC().Format(time.RFC3339)
+		expiresAt := sqlite.FormatTime(time.Now().Add(tokenTTL))
 		tokenHash := auth.HashToken(token)
 
 		sql, args = sqlite.Insert("password_reset_tokens").
