@@ -1,6 +1,6 @@
 // Package admindb provides the database administration endpoints. It exposes
-// SQLite statistics, migration history, table inventory, manual backup, and
-// database file download.
+// SQLite statistics, migration history, table inventory, manual backup,
+// database file download, integrity check, optimize, and backup management.
 package admindb
 
 import (
@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/http"
@@ -20,13 +21,19 @@ import (
 // The group should already have auth middleware applied.
 // Routes:
 //
-//	GET  /api/admin/database          — stats, tables, migrations
-//	POST /api/admin/database/backup   — trigger manual backup
-//	GET  /api/admin/database/download — download the SQLite file
+//	GET    /api/admin/database                 — stats, tables, migrations
+//	POST   /api/admin/database/backup          — trigger manual backup
+//	GET    /api/admin/database/download         — download the SQLite file
+//	POST   /api/admin/database/integrity-check — run PRAGMA integrity_check
+//	POST   /api/admin/database/optimize        — run PRAGMA optimize
+//	DELETE /api/admin/database/backups/{name}   — delete a specific backup
 func Register(admin *http.Group, db *sqlite.DB, backupsDir string) {
 	admin.HandleFunc("GET /database", infoHandler(db, backupsDir))
 	admin.HandleFunc("POST /database/backup", backupHandler(db, backupsDir))
 	admin.HandleFunc("GET /database/download", downloadHandler(db))
+	admin.HandleFunc("POST /database/integrity-check", integrityCheckHandler(db))
+	admin.HandleFunc("POST /database/optimize", optimizeHandler(db))
+	admin.HandleFunc("DELETE /database/backups/{name}", deleteBackupHandler(db, backupsDir))
 }
 
 func infoHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *http.Request) {
@@ -207,5 +214,81 @@ func downloadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		w.WriteHeader(200)
 
 		_, _ = io.Copy(w, f)
+	}
+}
+
+func integrityCheckHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		err := db.IntegrityCheck()
+		duration := time.Since(start)
+
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+
+		adminaudit.Log(db, r, "database.integrity_check", "database", "", fmt.Sprintf("status=%s duration=%s", status, duration))
+
+		result := map[string]any{
+			"status":      status,
+			"duration_ms": duration.Milliseconds(),
+		}
+		if err != nil {
+			result["errors"] = strings.Split(err.Error(), "\n")
+		}
+
+		http.WriteJSON(w, http.StatusOK, result)
+	}
+}
+
+func optimizeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		err := db.Optimize()
+		duration := time.Since(start)
+
+		if err != nil {
+			http.WriteServerError(w, r, "pragma optimize failed", err)
+			return
+		}
+
+		adminaudit.Log(db, r, "database.optimize", "database", "", fmt.Sprintf("duration=%s", duration))
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"status":      "ok",
+			"duration_ms": duration.Milliseconds(),
+		})
+	}
+}
+
+func deleteBackupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+
+		// Reject path traversal attempts.
+		if name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") {
+			http.WriteError(w, http.StatusBadRequest, "invalid backup name")
+			return
+		}
+
+		path := filepath.Join(backupsDir, name)
+
+		info, err := os.Stat(path)
+		if err != nil {
+			http.WriteError(w, http.StatusNotFound, "backup not found")
+			return
+		}
+
+		if err := os.Remove(path); err != nil {
+			http.WriteServerError(w, r, "failed to delete backup", err)
+			return
+		}
+
+		adminaudit.Log(db, r, "database.delete_backup", "database", "", fmt.Sprintf("file=%s size=%d", name, info.Size()))
+
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"deleted": name,
+		})
 	}
 }
