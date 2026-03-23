@@ -38,22 +38,14 @@ interface Role {
   updated_at: string;
 }
 
-const SCOPE_LABELS: Record<string, string> = {
-  admin: "Base Access",
-  "admin:users": "User Management",
-  "admin:settings": "Settings",
-  "admin:jobs": "Jobs & Cron",
-  "admin:logs": "Log Viewer",
-  "admin:audit": "Audit Log",
-  "admin:uploads": "Uploads",
-  "admin:database": "Database",
-  "admin:roles": "Role Management",
-  "admin:notifications": "Notifications",
-};
+interface ScopeDef {
+  name: string;
+  label: string;
+}
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [allScopes, setAllScopes] = useState<string[]>([]);
+  const [allScopes, setAllScopes] = useState<ScopeDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -79,7 +71,7 @@ export default function RolesPage() {
     try {
       const [rolesData, scopesData] = await Promise.all([
         get<{ roles: Role[] }>("/admin/roles/"),
-        get<{ scopes: string[] }>("/admin/roles/scopes"),
+        get<{ scopes: ScopeDef[] }>("/admin/roles/scopes"),
       ]);
       setRoles(rolesData.roles ?? []);
       setAllScopes(scopesData.scopes ?? []);
@@ -157,16 +149,16 @@ export default function RolesPage() {
         <Text size="sm" fw={500}>Scopes</Text>
         {allScopes.map((scope) => (
           <Checkbox
-            key={scope}
-            label={SCOPE_LABELS[scope] ?? scope}
-            checked={values.includes(scope)}
-            disabled={scope === "admin"}
+            key={scope.name}
+            label={scope.label}
+            checked={values.includes(scope.name)}
+            disabled={scope.name === "admin"}
             onChange={(e) => {
               const checked = e.currentTarget.checked;
               const current = form.getValues().scopes;
               form.setFieldValue(
                 field as "scopes",
-                checked ? [...current, scope] : current.filter((s) => s !== scope),
+                checked ? [...current, scope.name] : current.filter((s) => s !== scope.name),
               );
             }}
           />
@@ -229,11 +221,14 @@ export default function RolesPage() {
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="wrap">
-                        {role.scopes.map((scope) => (
-                          <Tooltip key={scope} label={scope}>
-                            <Badge variant="light" size="xs">{SCOPE_LABELS[scope] ?? scope}</Badge>
-                          </Tooltip>
-                        ))}
+                        {role.scopes.map((scope) => {
+                          const def = allScopes.find((s) => s.name === scope);
+                          return (
+                            <Tooltip key={scope} label={scope}>
+                              <Badge variant="light" size="xs">{def?.label ?? scope}</Badge>
+                            </Tooltip>
+                          );
+                        })}
                       </Group>
                     </Table.Td>
                     <Table.Td>

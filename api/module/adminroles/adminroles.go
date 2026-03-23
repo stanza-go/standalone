@@ -16,19 +16,29 @@ import (
 	"github.com/stanza-go/standalone/module/webhooks"
 )
 
+// Scope defines an admin permission scope with a human-readable label.
+// The backend is the single source of truth — the admin panel fetches
+// scope names and labels from the /admin/roles/scopes endpoint.
+type Scope struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
 // KnownScopes lists all valid admin scopes. Used for validation when
-// assigning scopes to roles.
-var KnownScopes = []string{
-	"admin",
-	"admin:users",
-	"admin:settings",
-	"admin:jobs",
-	"admin:logs",
-	"admin:audit",
-	"admin:uploads",
-	"admin:database",
-	"admin:roles",
-	"admin:notifications",
+// assigning scopes to roles, and served to the admin panel via the
+// scopes endpoint.
+var KnownScopes = []Scope{
+	{Name: "admin", Label: "Base Access"},
+	{Name: "admin:users", Label: "User Management"},
+	{Name: "admin:settings", Label: "Settings"},
+	{Name: "admin:jobs", Label: "Jobs & Cron"},
+	{Name: "admin:logs", Label: "Log Viewer"},
+	{Name: "admin:audit", Label: "Audit Log"},
+	{Name: "admin:uploads", Label: "Uploads"},
+	{Name: "admin:database", Label: "Database"},
+	{Name: "admin:roles", Label: "Role Management"},
+	{Name: "admin:notifications", Label: "Notifications"},
+	{Name: "admin:webhooks", Label: "Webhooks"},
 }
 
 // Register mounts the role management routes on the given admin group.
@@ -400,7 +410,7 @@ func saveScopes(db *sqlite.DB, roleID int64, scopes []string) error {
 func validateScopes(scopes []string) string {
 	known := make(map[string]bool, len(KnownScopes))
 	for _, s := range KnownScopes {
-		known[s] = true
+		known[s.Name] = true
 	}
 	for _, s := range scopes {
 		if !known[s] {
