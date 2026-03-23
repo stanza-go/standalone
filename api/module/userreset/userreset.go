@@ -89,7 +89,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		_, _ = db.Update(sqlite.Update("password_reset_tokens").
 			Set("used_at", now).
 			Where("email = ?", req.Email).
-			Where("used_at IS NULL"))
+			WhereNull("used_at"))
 
 		// Generate reset token (32 bytes = 64 hex chars).
 		token, err := generateToken()
@@ -174,7 +174,7 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		sql, args := sqlite.Select("id", "email", "expires_at").
 			From("password_reset_tokens").
 			Where("token_hash = ?", tokenHash).
-			Where("used_at IS NULL").
+			WhereNull("used_at").
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&tokenID, &tokenEmail, &expiresAtStr); err != nil {

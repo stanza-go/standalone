@@ -289,7 +289,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		n, err := db.Update(sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).
-			Where("revoked_at IS NULL"))
+			WhereNull("revoked_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to revoke api key", err)
 			return
@@ -327,7 +327,7 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		n, err := db.Update(sqlite.Update("api_keys").
 			Set("revoked_at", now).
-			Where("revoked_at IS NULL").
+			WhereNull("revoked_at").
 			WhereIn("id", ids...))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to bulk revoke api keys", err)

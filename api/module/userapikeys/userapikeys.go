@@ -224,7 +224,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("revoked_at IS NULL"))
+			WhereNull("revoked_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to revoke api key", err)
 			return

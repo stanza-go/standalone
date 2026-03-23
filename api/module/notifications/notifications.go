@@ -305,7 +305,7 @@ func UnreadCount(db *sqlite.DB, entityType string, entityID int64) int {
 	sql, args := sqlite.Count("notifications").
 		Where("entity_type = ?", entityType).
 		Where("entity_id = ?", entityID).
-		Where("read_at IS NULL").
+		WhereNull("read_at").
 		Build()
 	var count int
 	_ = db.QueryRow(sql, args...).Scan(&count)

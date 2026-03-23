@@ -39,7 +39,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID)
 		if unreadOnly {
-			q.Where("read_at IS NULL")
+			q.WhereNull("read_at")
 		}
 
 		total, _ := db.Count(q)
@@ -97,7 +97,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("id = ?", id).
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID).
-			Where("read_at IS NULL"))
+			WhereNull("read_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notification as read", err)
 			return
@@ -122,7 +122,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 			Set("read_at", now).
 			Where("entity_type = ?", notifications.EntityUser).
 			Where("entity_id = ?", userID).
-			Where("read_at IS NULL"))
+			WhereNull("read_at"))
 		if err != nil {
 			http.WriteServerError(w, r, "failed to mark notifications as read", err)
 			return

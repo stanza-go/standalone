@@ -78,7 +78,7 @@ func queryDBStats(db *sqlite.DB) (*dbStats, error) {
 	sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", sqlite.Now()).Build()
 	_ = db.QueryRow(sql, args...).Scan(&st.ActiveSessions)
 
-	sql, args = sqlite.Count("api_keys").Where("revoked_at IS NULL").Build()
+	sql, args = sqlite.Count("api_keys").WhereNull("revoked_at").Build()
 	_ = db.QueryRow(sql, args...).Scan(&st.ActiveAPIKeys)
 
 	row = db.QueryRow(`SELECT count(*) FROM _migrations`)
