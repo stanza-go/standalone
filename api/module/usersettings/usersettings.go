@@ -188,10 +188,11 @@ func deleteSetting(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		result, err := db.Exec(
-			"DELETE FROM user_settings WHERE user_id = ? AND key = ?",
-			claims.UID, key,
-		)
+		dsql, dargs := sqlite.Delete("user_settings").
+			Where("user_id = ?", claims.UID).
+			Where("key = ?", key).
+			Build()
+		result, err := db.Exec(dsql, dargs...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to delete setting")
 			return

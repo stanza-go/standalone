@@ -238,16 +238,18 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Revoke all other sessions for this admin (keep current session).
 		refreshToken, _ := auth.ReadRefreshToken(r)
 		if refreshToken != "" {
-			_, _ = db.Exec(
-				"DELETE FROM refresh_tokens WHERE entity_type = 'admin' AND entity_id = ? AND token_hash != ?",
-				claims.UID,
-				auth.HashToken(refreshToken),
-			)
+			dsql, dargs := sqlite.Delete("refresh_tokens").
+				Where("entity_type = ?", "admin").
+				Where("entity_id = ?", claims.UID).
+				Where("token_hash != ?", auth.HashToken(refreshToken)).
+				Build()
+			_, _ = db.Exec(dsql, dargs...)
 		} else {
-			_, _ = db.Exec(
-				"DELETE FROM refresh_tokens WHERE entity_type = 'admin' AND entity_id = ?",
-				claims.UID,
-			)
+			dsql, dargs := sqlite.Delete("refresh_tokens").
+				Where("entity_type = ?", "admin").
+				Where("entity_id = ?", claims.UID).
+				Build()
+			_, _ = db.Exec(dsql, dargs...)
 		}
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -323,10 +325,12 @@ func revokeSession(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		result, err := db.Exec(
-			"DELETE FROM refresh_tokens WHERE id = ? AND entity_type = 'admin' AND entity_id = ?",
-			sessionID, claims.UID,
-		)
+		dsql, dargs := sqlite.Delete("refresh_tokens").
+			Where("id = ?", sessionID).
+			Where("entity_type = ?", "admin").
+			Where("entity_id = ?", claims.UID).
+			Build()
+		result, err := db.Exec(dsql, dargs...)
 		if err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "internal error")
 			return

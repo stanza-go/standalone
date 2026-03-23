@@ -85,8 +85,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		events string
 	}
 
-	allWebhooks, err := sqlite.QueryAll(d.db,
-		"SELECT id, url, secret, events FROM webhooks WHERE is_active = 1", nil,
+	sql, args := sqlite.Select("id", "url", "secret", "events").
+		From("webhooks").
+		Where("is_active = ?", true).
+		Build()
+
+	allWebhooks, err := sqlite.QueryAll(d.db, sql, args,
 		func(rows *sqlite.Rows) (webhookRow, error) {
 			var w webhookRow
 			err := rows.Scan(&w.id, &w.url, &w.secret, &w.events)
@@ -107,10 +111,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 
 	for _, t := range targets {
 		// Create delivery record.
-		res, err := d.db.Exec(
-			"INSERT INTO webhook_deliveries (webhook_id, event, payload, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-			t.id, event, string(body), now,
-		)
+		isql, iargs := sqlite.Insert("webhook_deliveries").
+			Set("webhook_id", t.id).
+			Set("event", event).
+			Set("payload", string(body)).
+			Set("status", "pending").
+			Set("created_at", now).
+			Build()
+		res, err := d.db.Exec(isql, iargs...)
 		if err != nil {
 			d.logger.Error("webhook: create delivery record",
 				log.Int64("webhook_id", t.id),
@@ -162,10 +170,14 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 
 	if err != nil {
 		// Update delivery record as failed.
-		_, _ = d.db.Exec(
-			"UPDATE webhook_deliveries SET status = 'failed', response_body = ?, attempts = attempts + 1, completed_at = ? WHERE id = ?",
-			err.Error(), now, job.DeliveryID,
-		)
+		usql, uargs := sqlite.Update("webhook_deliveries").
+			Set("status", "failed").
+			Set("response_body", err.Error()).
+			SetExpr("attempts", "attempts + 1").
+			Set("completed_at", now).
+			Where("id = ?", job.DeliveryID).
+			Build()
+		_, _ = d.db.Exec(usql, uargs...)
 		return err
 	}
 
@@ -179,10 +191,16 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 		respBody = respBody[:4096]
 	}
 
-	_, _ = d.db.Exec(
-		"UPDATE webhook_deliveries SET status = ?, status_code = ?, response_body = ?, delivery_id = ?, attempts = attempts + 1, completed_at = ? WHERE id = ?",
-		status, result.StatusCode, respBody, result.DeliveryID, now, job.DeliveryID,
-	)
+	usql, uargs := sqlite.Update("webhook_deliveries").
+		Set("status", status).
+		Set("status_code", result.StatusCode).
+		Set("response_body", respBody).
+		Set("delivery_id", result.DeliveryID).
+		SetExpr("attempts", "attempts + 1").
+		Set("completed_at", now).
+		Where("id = ?", job.DeliveryID).
+		Build()
+	_, _ = d.db.Exec(usql, uargs...)
 
 	if status == "failed" {
 		return &DeliveryError{StatusCode: result.StatusCode}
