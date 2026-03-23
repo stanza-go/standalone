@@ -304,7 +304,7 @@ func fileHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *ht
 			w.Header().Set("Content-Type", "application/octet-stream")
 		}
 		if !isImage(ct) {
-			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, originalName))
+			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, sanitizeHeaderValue(originalName)))
 		}
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
 		w.WriteHeader(200)
@@ -455,6 +455,18 @@ func isImage(contentType string) bool {
 		return true
 	}
 	return false
+}
+
+// sanitizeHeaderValue strips characters that could break HTTP header values.
+// Specifically removes " and \ to prevent Content-Disposition header injection,
+// and removes \r and \n to prevent header splitting.
+func sanitizeHeaderValue(s string) string {
+	return strings.NewReplacer(
+		`"`, "",
+		`\`, "",
+		"\r", "",
+		"\n", "",
+	).Replace(s)
 }
 
 // detectContentType guesses the MIME type from a filename extension.

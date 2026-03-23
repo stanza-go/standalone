@@ -285,6 +285,13 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
+		// If deactivated, revoke all sessions.
+		if req.IsActive != nil && !*req.IsActive {
+			_, _ = db.Delete(sqlite.Delete("refresh_tokens").
+				Where("entity_type = 'admin'").
+				Where("entity_id = ?", sqlite.FormatID(id)))
+		}
+
 		adminaudit.Log(db, r, "admin.update", "admin", sqlite.FormatID(id), currentEmail)
 
 		_ = wh.Dispatch(r.Context(), webhooks.EventAdminUpdated, map[string]any{
