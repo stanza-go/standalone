@@ -24,6 +24,7 @@ func Register(db *sqlite.DB) {
 	db.AddMigration(1742428812, "add_api_key_entity", addAPIKeyEntityUp, addAPIKeyEntityDown)
 	db.AddMigration(1742428813, "create_user_settings", createUserSettingsUp, createUserSettingsDown)
 	db.AddMigration(1742428814, "create_webhooks", createWebhooksUp, createWebhooksDown)
+	db.AddMigration(1742428816, "create_metric_dashboards", createMetricDashboardsUp, createMetricDashboardsDown)
 }
 
 func createSettingsUp(tx *sqlite.Tx) error {
@@ -513,5 +514,21 @@ func createWebhooksDown(tx *sqlite.Tx) error {
 		return err
 	}
 	_, err = tx.Exec(`DELETE FROM role_scopes WHERE scope = 'admin:webhooks'`)
+	return err
+}
+
+func createMetricDashboardsUp(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE metric_dashboards (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		name       TEXT    NOT NULL,
+		panels     TEXT    NOT NULL DEFAULT '[]',
+		created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+		updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	)`)
+	return err
+}
+
+func createMetricDashboardsDown(tx *sqlite.Tx) error {
+	_, err := tx.Exec(`DROP TABLE IF EXISTS metric_dashboards`)
 	return err
 }

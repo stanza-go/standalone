@@ -3,9 +3,11 @@ import {
   ActionIcon,
   Alert,
   Badge,
+  Button,
   Card,
   Group,
   Loader,
+  Menu,
   NativeSelect,
   Paper,
   SegmentedControl,
@@ -21,14 +23,18 @@ import { AreaChart } from "@mantine/charts";
 import {
   IconAlertCircle,
   IconChartLine,
+  IconCheck,
   IconClockHour4,
   IconDatabase,
+  IconDeviceFloppy,
+  IconDotsVertical,
+  IconLayoutDashboard,
   IconPlus,
   IconRefresh,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
-import { get } from "@/lib/api";
+import { del, get, post, put } from "@/lib/api";
 
 interface StoreStats {
   series_count: number;
@@ -51,6 +57,21 @@ interface SeriesData {
 
 interface QueryResponse {
   series: SeriesData[];
+}
+
+interface PanelConfig {
+  metric: string;
+  range: string;
+  fn: string;
+  labels: string;
+}
+
+interface Dashboard {
+  id: number;
+  name: string;
+  panels: PanelConfig[];
+  created_at: string;
+  updated_at: string;
 }
 
 const TIME_RANGES = [
@@ -118,7 +139,7 @@ function toChartData(
   const labels = series.map(seriesLabel);
   const seriesConfig = labels.map((name, i) => ({
     name,
-    color: CHART_COLORS[i % CHART_COLORS.length],
+    color: CHART_COLORS[i % CHART_COLORS.length]!,
   }));
 
   // Build a lookup map per series for O(1) point access.
@@ -131,8 +152,8 @@ function toChartData(
   const data = timestamps.map((ts) => {
     const row: Record<string, unknown> = { time: formatTime(ts, range) };
     for (let i = 0; i < series.length; i++) {
-      const v = lookups[i].get(ts);
-      row[labels[i]] = v !== undefined ? Math.round(v * 1000) / 1000 : null;
+      const v = lookups[i]!.get(ts);
+      row[labels[i]!] = v !== undefined ? Math.round(v * 1000) / 1000 : null;
     }
     return row;
   });
@@ -144,17 +165,21 @@ let nextPanelId = 1;
 
 function MetricChartPanel({
   names,
+  initialConfig,
+  onConfigChange,
   onRemove,
   canRemove,
 }: {
   names: string[];
+  initialConfig?: PanelConfig;
+  onConfigChange?: (config: PanelConfig) => void;
   onRemove: () => void;
   canRemove: boolean;
 }) {
-  const [metric, setMetric] = useState("");
-  const [range, setRange] = useState("1h");
-  const [fn, setFn] = useState("sum");
-  const [labels, setLabels] = useState("");
+  const [metric, setMetric] = useState(initialConfig?.metric ?? "");
+  const [range, setRange] = useState(initialConfig?.range ?? "1h");
+  const [fn, setFn] = useState(initialConfig?.fn ?? "sum");
+  const [labels, setLabels] = useState(initialConfig?.labels ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [series, setSeries] = useState<SeriesData[]>([]);
@@ -162,19 +187,26 @@ function MetricChartPanel({
   const labelsRef = useRef(labels);
   labelsRef.current = labels;
 
+  // Report config changes to parent for dashboard save.
+  const configRef = useRef(onConfigChange);
+  configRef.current = onConfigChange;
+  useEffect(() => {
+    configRef.current?.({ metric, range, fn, labels });
+  }, [metric, range, fn, labels]);
+
   const runQuery = useCallback(async () => {
     if (!metric) return;
     setLoading(true);
     setError("");
     try {
-      const tr = TIME_RANGES.find((r) => r.value === range) ?? TIME_RANGES[0];
+      const tr = TIME_RANGES.find((r) => r.value === range) ?? TIME_RANGES[0]!;
       const end = new Date();
-      const start = new Date(end.getTime() - tr.ms);
+      const start = new Date(end.getTime() - tr!.ms);
       const params = new URLSearchParams({
         name: metric,
         start: start.toISOString(),
         end: end.toISOString(),
-        step: tr.step,
+        step: tr!.step,
         fn,
       });
       if (labelsRef.current.trim()) {
@@ -321,19 +353,35 @@ function MetricChartPanel({
 export default function MetricsPage() {
   const [stats, setStats] = useState<StoreStats | null>(null);
   const [names, setNames] = useState<string[]>([]);
-  const [panelIds, setPanelIds] = useState<number[]>([nextPanelId++]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Panel state: each panel has an id and an optional initial config.
+  const [panels, setPanels] = useState<{ id: number; config?: PanelConfig }[]>([
+    { id: nextPanelId++ },
+  ]);
+
+  // Dashboard state.
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [activeDashboardId, setActiveDashboardId] = useState<number | null>(null);
+  const [saveName, setSaveName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Track current panel configs via refs (updated by child callbacks).
+  const panelConfigsRef = useRef<Map<number, PanelConfig>>(new Map());
 
   useEffect(() => {
     (async () => {
       try {
-        const [statsRes, namesRes] = await Promise.all([
+        const [statsRes, namesRes, dashRes] = await Promise.all([
           get<StoreStats>("/admin/metrics/stats"),
           get<{ names: string[] }>("/admin/metrics/names"),
+          get<{ dashboards: Dashboard[] }>("/admin/dashboards"),
         ]);
         setStats(statsRes);
         setNames(namesRes.names ?? []);
+        setDashboards(dashRes.dashboards ?? []);
       } catch {
         setError("Failed to load metrics");
       } finally {
@@ -343,12 +391,97 @@ export default function MetricsPage() {
   }, []);
 
   const addPanel = useCallback(() => {
-    setPanelIds((prev) => [...prev, nextPanelId++]);
+    setPanels((prev) => [...prev, { id: nextPanelId++ }]);
   }, []);
 
   const removePanel = useCallback((id: number) => {
-    setPanelIds((prev) => (prev.length > 1 ? prev.filter((p) => p !== id) : prev));
+    setPanels((prev) => {
+      if (prev.length <= 1) return prev;
+      panelConfigsRef.current.delete(id);
+      return prev.filter((p) => p.id !== id);
+    });
   }, []);
+
+  const handleConfigChange = useCallback((panelId: number, config: PanelConfig) => {
+    panelConfigsRef.current.set(panelId, config);
+  }, []);
+
+  // Collect current panel configs from the ref map.
+  const collectPanelConfigs = useCallback((): PanelConfig[] => {
+    return panels.map((p) => panelConfigsRef.current.get(p.id) ?? {
+      metric: "", range: "1h", fn: "sum", labels: "",
+    });
+  }, [panels]);
+
+  // Load a saved dashboard.
+  const loadDashboard = useCallback((dashboard: Dashboard) => {
+    panelConfigsRef.current.clear();
+    const newPanels: { id: number; config?: PanelConfig }[] = dashboard.panels.map((config) => {
+      const id = nextPanelId++;
+      panelConfigsRef.current.set(id, config);
+      return { id, config };
+    });
+    if (newPanels.length === 0) {
+      newPanels.push({ id: nextPanelId++ });
+    }
+    setPanels(newPanels);
+    setActiveDashboardId(dashboard.id);
+    setSaveName(dashboard.name);
+  }, []);
+
+  // Switch to explorer mode (no dashboard loaded).
+  const switchToExplorer = useCallback(() => {
+    panelConfigsRef.current.clear();
+    setPanels([{ id: nextPanelId++ }]);
+    setActiveDashboardId(null);
+    setSaveName("");
+  }, []);
+
+  // Save current panels as a new dashboard or update existing.
+  const saveDashboard = useCallback(async () => {
+    const name = saveName.trim();
+    if (!name) return;
+
+    setSaving(true);
+    try {
+      const panelConfigs = collectPanelConfigs();
+      if (activeDashboardId) {
+        // Update existing dashboard.
+        const updated = await put<Dashboard>(`/admin/dashboards/${activeDashboardId}`, {
+          name,
+          panels: panelConfigs,
+        });
+        setDashboards((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      } else {
+        // Create new dashboard.
+        const created = await post<Dashboard>("/admin/dashboards", {
+          name,
+          panels: panelConfigs,
+        });
+        setDashboards((prev) => [created, ...prev]);
+        setActiveDashboardId(created.id);
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch {
+      // Silently fail — the user can retry.
+    } finally {
+      setSaving(false);
+    }
+  }, [saveName, activeDashboardId, collectPanelConfigs]);
+
+  // Delete a dashboard.
+  const deleteDashboard = useCallback(async (id: number) => {
+    try {
+      await del(`/admin/dashboards/${id}`);
+      setDashboards((prev) => prev.filter((d) => d.id !== id));
+      if (activeDashboardId === id) {
+        switchToExplorer();
+      }
+    } catch {
+      // Silently fail.
+    }
+  }, [activeDashboardId, switchToExplorer]);
 
   if (error) {
     return (
@@ -365,6 +498,8 @@ export default function MetricsPage() {
       </Group>
     );
   }
+
+  const activeDashboard = dashboards.find((d) => d.id === activeDashboardId);
 
   return (
     <Stack>
@@ -428,12 +563,99 @@ export default function MetricsPage() {
         </SimpleGrid>
       )}
 
-      {panelIds.map((id) => (
+      {/* Dashboard bar */}
+      <Paper withBorder p="sm" radius="md">
+        <Group justify="space-between" wrap="wrap" gap="xs">
+          <Group gap="xs" wrap="wrap">
+            <IconLayoutDashboard size={18} style={{ opacity: 0.6 }} />
+            {dashboards.length > 0 ? (
+              <Menu shadow="md" width={220}>
+                <Menu.Target>
+                  <Button variant="subtle" size="compact-xs">
+                    {activeDashboard ? activeDashboard.name : "Explorer"}
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={switchToExplorer}>
+                    Explorer
+                  </Menu.Item>
+                  {dashboards.length > 0 && <Menu.Divider />}
+                  {dashboards.map((d) => (
+                    <Menu.Item
+                      key={d.id}
+                      onClick={() => loadDashboard(d)}
+                      rightSection={
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteDashboard(d.id);
+                          }}
+                        >
+                          <IconTrash size={12} />
+                        </ActionIcon>
+                      }
+                    >
+                      {d.name}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            ) : (
+              <Text size="sm" c="dimmed">Explorer</Text>
+            )}
+          </Group>
+          <Group gap="xs">
+            <TextInput
+              size="xs"
+              w={180}
+              placeholder="Dashboard name..."
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveDashboard();
+              }}
+            />
+            <Tooltip label={activeDashboardId ? "Update dashboard" : "Save as new dashboard"}>
+              <ActionIcon
+                variant="light"
+                size="sm"
+                onClick={saveDashboard}
+                loading={saving}
+                disabled={!saveName.trim()}
+                color={saveSuccess ? "green" : undefined}
+              >
+                {saveSuccess ? <IconCheck size={14} /> : <IconDeviceFloppy size={14} />}
+              </ActionIcon>
+            </Tooltip>
+            {activeDashboardId && (
+              <Tooltip label="Save as new dashboard">
+                <ActionIcon
+                  variant="light"
+                  size="sm"
+                  onClick={() => {
+                    setActiveDashboardId(null);
+                    saveDashboard();
+                  }}
+                >
+                  <IconDotsVertical size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
+        </Group>
+      </Paper>
+
+      {panels.map((panel) => (
         <MetricChartPanel
-          key={id}
+          key={panel.id}
           names={names}
-          onRemove={() => removePanel(id)}
-          canRemove={panelIds.length > 1}
+          initialConfig={panel.config}
+          onConfigChange={(config) => handleConfigChange(panel.id, config)}
+          onRemove={() => removePanel(panel.id)}
+          canRemove={panels.length > 1}
         />
       ))}
 
