@@ -148,7 +148,7 @@ func (s *Service) sendEmail(ctx context.Context, entityType string, entityID int
 			s.logger.Warn("notification email: lookup failed",
 				log.String("entity_type", entityType),
 				log.Int64("entity_id", entityID),
-				log.String("error", err.Error()),
+				log.Err(err),
 			)
 		}
 		return
@@ -171,7 +171,7 @@ func (s *Service) sendEmail(ctx context.Context, entityType string, entityID int
 			s.logger.Error("notification email: send failed",
 				log.String("to", addr),
 				log.String("type", notifType),
-				log.String("error", err.Error()),
+				log.Err(err),
 			)
 		}
 	}

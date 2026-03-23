@@ -98,7 +98,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 			return
 		}
 
-		tokenID, err := randomID()
+		tokenID, err := auth.GenerateID()
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
@@ -122,7 +122,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 			if err := sendResetEmail(r.Context(), emailClient, req.Email, token); err != nil {
 				l.Error("send reset email",
 					log.String("email", req.Email),
-					log.String("error", err.Error()),
+					log.Err(err),
 				)
 				// Don't fail the request — the token is stored and can be
 				// retried. Log the error for observability.
@@ -280,11 +280,3 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// randomID generates a 16-byte hex-encoded random ID (32 characters).
-func randomID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return hex.EncodeToString(b), nil
-}

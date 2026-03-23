@@ -402,7 +402,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 			if err != nil {
 				logger.Error("failed to persist cron run",
 					log.String("job", r.Name),
-					log.String("error", err.Error()),
+					log.Err(err),
 				)
 			}
 		}),

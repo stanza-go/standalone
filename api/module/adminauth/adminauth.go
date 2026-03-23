@@ -4,9 +4,6 @@
 package adminauth
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
@@ -93,7 +90,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 			return
 		}
 
-		tokenID, err := randomID()
+		tokenID, err := auth.GenerateID()
 		if err != nil {
 			http.WriteServerError(w, r, "internal error", err)
 			return
@@ -240,11 +237,3 @@ func scopesForRole(db *sqlite.DB, role string) []string {
 	return scopes
 }
 
-// randomID generates a 16-byte hex-encoded random ID (32 characters).
-func randomID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return hex.EncodeToString(b), nil
-}

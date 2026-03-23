@@ -5,9 +5,6 @@
 package userauth
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"strings"
 	"time"
 
@@ -268,21 +265,21 @@ func logoutHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 func issueSession(w http.ResponseWriter, a *auth.Auth, db *sqlite.DB, logger *log.Logger, uid string) error {
 	accessToken, err := a.IssueAccessToken(uid, []string{"user"})
 	if err != nil {
-		logger.Error("issue access token", log.String("error", err.Error()))
+		logger.Error("issue access token", log.Err(err))
 		http.WriteError(w, http.StatusInternalServerError, "internal error")
 		return err
 	}
 
 	refreshToken, err := auth.GenerateRefreshToken()
 	if err != nil {
-		logger.Error("generate refresh token", log.String("error", err.Error()))
+		logger.Error("generate refresh token", log.Err(err))
 		http.WriteError(w, http.StatusInternalServerError, "internal error")
 		return err
 	}
 
-	tokenID, err := randomID()
+	tokenID, err := auth.GenerateID()
 	if err != nil {
-		logger.Error("generate token id", log.String("error", err.Error()))
+		logger.Error("generate token id", log.Err(err))
 		http.WriteError(w, http.StatusInternalServerError, "internal error")
 		return err
 	}
@@ -295,7 +292,7 @@ func issueSession(w http.ResponseWriter, a *auth.Auth, db *sqlite.DB, logger *lo
 		Set("token_hash", auth.HashToken(refreshToken)).
 		Set("expires_at", expiresAt))
 	if err != nil {
-		logger.Error("store refresh token", log.String("error", err.Error()))
+		logger.Error("store refresh token", log.Err(err))
 		http.WriteError(w, http.StatusInternalServerError, "internal error")
 		return err
 	}
@@ -305,11 +302,3 @@ func issueSession(w http.ResponseWriter, a *auth.Auth, db *sqlite.DB, logger *lo
 	return nil
 }
 
-// randomID generates a 16-byte hex-encoded random ID (32 characters).
-func randomID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return hex.EncodeToString(b), nil
-}
