@@ -742,6 +742,9 @@ func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.S
 			http.PrometheusMetric{Name: "stanza_email_errors_total", Help: "Total email send failures", Type: "counter", Value: float64(es.Errors)},
 		)
 
+		// Go runtime.
+		out = append(out, http.RuntimeMetrics()...)
+
 		return out
 	}
 }
