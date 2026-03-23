@@ -98,7 +98,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 
 		l.Info("user registered", log.String("email", req.Email), log.String("uid", uid))
 
-		_ = wh.Dispatch(r.Context(), "user.registered", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserRegistered, map[string]any{
 			"id":    id,
 			"email": req.Email,
 			"name":  req.Name,

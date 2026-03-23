@@ -140,7 +140,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		_ = wh.Dispatch(r.Context(), "user.updated", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserUpdated, map[string]any{
 			"id":    id,
 			"email": email,
 			"name":  name,

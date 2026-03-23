@@ -27,6 +27,7 @@ import (
 //	POST   /api/admin/webhooks/{id}/test    — send a test event
 func Register(admin *http.Group, db *sqlite.DB, dispatcher *webhooks.Dispatcher) {
 	admin.HandleFunc("GET /webhooks", listHandler(db))
+	admin.HandleFunc("GET /webhooks/events", eventsHandler())
 	admin.HandleFunc("GET /webhooks/export", exportHandler(db))
 	admin.HandleFunc("POST /webhooks", createHandler(db))
 	admin.HandleFunc("POST /webhooks/bulk-delete", bulkDeleteHandler(db))
@@ -35,6 +36,14 @@ func Register(admin *http.Group, db *sqlite.DB, dispatcher *webhooks.Dispatcher)
 	admin.HandleFunc("DELETE /webhooks/{id}", deleteHandler(db))
 	admin.HandleFunc("GET /webhooks/{id}/deliveries", deliveriesHandler(db))
 	admin.HandleFunc("POST /webhooks/{id}/test", testHandler(db, dispatcher))
+}
+
+func eventsHandler() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.WriteJSON(w, http.StatusOK, map[string]any{
+			"events": webhooks.KnownEvents,
+		})
+	}
 }
 
 type webhookJSON struct {
@@ -411,14 +420,14 @@ func testHandler(db *sqlite.DB, dispatcher *webhooks.Dispatcher) func(http.Respo
 
 		// Send a test event through the dispatcher.
 		testPayload := map[string]any{
-			"event":     "webhook.test",
+			"event":     webhooks.EventWebhookTest,
 			"timestamp": sqlite.Now(),
 			"data": map[string]string{
 				"message": "This is a test webhook delivery from Stanza.",
 			},
 		}
 
-		if err := dispatcher.Dispatch(r.Context(), "webhook.test", testPayload); err != nil {
+		if err := dispatcher.Dispatch(r.Context(), webhooks.EventWebhookTest, testPayload); err != nil {
 			http.WriteServerError(w, r, "failed to dispatch test event", err)
 			return
 		}

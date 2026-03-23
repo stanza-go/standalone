@@ -133,7 +133,7 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			adminaudit.Log(db, r, "session.revoke", "session", id, "bulk")
 		}
 
-		_ = wh.Dispatch(r.Context(), "session.bulk_revoked", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventSessionBulkRevoked, map[string]any{
 			"ids":      req.IDs,
 			"affected": n,
 		})
@@ -166,7 +166,7 @@ func revokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "session.revoke", "session", id, "")
 
-		_ = wh.Dispatch(r.Context(), "session.revoked", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventSessionRevoked, map[string]any{
 			"session_id": id,
 		})
 

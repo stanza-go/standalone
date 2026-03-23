@@ -39,9 +39,7 @@ func entriesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 		}
 
 		if !isValidLogFile(file) {
-			http.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": "invalid log file name",
-			})
+			http.WriteError(w, http.StatusBadRequest, "invalid log file name")
 			return
 		}
 
@@ -66,9 +64,7 @@ func entriesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 				})
 				return
 			}
-			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "failed to open log file",
-			})
+			http.WriteServerError(w, r, "failed to open log file", err)
 			return
 		}
 		defer f.Close()
@@ -255,9 +251,7 @@ func filesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		dirEntries, err := os.ReadDir(logsDir)
 		if err != nil {
-			http.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "failed to read logs directory",
-			})
+			http.WriteServerError(w, r, "failed to read logs directory", err)
 			return
 		}
 

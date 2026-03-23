@@ -19,6 +19,54 @@ import (
 
 const queueType = "webhook.deliver"
 
+// Webhook event name constants. Use these instead of bare strings to prevent
+// typos and enable grep-ability across the codebase.
+const (
+	EventUserRegistered    = "user.registered"
+	EventUserCreated       = "user.created"
+	EventUserUpdated       = "user.updated"
+	EventUserDeleted       = "user.deleted"
+	EventUserBulkDeleted   = "user.bulk_deleted"
+	EventAdminCreated      = "admin.created"
+	EventAdminUpdated      = "admin.updated"
+	EventAdminDeleted      = "admin.deleted"
+	EventAdminBulkDeleted  = "admin.bulk_deleted"
+	EventRoleCreated       = "role.created"
+	EventRoleUpdated       = "role.updated"
+	EventRoleDeleted       = "role.deleted"
+	EventSessionRevoked    = "session.revoked"
+	EventSessionBulkRevoked = "session.bulk_revoked"
+	EventSettingUpdated    = "setting.updated"
+	EventWebhookTest       = "webhook.test"
+)
+
+// Event holds a webhook event name and its human-readable label.
+type Event struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
+// KnownEvents lists all webhook events the application can dispatch.
+// Served to the admin panel via the events endpoint.
+var KnownEvents = []Event{
+	{Name: EventUserRegistered, Label: "User Registered"},
+	{Name: EventUserCreated, Label: "User Created"},
+	{Name: EventUserUpdated, Label: "User Updated"},
+	{Name: EventUserDeleted, Label: "User Deleted"},
+	{Name: EventUserBulkDeleted, Label: "Users Bulk Deleted"},
+	{Name: EventAdminCreated, Label: "Admin Created"},
+	{Name: EventAdminUpdated, Label: "Admin Updated"},
+	{Name: EventAdminDeleted, Label: "Admin Deleted"},
+	{Name: EventAdminBulkDeleted, Label: "Admins Bulk Deleted"},
+	{Name: EventRoleCreated, Label: "Role Created"},
+	{Name: EventRoleUpdated, Label: "Role Updated"},
+	{Name: EventRoleDeleted, Label: "Role Deleted"},
+	{Name: EventSessionRevoked, Label: "Session Revoked"},
+	{Name: EventSessionBulkRevoked, Label: "Sessions Bulk Revoked"},
+	{Name: EventSettingUpdated, Label: "Setting Updated"},
+	{Name: EventWebhookTest, Label: "Webhook Test"},
+}
+
 // Dispatcher sends webhook events to subscribed endpoints.
 type Dispatcher struct {
 	db     *sqlite.DB

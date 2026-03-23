@@ -168,7 +168,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "role.create", "role", sqlite.FormatID(roleID), req.Name)
 
-		_ = wh.Dispatch(r.Context(), "role.created", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventRoleCreated, map[string]any{
 			"id":     roleID,
 			"name":   req.Name,
 			"scopes": req.Scopes,
@@ -285,7 +285,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "role.update", "role", sqlite.FormatID(id), name)
 
-		_ = wh.Dispatch(r.Context(), "role.updated", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventRoleUpdated, map[string]any{
 			"id":     id,
 			"name":   name,
 			"scopes": scopes,
@@ -349,7 +349,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "role.delete", "role", sqlite.FormatID(id), name)
 
-		_ = wh.Dispatch(r.Context(), "role.deleted", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventRoleDeleted, map[string]any{
 			"id":   id,
 			"name": name,
 		})

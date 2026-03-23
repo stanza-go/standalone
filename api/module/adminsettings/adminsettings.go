@@ -95,7 +95,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "setting.update", "setting", key, req.Value)
 
-		_ = wh.Dispatch(r.Context(), "setting.updated", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventSettingUpdated, map[string]any{
 			"key":   key,
 			"value": req.Value,
 			"group": s.GroupName,

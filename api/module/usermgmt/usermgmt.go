@@ -171,7 +171,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "user.create", "user", sqlite.FormatID(id), req.Email)
 
-		_ = wh.Dispatch(r.Context(), "user.created", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserCreated, map[string]any{
 			"id":    id,
 			"email": req.Email,
 			"name":  req.Name,
@@ -295,7 +295,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "user.update", "user", sqlite.FormatID(id), currentEmail)
 
-		_ = wh.Dispatch(r.Context(), "user.updated", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserUpdated, map[string]any{
 			"id":        id,
 			"email":     currentEmail,
 			"name":      name,
@@ -345,7 +345,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		adminaudit.Log(db, r, "user.delete", "user", sqlite.FormatID(id), "")
 
-		_ = wh.Dispatch(r.Context(), "user.deleted", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserDeleted, map[string]any{
 			"id": id,
 		})
 
@@ -398,7 +398,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			adminaudit.Log(db, r, "user.delete", "user", sqlite.FormatID(id), "bulk")
 		}
 
-		_ = wh.Dispatch(r.Context(), "user.bulk_deleted", map[string]any{
+		_ = wh.Dispatch(r.Context(), webhooks.EventUserBulkDeleted, map[string]any{
 			"ids":      req.IDs,
 			"affected": n,
 		})
