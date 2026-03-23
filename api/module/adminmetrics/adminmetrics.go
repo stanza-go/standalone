@@ -104,6 +104,15 @@ func queryHandler(store *metrics.Store) func(http.ResponseWriter, *http.Request)
 			}
 		}
 
+		// Reject queries that would produce too many aggregation buckets.
+		if step > 0 {
+			buckets := end.Sub(start).Milliseconds()/step.Milliseconds() + 1
+			if buckets > 100_000 {
+				http.WriteError(w, http.StatusBadRequest, "step too small for time range (would exceed 100k buckets)")
+				return
+			}
+		}
+
 		mq := metrics.Query{
 			Name:  name,
 			Start: start,
