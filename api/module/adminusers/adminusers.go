@@ -50,11 +50,9 @@ type adminJSON struct {
 
 func scanAdmin(rows *sqlite.Rows) (adminJSON, error) {
 	var a adminJSON
-	var isActive int
-	if err := rows.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &isActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := rows.Scan(&a.ID, &a.Email, &a.Name, &a.Role, &a.IsActive, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return a, err
 	}
-	a.IsActive = isActive == 1
 	return a, nil
 }
 
@@ -115,12 +113,12 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			var id int64
 			var email, name, role, createdAt, updatedAt string
-			var isActive int
+			var isActive bool
 			if err := rows.Scan(&id, &email, &name, &role, &isActive, &createdAt, &updatedAt); err != nil {
 				return nil
 			}
 			active := "No"
-			if isActive == 1 {
+			if isActive {
 				active = "Yes"
 			}
 			return []string{strconv.FormatInt(id, 10), email, name, role, active, createdAt, updatedAt}
@@ -246,7 +244,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// Load current admin.
 		var currentEmail, currentName, currentRole, createdAt string
-		var currentActive int
+		var currentActive bool
 		sql, args := sqlite.Select("email", "name", "role", "is_active", "created_at").
 			From("admins").
 			Where("id = ?", id).
@@ -269,11 +267,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 		isActive := currentActive
 		if req.IsActive != nil {
-			if *req.IsActive {
-				isActive = 1
-			} else {
-				isActive = 0
-			}
+			isActive = *req.IsActive
 		}
 
 		now := sqlite.Now()
@@ -306,7 +300,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			"email":     currentEmail,
 			"name":      name,
 			"role":      role,
-			"is_active": isActive == 1,
+			"is_active": isActive,
 		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -315,7 +309,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				Email:     currentEmail,
 				Name:      name,
 				Role:      role,
-				IsActive:  isActive == 1,
+				IsActive:  isActive,
 				CreatedAt: createdAt,
 				UpdatedAt: now,
 			},
@@ -340,7 +334,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		now := sqlite.Now()
 		sql, args := sqlite.Update("admins").
 			Set("deleted_at", now).
-			Set("is_active", 0).
+			Set("is_active", false).
 			Set("updated_at", now).
 			Where("id = ?", id).
 			WhereNull("deleted_at").
@@ -530,7 +524,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 
 		query, args := sqlite.Update("admins").
 			Set("deleted_at", now).
-			Set("is_active", 0).
+			Set("is_active", false).
 			Set("updated_at", now).
 			WhereNull("deleted_at").
 			WhereIn("id", ids...).

@@ -81,7 +81,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 			Set("email", req.Email).
 			Set("password", passwordHash).
 			Set("name", req.Name).
-			Set("is_active", 1).
+			Set("is_active", true).
 			Set("created_at", now).
 			Set("updated_at", now).
 			Build()

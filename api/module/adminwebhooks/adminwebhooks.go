@@ -67,11 +67,9 @@ type deliveryJSON struct {
 func scanWebhook(rows *sqlite.Rows) (webhookJSON, error) {
 	var wh webhookJSON
 	var eventsStr string
-	var active int
-	if err := rows.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &active, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
+	if err := rows.Scan(&wh.ID, &wh.URL, &wh.Secret, &wh.Description, &eventsStr, &wh.IsActive, &wh.CreatedBy, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
 		return wh, err
 	}
-	wh.IsActive = active == 1
 	_ = json.Unmarshal([]byte(eventsStr), &wh.Events)
 	if wh.Events == nil {
 		wh.Events = []string{}
@@ -130,12 +128,12 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			var id, createdBy int64
 			var url, description, eventsStr, createdAt, updatedAt string
-			var active int
+			var active bool
 			if err := rows.Scan(&id, &url, &description, &eventsStr, &active, &createdBy, &createdAt, &updatedAt); err != nil {
 				return nil
 			}
 			isActive := "No"
-			if active == 1 {
+			if active {
 				isActive = "Yes"
 			}
 			return []string{strconv.FormatInt(id, 10), url, description, eventsStr, isActive, strconv.FormatInt(createdBy, 10), createdAt, updatedAt}
@@ -180,7 +178,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Set("secret", secret).
 			Set("description", req.Description).
 			Set("events", string(eventsJSON)).
-			Set("is_active", 1).
+			Set("is_active", true).
 			Set("created_by", createdBy).
 			Set("created_at", now).
 			Set("updated_at", now).
@@ -274,11 +272,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			ub = ub.Set("events", string(eventsJSON))
 		}
 		if req.IsActive != nil {
-			active := 0
-			if *req.IsActive {
-				active = 1
-			}
-			ub = ub.Set("is_active", active)
+			ub = ub.Set("is_active", *req.IsActive)
 		}
 
 		sql, args := ub.Build()

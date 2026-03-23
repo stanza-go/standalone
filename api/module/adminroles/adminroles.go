@@ -67,11 +67,9 @@ type roleJSON struct {
 
 func scanRole(rows *sqlite.Rows) (roleJSON, error) {
 	var role roleJSON
-	var isSystem int
-	if err := rows.Scan(&role.ID, &role.Name, &role.Description, &isSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
+	if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.IsSystem, &role.CreatedAt, &role.UpdatedAt); err != nil {
 		return role, err
 	}
-	role.IsSystem = isSystem == 1
 	return role, nil
 }
 
@@ -205,7 +203,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// Load current role.
 		var currentName, currentDesc, createdAt string
-		var isSystem int
+		var isSystem bool
 		sql, args := sqlite.Select("name", "description", "is_system", "created_at").
 			From("roles").
 			Where("id = ?", id).
@@ -218,7 +216,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// System roles cannot be renamed.
 		name := currentName
-		if req.Name != "" && isSystem == 0 {
+		if req.Name != "" && !isSystem {
 			name = strings.TrimSpace(strings.ToLower(req.Name))
 			v := validate.Fields(
 				validate.MinLen("name", name, 2),
@@ -247,7 +245,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		q := sqlite.Update("roles").
 			Set("description", desc).
 			Set("updated_at", now)
-		if isSystem == 0 {
+		if !isSystem {
 			q.Set("name", name)
 		}
 		sql, args = q.Where("id = ?", id).Build()
@@ -275,7 +273,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 
 		// If role was renamed and it's not a system role, update admins.
-		if isSystem == 0 && name != currentName {
+		if !isSystem && name != currentName {
 			sql, args = sqlite.Update("admins").
 				Set("role", name).
 				Where("role = ?", currentName).
@@ -298,7 +296,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				ID:          id,
 				Name:        name,
 				Description: desc,
-				IsSystem:    isSystem == 1,
+				IsSystem:    isSystem,
 				Scopes:      scopes,
 				CreatedAt:   createdAt,
 				UpdatedAt:   now,
@@ -316,7 +314,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// Check if role exists and is not a system role.
 		var name string
-		var isSystem int
+		var isSystem bool
 		sql, args := sqlite.Select("name", "is_system").From("roles").Where("id = ?", id).Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&name, &isSystem); err != nil {
@@ -324,7 +322,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		if isSystem == 1 {
+		if isSystem {
 			http.WriteError(w, http.StatusBadRequest, "cannot delete a system role")
 			return
 		}

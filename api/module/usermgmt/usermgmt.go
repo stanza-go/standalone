@@ -53,11 +53,9 @@ type userJSON struct {
 
 func scanUser(rows *sqlite.Rows) (userJSON, error) {
 	var u userJSON
-	var isActive int
-	if err := rows.Scan(&u.ID, &u.Email, &u.Name, &isActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.IsActive, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return u, err
 	}
-	u.IsActive = isActive == 1
 	return u, nil
 }
 
@@ -114,12 +112,12 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 			var id int64
 			var email, name, createdAt, updatedAt string
-			var isActive int
+			var isActive bool
 			if err := rows.Scan(&id, &email, &name, &isActive, &createdAt, &updatedAt); err != nil {
 				return nil
 			}
 			active := "No"
-			if isActive == 1 {
+			if isActive {
 				active = "Yes"
 			}
 			return []string{strconv.FormatInt(id, 10), email, name, active, createdAt, updatedAt}
@@ -252,7 +250,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		// Load current user.
 		var currentEmail, currentName, createdAt string
-		var currentActive int
+		var currentActive bool
 		sql, args := sqlite.Select("email", "name", "is_active", "created_at").
 			From("users").
 			Where("id = ?", id).
@@ -271,11 +269,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 		isActive := currentActive
 		if req.IsActive != nil {
-			if *req.IsActive {
-				isActive = 1
-			} else {
-				isActive = 0
-			}
+			isActive = *req.IsActive
 		}
 
 		now := sqlite.Now()
@@ -315,7 +309,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			"id":        id,
 			"email":     currentEmail,
 			"name":      name,
-			"is_active": isActive == 1,
+			"is_active": isActive,
 		})
 
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -323,7 +317,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				ID:        id,
 				Email:     currentEmail,
 				Name:      name,
-				IsActive:  isActive == 1,
+				IsActive:  isActive,
 				CreatedAt: createdAt,
 				UpdatedAt: now,
 			},
@@ -341,7 +335,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		now := sqlite.Now()
 		sql, args := sqlite.Update("users").
 			Set("deleted_at", now).
-			Set("is_active", 0).
+			Set("is_active", false).
 			Set("updated_at", now).
 			Where("id = ?", id).
 			WhereNull("deleted_at").
@@ -396,7 +390,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 
 		query, args := sqlite.Update("users").
 			Set("deleted_at", now).
-			Set("is_active", 0).
+			Set("is_active", false).
 			Set("updated_at", now).
 			WhereNull("deleted_at").
 			WhereIn("id", ids...).
@@ -560,12 +554,10 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 		uploads, err := sqlite.QueryAll(db, sql, args, func(rows *sqlite.Rows) (uploadEntry, error) {
 			var u uploadEntry
-			var hasThumbnail int
 			if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-				&u.SizeBytes, &hasThumbnail, &u.CreatedAt); err != nil {
+				&u.SizeBytes, &u.HasThumbnail, &u.CreatedAt); err != nil {
 				return u, err
 			}
-			u.HasThumbnail = hasThumbnail == 1
 			return u, nil
 		})
 		if err != nil {
@@ -590,7 +582,7 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 
 		// Verify user exists and is active.
 		var email, name string
-		var isActive int
+		var isActive bool
 		sql, args := sqlite.Select("email", "name", "is_active").
 			From("users").
 			Where("id = ?", id).
@@ -601,7 +593,7 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 			http.WriteError(w, http.StatusNotFound, "user not found")
 			return
 		}
-		if isActive == 0 {
+		if !isActive {
 			http.WriteError(w, http.StatusBadRequest, "cannot impersonate an inactive user")
 			return
 		}

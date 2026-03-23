@@ -62,12 +62,10 @@ type uploadJSON struct {
 
 func scanUserUpload(rows *sqlite.Rows) (uploadJSON, error) {
 	var u uploadJSON
-	var hasThumbnail int
 	if err := rows.Scan(&u.ID, &u.UUID, &u.OriginalName, &u.ContentType,
-		&u.SizeBytes, &hasThumbnail, &u.CreatedAt); err != nil {
+		&u.SizeBytes, &u.HasThumbnail, &u.CreatedAt); err != nil {
 		return u, err
 	}
-	u.HasThumbnail = hasThumbnail == 1
 	return u, nil
 }
 
@@ -170,10 +168,10 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		storagePath := filepath.Join(datePath, uploadUUID, storedName)
 
 		// Generate thumbnail for images.
-		hasThumbnail := 0
+		hasThumbnail := false
 		if isImage(ct) {
 			if generateThumbnail(filePath, filepath.Join(dirPath, thumbFilename)) {
-				hasThumbnail = 1
+				hasThumbnail = true
 			}
 		}
 
@@ -204,7 +202,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 				OriginalName: originalName,
 				ContentType:  ct,
 				SizeBytes:    written,
-				HasThumbnail: hasThumbnail == 1,
+				HasThumbnail: hasThumbnail,
 				CreatedAt:    now.Format(time.RFC3339),
 			},
 		})
@@ -329,7 +327,7 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 		}
 
 		var storagePath string
-		var hasThumbnail int
+		var hasThumbnail bool
 		sql, args := sqlite.Select("storage_path", "has_thumbnail").
 			From("uploads").
 			Where("id = ?", id).
@@ -342,7 +340,7 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 			return
 		}
 
-		if hasThumbnail == 0 {
+		if !hasThumbnail {
 			http.WriteError(w, http.StatusNotFound, "no thumbnail available")
 			return
 		}
