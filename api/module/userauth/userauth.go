@@ -71,8 +71,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			l.Error("hash password", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -92,8 +91,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 				http.WriteError(w, http.StatusConflict, "email already registered")
 				return
 			}
-			l.Error("create user", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -191,8 +189,6 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 // scopes. The frontend polls this endpoint every ~1 minute.
 func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		l := log.FromContext(r.Context())
-
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err != nil {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -243,8 +239,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 
 		accessToken, err := a.IssueAccessToken(uid, []string{"user"})
 		if err != nil {
-			l.Error("issue access token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 

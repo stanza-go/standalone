@@ -69,7 +69,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return k, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list api keys")
+			http.WriteServerError(w, r, "failed to list api keys", err)
 			return
 		}
 
@@ -105,7 +105,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Generate API key with prefix, display prefix, and hash.
 		fullKey, prefix, keyHash, err := auth.GenerateAPIKey("stza_")
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to generate key")
+			http.WriteServerError(w, r, "failed to generate key", err)
 			return
 		}
 
@@ -128,7 +128,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := q.Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create api key")
+			http.WriteServerError(w, r, "failed to create api key", err)
 			return
 		}
 
@@ -200,7 +200,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Where("entity_id = ?", userID).
 			Build()
 		if _, err := db.Exec(sql, args...); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to update api key")
+			http.WriteServerError(w, r, "failed to update api key", err)
 			return
 		}
 
@@ -233,7 +233,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to revoke api key")
+			http.WriteServerError(w, r, "failed to revoke api key", err)
 			return
 		}
 		if result.RowsAffected == 0 {

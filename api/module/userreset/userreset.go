@@ -97,15 +97,13 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		// Generate reset token (32 bytes = 64 hex chars).
 		token, err := generateToken()
 		if err != nil {
-			l.Error("generate reset token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
 		tokenID, err := randomID()
 		if err != nil {
-			l.Error("generate token id", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -120,8 +118,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			l.Error("store reset token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -209,8 +206,7 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		// Hash the new password.
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			l.Error("hash password", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -225,8 +221,7 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			l.Error("update password", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 		if result.RowsAffected == 0 {

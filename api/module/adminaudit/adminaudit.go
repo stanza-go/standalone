@@ -113,7 +113,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return e, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list audit entries")
+			http.WriteServerError(w, r, "failed to list audit entries", err)
 			return
 		}
 
@@ -131,7 +131,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := selectQ.OrderBy("audit_log."+sortCol, sortDir).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to export audit log")
+			http.WriteServerError(w, r, "failed to export audit log", err)
 			return
 		}
 		defer rows.Close()
@@ -172,7 +172,7 @@ func recentHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return e, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list recent activity")
+			http.WriteServerError(w, r, "failed to list recent activity", err)
 			return
 		}
 

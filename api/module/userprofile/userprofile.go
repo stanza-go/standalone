@@ -8,7 +8,6 @@ import (
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
-	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/validate"
 	"github.com/stanza-go/standalone/module/webhooks"
@@ -76,8 +75,6 @@ type updateRequest struct {
 // updateProfile updates the authenticated user's name and/or email.
 func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		l := log.FromContext(r.Context())
-
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -123,8 +120,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				http.WriteError(w, http.StatusConflict, "email already in use")
 				return
 			}
-			l.Error("update user profile", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -142,7 +138,7 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&id, &email, &name, &createdAt, &updatedAt); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -173,8 +169,6 @@ type passwordRequest struct {
 // changePassword verifies the current password and updates to a new one.
 func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		l := log.FromContext(r.Context())
-
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -219,8 +213,7 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		// Hash and store new password.
 		newHash, err := auth.HashPassword(req.NewPassword)
 		if err != nil {
-			l.Error("hash password", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -232,8 +225,7 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			l.Error("update password", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -303,7 +295,7 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return sr, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -341,7 +333,7 @@ func revokeSession(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 

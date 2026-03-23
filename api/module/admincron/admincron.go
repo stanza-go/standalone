@@ -102,7 +102,7 @@ func runsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return run, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "database error")
+			http.WriteServerError(w, r, "database error", err)
 			return
 		}
 

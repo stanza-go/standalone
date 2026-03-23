@@ -34,7 +34,7 @@ func statsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stats, err := q.Stats()
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to get queue stats")
+			http.WriteServerError(w, r, "failed to get queue stats", err)
 			return
 		}
 		http.WriteJSON(w, http.StatusOK, map[string]any{
@@ -68,13 +68,13 @@ func jobsHandler(q *queue.Queue) func(http.ResponseWriter, *http.Request) {
 			jobs, jobsErr = q.Jobs(f)
 		}()
 		if jobsErr != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list jobs")
+			http.WriteServerError(w, r, "failed to list jobs", jobsErr)
 			return
 		}
 
 		total, err := q.JobCount(f)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to count jobs")
+			http.WriteServerError(w, r, "failed to count jobs", err)
 			return
 		}
 

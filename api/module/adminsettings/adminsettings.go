@@ -41,7 +41,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return s, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
+			http.WriteServerError(w, r, "failed to query settings", err)
 			return
 		}
 
@@ -76,7 +76,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to update setting")
+			http.WriteServerError(w, r, "failed to update setting", err)
 			return
 		}
 
@@ -92,7 +92,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&s.Key, &s.Value, &s.GroupName, &s.UpdatedAt); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to read updated setting")
+			http.WriteServerError(w, r, "failed to read updated setting", err)
 			return
 		}
 

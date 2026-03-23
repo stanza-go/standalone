@@ -94,7 +94,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := qb.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		items, err := sqlite.QueryAll(db, sql, args, scanWebhook)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query webhooks")
+			http.WriteServerError(w, r, "failed to query webhooks", err)
 			return
 		}
 
@@ -117,7 +117,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := qb.OrderBy(sortCol, sortDir).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to export webhooks")
+			http.WriteServerError(w, r, "failed to export webhooks", err)
 			return
 		}
 		defer rows.Close()
@@ -185,7 +185,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create webhook")
+			http.WriteServerError(w, r, "failed to create webhook", err)
 			return
 		}
 
@@ -278,7 +278,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := ub.Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to update webhook")
+			http.WriteServerError(w, r, "failed to update webhook", err)
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -295,7 +295,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		wh, err := sqlite.QueryOne(db, sql, args, scanWebhook)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to read updated webhook")
+			http.WriteServerError(w, r, "failed to read updated webhook", err)
 			return
 		}
 
@@ -332,7 +332,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(dq, da...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete webhooks")
+			http.WriteServerError(w, r, "failed to bulk delete webhooks", err)
 			return
 		}
 
@@ -358,7 +358,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		dq, da = sqlite.Delete("webhooks").Where("id = ?", id).Build()
 		result, err := db.Exec(dq, da...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete webhook")
+			http.WriteServerError(w, r, "failed to delete webhook", err)
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -402,7 +402,7 @@ func deliveriesHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return d, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query deliveries")
+			http.WriteServerError(w, r, "failed to query deliveries", err)
 			return
 		}
 
@@ -432,7 +432,7 @@ func testHandler(db *sqlite.DB, dispatcher *webhooks.Dispatcher) func(http.Respo
 		}
 
 		if err := dispatcher.Dispatch(r.Context(), "webhook.test", testPayload); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to dispatch test event")
+			http.WriteServerError(w, r, "failed to dispatch test event", err)
 			return
 		}
 

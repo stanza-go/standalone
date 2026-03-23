@@ -54,7 +54,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return s, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
+			http.WriteServerError(w, r, "failed to list sessions", err)
 			return
 		}
 
@@ -82,7 +82,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to export sessions")
+			http.WriteServerError(w, r, "failed to export sessions", err)
 			return
 		}
 		defer rows.Close()
@@ -128,7 +128,7 @@ func bulkRevokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to bulk revoke sessions")
+			http.WriteServerError(w, r, "failed to bulk revoke sessions", err)
 			return
 		}
 
@@ -159,7 +159,7 @@ func revokeHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		sql, args := sqlite.Delete("refresh_tokens").Where("id = ?", id).Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to revoke session")
+			http.WriteServerError(w, r, "failed to revoke session", err)
 			return
 		}
 

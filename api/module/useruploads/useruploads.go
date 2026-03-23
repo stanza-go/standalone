@@ -92,7 +92,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := q.OrderBy("id", "DESC").Limit(pg.Limit).Offset(pg.Offset).Build()
 		uploads, err := sqlite.QueryAll(db, sql, args, scanUserUpload)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list uploads")
+			http.WriteServerError(w, r, "failed to list uploads", err)
 			return
 		}
 
@@ -121,7 +121,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		// Generate UUID for this upload.
 		uuidBytes := make([]byte, 16)
 		if _, err := rand.Read(uuidBytes); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to generate uuid")
+			http.WriteServerError(w, r, "failed to generate uuid", err)
 			return
 		}
 		uploadUUID := hex.EncodeToString(uuidBytes)
@@ -135,7 +135,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		)
 		dirPath := filepath.Join(uploadsDir, datePath, uploadUUID)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create upload directory")
+			http.WriteServerError(w, r, "failed to create upload directory", err)
 			return
 		}
 
@@ -147,7 +147,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		// Write file to disk.
 		dst, err := os.Create(filePath)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create file")
+			http.WriteServerError(w, r, "failed to create file", err)
 			return
 		}
 
@@ -157,7 +157,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		}
 		if err != nil {
 			_ = os.Remove(filePath)
-			http.WriteError(w, http.StatusInternalServerError, "failed to write file")
+			http.WriteServerError(w, r, "failed to write file", err)
 			return
 		}
 
@@ -191,7 +191,7 @@ func uploadHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *
 		result, err := db.Exec(sql, args...)
 		if err != nil {
 			_ = os.RemoveAll(dirPath)
-			http.WriteError(w, http.StatusInternalServerError, "failed to save upload record")
+			http.WriteServerError(w, r, "failed to save upload record", err)
 			return
 		}
 
@@ -251,7 +251,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete upload")
+			http.WriteServerError(w, r, "failed to delete upload", err)
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -298,7 +298,7 @@ func fileHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *ht
 
 		info, err := f.Stat()
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to stat file")
+			http.WriteServerError(w, r, "failed to stat file", err)
 			return
 		}
 
@@ -355,7 +355,7 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 
 		info, err := f.Stat()
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to stat thumbnail")
+			http.WriteServerError(w, r, "failed to stat thumbnail", err)
 			return
 		}
 

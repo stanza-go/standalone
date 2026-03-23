@@ -57,7 +57,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return n, nil
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
+			http.WriteServerError(w, r, "failed to list notifications", err)
 			return
 		}
 
@@ -101,7 +101,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to mark notification as read")
+			http.WriteServerError(w, r, "failed to mark notification as read", err)
 			return
 		}
 
@@ -128,7 +128,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to mark notifications as read")
+			http.WriteServerError(w, r, "failed to mark notifications as read", err)
 			return
 		}
 
@@ -156,7 +156,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete notification")
+			http.WriteServerError(w, r, "failed to delete notification", err)
 			return
 		}
 

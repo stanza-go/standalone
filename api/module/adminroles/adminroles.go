@@ -81,7 +81,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		roles, err := sqlite.QueryAll(db, sql, args, scanRole)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list roles")
+			http.WriteServerError(w, r, "failed to list roles", err)
 			return
 		}
 
@@ -151,13 +151,13 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				http.WriteError(w, http.StatusConflict, "role name already exists")
 				return
 			}
-			http.WriteError(w, http.StatusInternalServerError, "failed to create role")
+			http.WriteServerError(w, r, "failed to create role", err)
 			return
 		}
 
 		roleID := result.LastInsertID
 		if err := saveScopes(db, roleID, req.Scopes); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to save scopes")
+			http.WriteServerError(w, r, "failed to save scopes", err)
 			return
 		}
 
@@ -254,7 +254,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				http.WriteError(w, http.StatusConflict, "role name already exists")
 				return
 			}
-			http.WriteError(w, http.StatusInternalServerError, "failed to update role")
+			http.WriteServerError(w, r, "failed to update role", err)
 			return
 		}
 
@@ -263,11 +263,11 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			// Delete existing scopes.
 			sql, args = sqlite.Delete("role_scopes").Where("role_id = ?", id).Build()
 			if _, err := db.Exec(sql, args...); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to update scopes")
+				http.WriteServerError(w, r, "failed to update scopes", err)
 				return
 			}
 			if err := saveScopes(db, id, req.Scopes); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to save scopes")
+				http.WriteServerError(w, r, "failed to save scopes", err)
 				return
 			}
 		}
@@ -345,7 +345,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		sql, args = sqlite.Delete("roles").Where("id = ?", id).Build()
 		if _, err := db.Exec(sql, args...); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete role")
+			http.WriteServerError(w, r, "failed to delete role", err)
 			return
 		}
 

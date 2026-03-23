@@ -84,23 +84,20 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		// Issue access token.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
 		if err != nil {
-			l.Error("issue access token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
 		// Generate and store refresh token.
 		refreshToken, err := auth.GenerateRefreshToken()
 		if err != nil {
-			l.Error("generate refresh token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
 		tokenID, err := randomID()
 		if err != nil {
-			l.Error("generate token id", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -114,8 +111,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 			Build()
 		_, err = db.Exec(sql, args...)
 		if err != nil {
-			l.Error("store refresh token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 
@@ -141,8 +137,6 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 // The frontend polls this endpoint every ~1 minute.
 func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		l := log.FromContext(r.Context())
-
 		refreshToken, err := auth.ReadRefreshToken(r)
 		if err != nil {
 			http.WriteError(w, http.StatusUnauthorized, "authentication required")
@@ -199,8 +193,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		// Issue fresh access token with current scopes.
 		accessToken, err := a.IssueAccessToken(uid, scopes)
 		if err != nil {
-			l.Error("issue access token", log.String("error", err.Error()))
-			http.WriteError(w, http.StatusInternalServerError, "internal error")
+			http.WriteServerError(w, r, "internal error", err)
 			return
 		}
 

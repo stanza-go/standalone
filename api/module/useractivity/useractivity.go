@@ -73,7 +73,7 @@ func listActivity(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return e, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
+			http.WriteServerError(w, r, "failed to query activity", err)
 			return
 		}
 

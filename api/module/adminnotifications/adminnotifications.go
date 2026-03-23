@@ -72,7 +72,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return n, nil
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list notifications")
+			http.WriteServerError(w, r, "failed to list notifications", err)
 			return
 		}
 
@@ -106,7 +106,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := q.OrderBy(sortCol, sortDir).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to export notifications")
+			http.WriteServerError(w, r, "failed to export notifications", err)
 			return
 		}
 		defer rows.Close()
@@ -157,7 +157,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to mark notification as read")
+			http.WriteServerError(w, r, "failed to mark notification as read", err)
 			return
 		}
 
@@ -184,7 +184,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to mark notifications as read")
+			http.WriteServerError(w, r, "failed to mark notifications as read", err)
 			return
 		}
 
@@ -248,7 +248,7 @@ func sendHandler(svc *notifications.Service) func(http.ResponseWriter, *http.Req
 			id, err = svc.NotifyUser(req.EntityID, req.Type, req.Title, req.Message, opts...)
 		}
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create notification")
+			http.WriteServerError(w, r, "failed to create notification", err)
 			return
 		}
 
@@ -358,7 +358,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete notifications")
+			http.WriteServerError(w, r, "failed to bulk delete notifications", err)
 			return
 		}
 
@@ -386,7 +386,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete notification")
+			http.WriteServerError(w, r, "failed to delete notification", err)
 			return
 		}
 

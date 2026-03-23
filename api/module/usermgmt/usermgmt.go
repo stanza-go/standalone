@@ -77,7 +77,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := selectQ.OrderBy(sortCol, sortDir).Limit(pg.Limit).Offset(pg.Offset).Build()
 		users, err := sqlite.QueryAll(db, sql, args, scanUser)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to list users")
+			http.WriteServerError(w, r, "failed to list users", err)
 			return
 		}
 
@@ -101,7 +101,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := q.OrderBy(sortCol, sortDir).Build()
 		rows, err := db.Query(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to export users")
+			http.WriteServerError(w, r, "failed to export users", err)
 			return
 		}
 		defer rows.Close()
@@ -152,7 +152,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 
 		hash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to hash password")
+			http.WriteServerError(w, r, "failed to hash password", err)
 			return
 		}
 
@@ -170,7 +170,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 				http.WriteError(w, http.StatusConflict, "email already exists")
 				return
 			}
-			http.WriteError(w, http.StatusInternalServerError, "failed to create user")
+			http.WriteServerError(w, r, "failed to create user", err)
 			return
 		}
 
@@ -280,7 +280,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		if req.Password != "" {
 			hash, err := auth.HashPassword(req.Password)
 			if err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to hash password")
+				http.WriteServerError(w, r, "failed to hash password", err)
 				return
 			}
 			q.Set("password", hash)
@@ -290,7 +290,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			WhereNull("deleted_at").
 			Build()
 		if _, err := db.Exec(sql, args...); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to update user")
+			http.WriteServerError(w, r, "failed to update user", err)
 			return
 		}
 
@@ -342,7 +342,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete user")
+			http.WriteServerError(w, r, "failed to delete user", err)
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -397,7 +397,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			Build()
 		result, err := db.Exec(query, args...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to bulk delete users")
+			http.WriteServerError(w, r, "failed to bulk delete users", err)
 			return
 		}
 
@@ -471,7 +471,7 @@ func activityHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return e, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query activity")
+			http.WriteServerError(w, r, "failed to query activity", err)
 			return
 		}
 
@@ -508,7 +508,7 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return s, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query sessions")
+			http.WriteServerError(w, r, "failed to query sessions", err)
 			return
 		}
 
@@ -562,7 +562,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return u, nil
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query uploads")
+			http.WriteServerError(w, r, "failed to query uploads", err)
 			return
 		}
 
@@ -602,7 +602,7 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 		uid := strconv.FormatInt(id, 10)
 		token, err := a.IssueAccessToken(uid, []string{"user"})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to issue token")
+			http.WriteServerError(w, r, "failed to issue token", err)
 			return
 		}
 

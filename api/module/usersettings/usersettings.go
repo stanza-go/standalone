@@ -52,7 +52,7 @@ func listSettings(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return s, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
+			http.WriteServerError(w, r, "failed to query settings", err)
 			return
 		}
 
@@ -146,7 +146,7 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 				OnConflict([]string{"user_id", "key"}, []string{"value", "updated_at"}).
 				Build()
 			if _, err := db.Exec(sql, args...); err != nil {
-				http.WriteError(w, http.StatusInternalServerError, "failed to save setting")
+				http.WriteServerError(w, r, "failed to save setting", err)
 				return
 			}
 		}
@@ -163,7 +163,7 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return s, err
 		})
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to query settings")
+			http.WriteServerError(w, r, "failed to query settings", err)
 			return
 		}
 
@@ -194,7 +194,7 @@ func deleteSetting(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			Build()
 		result, err := db.Exec(dsql, dargs...)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to delete setting")
+			http.WriteServerError(w, r, "failed to delete setting", err)
 			return
 		}
 

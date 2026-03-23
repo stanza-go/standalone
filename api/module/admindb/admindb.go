@@ -157,13 +157,13 @@ func backupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *
 		backupPath := filepath.Join(backupsDir, backupName)
 
 		if err := db.Backup(backupPath); err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to create backup")
+			http.WriteServerError(w, r, "failed to create backup", err)
 			return
 		}
 
 		info, err := os.Stat(backupPath)
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to stat backup")
+			http.WriteServerError(w, r, "failed to stat backup", err)
 			return
 		}
 
@@ -188,14 +188,14 @@ func downloadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		f, err := os.Open(db.Path())
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to open database file")
+			http.WriteServerError(w, r, "failed to open database file", err)
 			return
 		}
 		defer f.Close()
 
 		info, err := f.Stat()
 		if err != nil {
-			http.WriteError(w, http.StatusInternalServerError, "failed to stat database file")
+			http.WriteServerError(w, r, "failed to stat database file", err)
 			return
 		}
 
