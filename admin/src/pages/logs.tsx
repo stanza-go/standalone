@@ -72,12 +72,6 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function wsUrl(path: string): string {
-  const loc = window.location;
-  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${loc.host}/api${path}`;
-}
-
 const levelColors: Record<string, string> = {
   debug: "gray",
   info: "blue",
@@ -110,7 +104,7 @@ function ExtraFields({ entry }: { entry: LogEntry }) {
   );
 }
 
-type WsState = "disconnected" | "connecting" | "connected";
+type StreamState = "disconnected" | "connecting" | "connected";
 
 export default function LogsPage() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -124,11 +118,10 @@ export default function LogsPage() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [total, setTotal] = useState(0);
-  const [wsState, setWsState] = useState<WsState>("disconnected");
+  const [streamState, setStreamState] = useState<StreamState>("disconnected");
   const [streamCount, setStreamCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -159,38 +152,34 @@ export default function LogsPage() {
     setLoading(false);
   }, [loadEntries, loadFiles]);
 
-  const closeWs = useCallback(() => {
-    if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
-      reconnectRef.current = null;
+  const closeStream = useCallback(() => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
     }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    setWsState("disconnected");
+    setStreamState("disconnected");
   }, []);
 
-  const connectWs = useCallback(() => {
-    closeWs();
-    setWsState("connecting");
+  const connectStream = useCallback(() => {
+    closeStream();
+    setStreamState("connecting");
     setStreamCount(0);
 
     const params = new URLSearchParams();
     if (level) params.set("level", level);
     if (search) params.set("search", search);
     const qs = params.toString();
-    const url = wsUrl(`/admin/logs/stream${qs ? "?" + qs : ""}`);
+    const url = `/api/admin/logs/sse${qs ? "?" + qs : ""}`;
 
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    const es = new EventSource(url);
+    sseRef.current = es;
 
-    ws.onopen = () => {
-      setWsState("connected");
+    es.onopen = () => {
+      setStreamState("connected");
       setError("");
     };
 
-    ws.onmessage = (event) => {
+    es.addEventListener("log", (event) => {
       try {
         const entry = JSON.parse(event.data) as LogEntry;
         setEntries((prev) => {
@@ -200,35 +189,27 @@ export default function LogsPage() {
         setTotal((prev) => prev + 1);
         setStreamCount((prev) => prev + 1);
       } catch {
-        // Ignore non-JSON messages.
+        // Ignore malformed events.
+      }
+    });
+
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) {
+        setStreamState("disconnected");
+      } else {
+        // EventSource is reconnecting automatically (using server retry: 5000ms).
+        setStreamState("connecting");
       }
     };
-
-    ws.onclose = () => {
-      setWsState("disconnected");
-      wsRef.current = null;
-      reconnectRef.current = setTimeout(() => {
-        reconnectRef.current = null;
-      }, 3000);
-    };
-
-    ws.onerror = () => {
-      // onclose will fire after this.
-    };
-  }, [level, search, closeWs]);
-
-  const sendFilters = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ level, search }));
-    }
-  }, [level, search]);
+  }, [level, search, closeStream]);
 
   // Initial load.
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  // Manage live mode.
+  // Manage live mode. When filters change, connectStream changes (it depends
+  // on level/search), so the effect re-runs and reconnects with new params.
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -236,29 +217,22 @@ export default function LogsPage() {
     }
 
     if (!autoRefresh) {
-      closeWs();
+      closeStream();
       return;
     }
 
     if (selectedFile === "stanza.log") {
-      connectWs();
+      connectStream();
     } else {
-      closeWs();
+      closeStream();
       intervalRef.current = setInterval(loadEntries, 5_000);
     }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      closeWs();
+      closeStream();
     };
-  }, [autoRefresh, selectedFile, connectWs, closeWs, loadEntries]);
-
-  // Send filter updates to active WebSocket.
-  useEffect(() => {
-    if (wsState === "connected") {
-      sendFilters();
-    }
-  }, [level, search, wsState, sendFilters]);
+  }, [autoRefresh, selectedFile, connectStream, closeStream, loadEntries]);
 
   function toggleExpanded(idx: number) {
     setExpanded((prev) => {
@@ -290,24 +264,24 @@ export default function LogsPage() {
           <Title order={3}>Logs</Title>
           <Group gap="xs" mt={2}>
             <Text size="sm" c="dimmed">{total} entries in {selectedFile}</Text>
-            {wsState === "connected" && streamCount > 0 && (
+            {streamState === "connected" && streamCount > 0 && (
               <Text size="sm" c="green">+{streamCount} streamed</Text>
             )}
           </Group>
         </div>
         <Group gap="xs">
-          {/* WebSocket status */}
-          {wsState === "connected" && (
+          {/* Stream status */}
+          {streamState === "connected" && (
             <Badge variant="light" color="green" size="sm" leftSection={<IconWifi size={10} />}>
               Streaming
             </Badge>
           )}
-          {wsState === "connecting" && (
+          {streamState === "connecting" && (
             <Badge variant="light" color="yellow" size="sm" leftSection={<IconWifi size={10} />}>
               Connecting
             </Badge>
           )}
-          {autoRefresh && selectedFile === "stanza.log" && wsState === "disconnected" && (
+          {autoRefresh && selectedFile === "stanza.log" && streamState === "disconnected" && (
             <Badge variant="light" color="gray" size="sm" leftSection={<IconWifiOff size={10} />}>
               Disconnected
             </Badge>
