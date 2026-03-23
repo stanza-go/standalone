@@ -84,7 +84,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			From("uploads").
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL")
+			WhereNull("deleted_at")
 		if contentType != "" {
 			q.Where("content_type LIKE ?", contentType+"%")
 		}
@@ -243,13 +243,13 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("uploads").
 			Set("deleted_at", now).
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
@@ -283,7 +283,7 @@ func fileHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *ht
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		if err := db.QueryRow(sql, args...).Scan(&storagePath, &originalName, &ct); err != nil {
 			http.WriteError(w, http.StatusNotFound, "upload not found")
@@ -335,7 +335,7 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 			Where("id = ?", id).
 			Where("entity_type = ?", entityType).
 			Where("entity_id = ?", userID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		if err := db.QueryRow(sql, args...).Scan(&storagePath, &hasThumbnail); err != nil {
 			http.WriteError(w, http.StatusNotFound, "upload not found")
@@ -377,7 +377,7 @@ func findUserUpload(db *sqlite.DB, id int64, userID string) (uploadJSON, error) 
 		Where("id = ?", id).
 		Where("entity_type = ?", entityType).
 		Where("entity_id = ?", userID).
-		Where("deleted_at IS NULL").
+		WhereNull("deleted_at").
 		Build()
 	return sqlite.QueryOne(db, sql, args, scanUserUpload)
 }

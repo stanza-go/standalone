@@ -74,7 +74,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		sql, args := sqlite.Select("id").
 			From("users").
 			Where("email = ?", req.Email).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row := db.QueryRow(sql, args...)
@@ -86,7 +86,7 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 		}
 
 		// Invalidate any existing unused reset tokens for this email.
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args = sqlite.Update("password_reset_tokens").
 			Set("used_at", now).
 			Where("email = ?", req.Email).
@@ -195,7 +195,7 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 		if err != nil || time.Now().After(expiresAt) {
 			// Mark expired token as used.
-			now := time.Now().UTC().Format(time.RFC3339)
+			now := sqlite.Now()
 			sql, args = sqlite.Update("password_reset_tokens").
 				Set("used_at", now).
 				Where("id = ?", tokenID).
@@ -215,12 +215,12 @@ func resetPasswordHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request
 		}
 
 		// Update the user's password.
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args = sqlite.Update("users").
 			Set("password", passwordHash).
 			Set("updated_at", now).
 			Where("email = ?", tokenEmail).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		result, err := db.Exec(sql, args...)

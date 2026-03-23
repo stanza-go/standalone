@@ -48,7 +48,7 @@ func NewValidator(db *sqlite.DB) auth.KeyValidator {
 		}
 
 		// Update last_used_at and request_count — don't block the request.
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		usageSQL, usageArgs := sqlite.Update("api_keys").
 			Set("last_used_at", now).
 			SetExpr("request_count", "request_count + 1").

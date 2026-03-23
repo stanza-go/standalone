@@ -5,7 +5,6 @@ package userprofile
 
 import (
 	"strings"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -47,7 +46,7 @@ func getProfile(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := sqlite.Select("id", "email", "name", "created_at", "updated_at").
 			From("users").
 			Where("id = ?", claims.UID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row := db.QueryRow(sql, args...)
@@ -103,11 +102,11 @@ func updateProfile(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		b := sqlite.Update("users").
 			Set("updated_at", now).
 			Where("id = ?", claims.UID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1")
 
 		if req.Name != "" {
@@ -203,7 +202,7 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := sqlite.Select("password").
 			From("users").
 			Where("id = ?", claims.UID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row := db.QueryRow(sql, args...)
@@ -225,7 +224,7 @@ func changePassword(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args = sqlite.Update("users").
 			Set("password", newHash).
 			Set("updated_at", now).
@@ -279,7 +278,7 @@ func getSessions(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Select("id", "created_at", "expires_at", "token_hash").
 			From("refresh_tokens").
 			Where("entity_type = 'user'").

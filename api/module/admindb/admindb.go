@@ -173,7 +173,7 @@ func backupHandler(db *sqlite.DB, backupsDir string) func(http.ResponseWriter, *
 			"name":       backupName,
 			"path":       backupPath,
 			"size_bytes": info.Size(),
-			"created_at": time.Now().UTC().Format(time.RFC3339),
+			"created_at": sqlite.Now(),
 		})
 	}
 }

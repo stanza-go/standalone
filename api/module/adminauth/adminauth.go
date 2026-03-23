@@ -63,7 +63,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		sql, args := sqlite.Select("id", "password", "name", "role").
 			From("admins").
 			Where("email = ?", req.Email).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row := db.QueryRow(sql, args...)
@@ -180,7 +180,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		sql, args = sqlite.Select("id", "email", "name", "role").
 			From("admins").
 			Where("id = ?", entityID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row = db.QueryRow(sql, args...)

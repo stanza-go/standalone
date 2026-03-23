@@ -4,8 +4,6 @@
 package adminsettings
 
 import (
-	"time"
-
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/adminaudit"
@@ -69,7 +67,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		sql, args := sqlite.Update("settings").
 			Set("value", req.Value).

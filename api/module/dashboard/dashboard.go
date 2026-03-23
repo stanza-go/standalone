@@ -69,13 +69,13 @@ func queryDBStats(db *sqlite.DB) (*dbStats, error) {
 	row := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
 	_ = row.Scan(&st.Tables)
 
-	sql, args := sqlite.Count("admins").Where("deleted_at IS NULL").Build()
+	sql, args := sqlite.Count("admins").WhereNull("deleted_at").Build()
 	_ = db.QueryRow(sql, args...).Scan(&st.TotalAdmins)
 
-	sql, args = sqlite.Count("users").Where("deleted_at IS NULL").Build()
+	sql, args = sqlite.Count("users").WhereNull("deleted_at").Build()
 	_ = db.QueryRow(sql, args...).Scan(&st.TotalUsers)
 
-	sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).Build()
+	sql, args = sqlite.Count("refresh_tokens").Where("expires_at > ?", sqlite.Now()).Build()
 	_ = db.QueryRow(sql, args...).Scan(&st.ActiveSessions)
 
 	sql, args = sqlite.Count("api_keys").Where("revoked_at IS NULL").Build()
@@ -248,7 +248,7 @@ func queryCharts(db *sqlite.DB, days int) (*chartsData, error) {
 	userSQL, userArgs := sqlite.Select("date(created_at) as day", "COUNT(*) as cnt").
 		From("users").
 		Where("created_at >= ?", since).
-		Where("deleted_at IS NULL").
+		WhereNull("deleted_at").
 		GroupBy("day").
 		OrderBy("day", "ASC").
 		Build()

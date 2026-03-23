@@ -6,7 +6,6 @@ package apikeys
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -171,7 +170,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			createdBy = claims.IntUID()
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		entityID := strconv.FormatInt(createdBy, 10)
 		q := sqlite.Insert("api_keys").
 			Set("name", req.Name).
@@ -291,7 +290,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).
@@ -328,7 +327,7 @@ func bulkRevokeHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
 			ids[i] = id

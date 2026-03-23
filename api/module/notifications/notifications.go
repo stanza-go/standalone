@@ -11,7 +11,6 @@ package notifications
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/email"
 	"github.com/stanza-go/framework/pkg/log"
@@ -254,7 +253,7 @@ func applyOpts(options []Option) opts {
 
 // Notify creates a notification for a specific entity.
 func Notify(db *sqlite.DB, entityType string, entityID int64, notifType, title, message, data string) (int64, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := sqlite.Now()
 	sql, args := sqlite.Insert("notifications").
 		Set("entity_type", entityType).
 		Set("entity_id", entityID).
@@ -275,7 +274,7 @@ func Notify(db *sqlite.DB, entityType string, entityID int64, notifType, title, 
 func activeAdminIDs(db *sqlite.DB) ([]int64, error) {
 	sq, sa := sqlite.Select("id").From("admins").
 		Where("is_active = 1").
-		Where("deleted_at IS NULL").
+		WhereNull("deleted_at").
 		Build()
 	return sqlite.QueryAll(db, sq, sa, func(rows *sqlite.Rows) (int64, error) {
 		var id int64
@@ -297,7 +296,7 @@ func (s *Service) publishToAdmin(adminID, notifID int64, notifType, title, messa
 			Type:       notifType,
 			Title:      title,
 			Message:    message,
-			CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+			CreatedAt:  sqlite.Now(),
 		},
 		UnreadCount: unread,
 	})

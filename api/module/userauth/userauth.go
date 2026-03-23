@@ -76,7 +76,7 @@ func registerHandler(a *auth.Auth, db *sqlite.DB, wh *webhooks.Dispatcher) func(
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Insert("users").
 			Set("email", req.Email).
 			Set("password", passwordHash).
@@ -154,7 +154,7 @@ func loginHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.R
 		sql, args := sqlite.Select("id", "password", "name").
 			From("users").
 			Where("email = ?", strings.TrimSpace(strings.ToLower(req.Email))).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row := db.QueryRow(sql, args...)
@@ -227,7 +227,7 @@ func statusHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *http.
 		sql, args = sqlite.Select("id", "email", "name").
 			From("users").
 			Where("id = ?", entityID).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Where("is_active = 1").
 			Build()
 		row = db.QueryRow(sql, args...)

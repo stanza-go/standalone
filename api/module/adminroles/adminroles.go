@@ -7,7 +7,6 @@ package adminroles
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -95,7 +94,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			var count int
 			cq, ca := sqlite.Count("admins").
 				Where("role = ?", roles[i].Name).
-				Where("deleted_at IS NULL").
+				WhereNull("deleted_at").
 				Build()
 			_ = db.QueryRow(cq, ca...).Scan(&count)
 			roles[i].AdminCount = count
@@ -141,7 +140,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		// Ensure "admin" base scope is always included.
 		req.Scopes = ensureBaseScope(req.Scopes)
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Insert("roles").
 			Set("name", req.Name).
 			Set("description", req.Description).
@@ -244,7 +243,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			req.Scopes = ensureBaseScope(req.Scopes)
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		q := sqlite.Update("roles").
 			Set("description", desc).
 			Set("updated_at", now)
@@ -334,7 +333,7 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		var count int
 		cq, ca := sqlite.Count("admins").
 			Where("role = ?", name).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		_ = db.QueryRow(cq, ca...).Scan(&count)
 		if count > 0 {

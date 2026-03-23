@@ -90,7 +90,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"entity_type", "entity_id", "created_at", sqlite.CoalesceEmpty("deleted_at")).
 			From("uploads")
 		if !includeDeleted {
-			q.Where("deleted_at IS NULL")
+			q.WhereNull("deleted_at")
 		}
 		if contentType != "" {
 			q.Where("content_type LIKE ?", contentType+"%")
@@ -126,7 +126,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			"entity_type", "entity_id", "created_at", sqlite.CoalesceEmpty("deleted_at")).
 			From("uploads")
 		if !includeDeleted {
-			q.Where("deleted_at IS NULL")
+			q.WhereNull("deleted_at")
 		}
 		if contentType != "" {
 			q.Where("content_type LIKE ?", contentType+"%")
@@ -315,11 +315,11 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("uploads").
 			Set("deleted_at", now).
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
@@ -350,7 +350,7 @@ func fileHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *ht
 		sql, args := sqlite.Select("storage_path", "original_name", "content_type").
 			From("uploads").
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		if err := db.QueryRow(sql, args...).Scan(&storagePath, &originalName, &contentType); err != nil {
 			http.WriteError(w, http.StatusNotFound, "upload not found")
@@ -398,7 +398,7 @@ func thumbHandler(db *sqlite.DB, uploadsDir string) func(http.ResponseWriter, *h
 		sql, args := sqlite.Select("storage_path", "has_thumbnail").
 			From("uploads").
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		if err := db.QueryRow(sql, args...).Scan(&storagePath, &hasThumbnail); err != nil {
 			http.WriteError(w, http.StatusNotFound, "upload not found")
@@ -445,7 +445,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
 			ids[i] = id
@@ -453,7 +453,7 @@ func bulkDeleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		query, args := sqlite.Update("uploads").
 			Set("deleted_at", now).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			WhereIn("id", ids...).
 			Build()
 		result, err := db.Exec(query, args...)

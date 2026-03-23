@@ -297,7 +297,7 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 
 	// Purge expired refresh tokens every hour at :30.
 	if err := s.Add("purge-expired-tokens", "30 * * * *", func(ctx context.Context) error {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Delete("refresh_tokens").Where("expires_at < ?", now).Build()
 		res, err := db.Exec(sql, args...)
 		if err != nil {

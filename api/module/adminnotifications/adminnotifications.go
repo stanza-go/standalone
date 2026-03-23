@@ -147,7 +147,7 @@ func markReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("id = ?", id).
@@ -175,7 +175,7 @@ func markAllReadHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) 
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		adminID := claims.IntUID()
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("notifications").
 			Set("read_at", now).
 			Where("entity_type = ?", notifications.EntityAdmin).

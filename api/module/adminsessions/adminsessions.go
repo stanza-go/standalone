@@ -4,8 +4,6 @@
 package adminsessions
 
 import (
-	"time"
-
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/standalone/module/adminaudit"
@@ -27,7 +25,7 @@ func Register(admin *http.Group, db *sqlite.DB, wh *webhooks.Dispatcher) {
 
 func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"created_at", "expires_at", "entity_type"},
@@ -68,7 +66,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		sortCol, sortDir := http.QueryParamSort(r,
 			[]string{"created_at", "expires_at", "entity_type"},

@@ -6,7 +6,6 @@ package usermgmt
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -69,7 +68,7 @@ func listHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		selectQ := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
 			From("users").
-			Where("deleted_at IS NULL")
+			WhereNull("deleted_at")
 		selectQ.WhereSearch(search, "email", "name")
 
 		total, _ := db.Count(selectQ)
@@ -94,7 +93,7 @@ func exportHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		q := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
 			From("users").
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			WhereSearch(search, "email", "name")
 
 		sortCol, sortDir := http.QueryParamSort(r,
@@ -159,7 +158,7 @@ func createHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Insert("users").
 			Set("email", req.Email).
 			Set("password", hash).
@@ -208,7 +207,7 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args := sqlite.Select("id", "email", "name", "is_active", "created_at", "updated_at").
 			From("users").
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		u, err := sqlite.QueryOne(db, sql, args, scanUser)
 		if err != nil {
@@ -221,7 +220,7 @@ func getHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		sql, args = sqlite.Count("refresh_tokens").
 			Where("entity_type = 'user'").
 			Where("entity_id = ?", strconv.FormatInt(id, 10)).
-			Where("expires_at > ?", time.Now().UTC().Format(time.RFC3339)).
+			Where("expires_at > ?", sqlite.Now()).
 			Build()
 		_ = db.QueryRow(sql, args...).Scan(&sessionCount)
 
@@ -257,7 +256,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		sql, args := sqlite.Select("email", "name", "is_active", "created_at").
 			From("users").
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&currentEmail, &currentName, &currentActive, &createdAt); err != nil {
@@ -279,7 +278,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			}
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		q := sqlite.Update("users").
 			Set("name", name).
@@ -294,7 +293,7 @@ func updateHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 		}
 		sql, args = q.Set("updated_at", now).
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		if _, err := db.Exec(sql, args...); err != nil {
 			http.WriteError(w, http.StatusInternalServerError, "failed to update user")
@@ -339,13 +338,13 @@ func deleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.ResponseWri
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("users").
 			Set("deleted_at", now).
 			Set("is_active", 0).
 			Set("updated_at", now).
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		result, err := db.Exec(sql, args...)
 		if err != nil {
@@ -389,7 +388,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		ids := make([]any, len(req.IDs))
 		for i, id := range req.IDs {
 			ids[i] = id
@@ -399,7 +398,7 @@ func bulkDeleteHandler(db *sqlite.DB, wh *webhooks.Dispatcher) func(http.Respons
 			Set("deleted_at", now).
 			Set("is_active", 0).
 			Set("updated_at", now).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			WhereIn("id", ids...).
 			Build()
 		result, err := db.Exec(query, args...)
@@ -494,7 +493,7 @@ func sessionsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		idStr := strconv.FormatInt(id, 10)
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		sql, args := sqlite.Select("id", "created_at", "expires_at").
 			From("refresh_tokens").
@@ -542,7 +541,7 @@ func uploadsHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		).From("uploads").
 			Where("entity_type = 'user'").
 			Where("entity_id = ?", idStr).
-			Where("deleted_at IS NULL")
+			WhereNull("deleted_at")
 
 		total, _ := db.Count(selectQ)
 
@@ -595,7 +594,7 @@ func impersonateHandler(a *auth.Auth, db *sqlite.DB) func(http.ResponseWriter, *
 		sql, args := sqlite.Select("email", "name", "is_active").
 			From("users").
 			Where("id = ?", id).
-			Where("deleted_at IS NULL").
+			WhereNull("deleted_at").
 			Build()
 		row := db.QueryRow(sql, args...)
 		if err := row.Scan(&email, &name, &isActive); err != nil {

@@ -7,7 +7,6 @@ import (
 	nethttp "net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -39,7 +38,7 @@ func Log(db *sqlite.DB, r *nethttp.Request, action, entityType, entityID, detail
 		ip = strings.TrimSpace(parts[0])
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := sqlite.Now()
 	sql, args := sqlite.Insert("audit_log").
 		Set("admin_id", claims.UID).
 		Set("action", action).

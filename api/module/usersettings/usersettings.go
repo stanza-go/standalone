@@ -4,8 +4,6 @@
 package usersettings
 
 import (
-	"time"
-
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -135,7 +133,7 @@ func batchUpsert(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			}
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		// Upsert each setting.
 		for key, value := range req.Settings {

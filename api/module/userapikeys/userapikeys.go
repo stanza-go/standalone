@@ -5,8 +5,6 @@
 package userapikeys
 
 import (
-	"time"
-
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/sqlite"
@@ -112,7 +110,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 		}
 
 		createdBy := claims.IntUID()
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		q := sqlite.Insert("api_keys").
 			Set("name", req.Name).
@@ -225,7 +223,7 @@ func deleteHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		sql, args := sqlite.Update("api_keys").
 			Set("revoked_at", now).
 			Where("id = ?", id).

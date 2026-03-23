@@ -6,7 +6,6 @@ package adminwebhooks
 import (
 	"encoding/json"
 	"strconv"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/http"
@@ -171,7 +170,7 @@ func createHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 
 		eventsJSON, _ := json.Marshal(req.Events)
 		secret := webhooks.GenerateSecret()
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 
 		claims, _ := auth.ClaimsFromContext(r.Context())
 		createdBy := claims.IntUID()
@@ -257,7 +256,7 @@ func updateHandler(db *sqlite.DB) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := sqlite.Now()
 		ub := sqlite.Update("webhooks").Set("updated_at", now).Where("id = ?", id)
 
 		if req.URL != nil {
@@ -432,7 +431,7 @@ func testHandler(db *sqlite.DB, dispatcher *webhooks.Dispatcher) func(http.Respo
 		// Send a test event through the dispatcher.
 		testPayload := map[string]any{
 			"event":     "webhook.test",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"timestamp": sqlite.Now(),
 			"data": map[string]string{
 				"message": "This is a test webhook delivery from Stanza.",
 			},

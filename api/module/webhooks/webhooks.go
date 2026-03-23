@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/queue"
@@ -104,7 +103,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := sqlite.Now()
 
 	for _, t := range targets {
 		// Create delivery record.
@@ -159,7 +158,7 @@ func (d *Dispatcher) processDelivery(ctx context.Context, payload []byte) error 
 		Payload: []byte(job.Payload),
 	})
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := sqlite.Now()
 
 	if err != nil {
 		// Update delivery record as failed.
