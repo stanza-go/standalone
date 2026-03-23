@@ -19,8 +19,12 @@ import {
   IconAlertCircle,
   IconClock,
   IconDatabase,
+  IconMail,
   IconServer,
+  IconShieldCheck,
   IconUsers,
+  IconWebhook,
+  IconWorld,
 } from "@tabler/icons-react";
 import { get } from "@/lib/api";
 
@@ -53,6 +57,38 @@ interface DashboardData {
     running: number;
     next_run: string;
   };
+  http: {
+    total_requests: number;
+    active_requests: number;
+    status_2xx: number;
+    status_3xx: number;
+    status_4xx: number;
+    status_5xx: number;
+    bytes_written: number;
+    avg_duration_ms: number;
+  };
+  auth: {
+    issued: number;
+    accepted: number;
+    rejected: number;
+  };
+  webhook: {
+    sends: number;
+    successes: number;
+    failures: number;
+    retries: number;
+    errors: number;
+  };
+  email: {
+    sent: number;
+    errors: number;
+  };
+  cache: {
+    entries: number;
+    hits: number;
+    misses: number;
+    evictions: number;
+  };
   stats: {
     total_admins: number;
     total_users: number;
@@ -78,6 +114,24 @@ interface ActivityEntry {
   details: string;
   ip_address: string;
   created_at: string;
+}
+
+interface SeriesPoint {
+  t: number;
+  v: number;
+}
+
+interface QueryResponse {
+  series: {
+    name: string;
+    labels: Record<string, string>;
+    points: SeriesPoint[];
+  }[];
+}
+
+interface TrafficPoint {
+  time: string;
+  Requests: number;
 }
 
 function StatCard({
@@ -110,6 +164,15 @@ function StatCard({
   );
 }
 
+function InfoRow({ label, value, valueColor }: { label: string; value: string | number; valueColor?: string }) {
+  return (
+    <Group justify="space-between">
+      <Text size="sm" c="dimmed">{label}</Text>
+      <Text size="sm" c={valueColor}>{value}</Text>
+    </Group>
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -137,6 +200,12 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
 const ACTION_COLORS: Record<string, string> = {
   create: "green",
   update: "blue",
@@ -159,6 +228,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [traffic, setTraffic] = useState<TrafficPoint[]>([]);
   const [period, setPeriod] = useState("7d");
   const [error, setError] = useState("");
 
@@ -187,10 +257,42 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadTraffic = useCallback(async () => {
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 3_600_000);
+      const params = new URLSearchParams({
+        name: "http_requests",
+        start: start.toISOString(),
+        end: end.toISOString(),
+        step: "1m",
+        fn: "sum",
+      });
+      const res = await get<QueryResponse>(`/admin/metrics/query?${params}`);
+      // Aggregate all series (method/path/status combos) into total per minute.
+      const buckets = new Map<number, number>();
+      for (const s of res.series ?? []) {
+        for (const p of s.points) {
+          buckets.set(p.t, (buckets.get(p.t) ?? 0) + p.v);
+        }
+      }
+      const points: TrafficPoint[] = [...buckets.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([t, v]) => ({
+          time: new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          Requests: Math.round(v),
+        }));
+      setTraffic(points);
+    } catch {
+      // Traffic chart is non-critical — silently fail.
+    }
+  }, []);
+
   useEffect(() => {
     loadStats();
     loadActivity();
-  }, [loadStats, loadActivity]);
+    loadTraffic();
+  }, [loadStats, loadActivity, loadTraffic]);
 
   useEffect(() => {
     loadCharts(period);
@@ -216,6 +318,10 @@ export default function DashboardPage() {
   const activityChartData = charts?.activity.map((d) => ({ date: formatDate(d.date), Actions: d.count })) ?? [];
   const jobChartData = charts?.jobs.map((d) => ({ date: formatDate(d.date), Completed: d.completed, Failed: d.failed })) ?? [];
 
+  const successRate = data.http.total_requests > 0
+    ? ((data.http.status_2xx + data.http.status_3xx) / data.http.total_requests * 100).toFixed(1)
+    : "100.0";
+
   return (
     <Stack>
       <Title order={3}>Dashboard</Title>
@@ -226,6 +332,31 @@ export default function DashboardPage() {
         <StatCard title="Database" value={formatBytes(data.database.size_bytes)} icon={IconDatabase} color="violet" />
         <StatCard title="Uptime" value={data.system.uptime} icon={IconClock} color="orange" />
       </SimpleGrid>
+
+      <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
+        <StatCard title="Total Requests" value={formatNumber(data.http.total_requests)} icon={IconWorld} color="cyan" />
+        <StatCard title="Success Rate" value={`${successRate}%`} icon={IconShieldCheck} color={Number(successRate) >= 99 ? "green" : "yellow"} />
+        <StatCard title="Avg Latency" value={`${data.http.avg_duration_ms.toFixed(1)} ms`} icon={IconClock} color={data.http.avg_duration_ms < 100 ? "teal" : "orange"} />
+        <StatCard title="Emails Sent" value={data.email.sent} icon={IconMail} color="grape" />
+      </SimpleGrid>
+
+      {traffic.length > 0 && (
+        <Card withBorder padding="lg" radius="md">
+          <Text size="sm" c="dimmed" mb="sm">HTTP Requests (last hour)</Text>
+          <AreaChart
+            h={200}
+            data={traffic}
+            dataKey="time"
+            series={[{ name: "Requests", color: "cyan.6" }]}
+            curveType="monotone"
+            withDots={false}
+            withGradient
+            gridAxis="x"
+            tickLine="none"
+            withYAxis={false}
+          />
+        </Card>
+      )}
 
       {charts && (
         <>
@@ -308,22 +439,10 @@ export default function DashboardPage() {
           <Card withBorder padding="lg" radius="md">
             <Text fw={600} mb="sm">System</Text>
             <Stack gap={4}>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Go Version</Text>
-                <Text size="sm">{data.system.go_version}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Goroutines</Text>
-                <Text size="sm">{data.system.goroutines}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Memory (alloc)</Text>
-                <Text size="sm">{data.system.memory_alloc_mb.toFixed(1)} MB</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Memory (sys)</Text>
-                <Text size="sm">{data.system.memory_sys_mb.toFixed(1)} MB</Text>
-              </Group>
+              <InfoRow label="Go Version" value={data.system.go_version} />
+              <InfoRow label="Goroutines" value={data.system.goroutines} />
+              <InfoRow label="Memory (alloc)" value={`${data.system.memory_alloc_mb.toFixed(1)} MB`} />
+              <InfoRow label="Memory (sys)" value={`${data.system.memory_sys_mb.toFixed(1)} MB`} />
             </Stack>
           </Card>
         </Grid.Col>
@@ -332,22 +451,22 @@ export default function DashboardPage() {
           <Card withBorder padding="lg" radius="md">
             <Text fw={600} mb="sm">Database</Text>
             <Stack gap={4}>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Tables</Text>
-                <Text size="sm">{data.database.tables}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Migrations</Text>
-                <Text size="sm">{data.database.migrations}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">DB Size</Text>
-                <Text size="sm">{formatBytes(data.database.size_bytes)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">WAL Size</Text>
-                <Text size="sm">{formatBytes(data.database.wal_size_bytes)}</Text>
-              </Group>
+              <InfoRow label="Tables" value={data.database.tables} />
+              <InfoRow label="Migrations" value={data.database.migrations} />
+              <InfoRow label="DB Size" value={formatBytes(data.database.size_bytes)} />
+              <InfoRow label="WAL Size" value={formatBytes(data.database.wal_size_bytes)} />
+            </Stack>
+          </Card>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder padding="lg" radius="md">
+            <Text fw={600} mb="sm">HTTP</Text>
+            <Stack gap={4}>
+              <InfoRow label="2xx Responses" value={formatNumber(data.http.status_2xx)} />
+              <InfoRow label="4xx Responses" value={formatNumber(data.http.status_4xx)} valueColor={data.http.status_4xx > 0 ? "yellow" : undefined} />
+              <InfoRow label="5xx Responses" value={formatNumber(data.http.status_5xx)} valueColor={data.http.status_5xx > 0 ? "red" : undefined} />
+              <InfoRow label="Bytes Written" value={formatBytes(data.http.bytes_written)} />
             </Stack>
           </Card>
         </Grid.Col>
@@ -356,42 +475,48 @@ export default function DashboardPage() {
           <Card withBorder padding="lg" radius="md">
             <Text fw={600} mb="sm">Job Queue</Text>
             <Stack gap={4}>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Pending</Text>
-                <Text size="sm">{data.queue.pending}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Running</Text>
-                <Text size="sm">{data.queue.running}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Completed</Text>
-                <Text size="sm">{data.queue.completed}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Failed</Text>
-                <Text size="sm" c={data.queue.failed > 0 ? "red" : undefined}>{data.queue.failed}</Text>
-              </Group>
+              <InfoRow label="Pending" value={data.queue.pending} />
+              <InfoRow label="Running" value={data.queue.running} />
+              <InfoRow label="Completed" value={data.queue.completed} />
+              <InfoRow label="Failed" value={data.queue.failed} valueColor={data.queue.failed > 0 ? "red" : undefined} />
             </Stack>
           </Card>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card withBorder padding="lg" radius="md">
-            <Text fw={600} mb="sm">Application</Text>
+            <Group justify="space-between" mb="sm">
+              <Text fw={600}>Auth</Text>
+              <ThemeIcon size={24} radius="sm" variant="light" color="cyan">
+                <IconShieldCheck size={14} stroke={1.5} />
+              </ThemeIcon>
+            </Group>
             <Stack gap={4}>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Admins</Text>
-                <Text size="sm">{data.stats.total_admins}</Text>
+              <InfoRow label="Tokens Issued" value={formatNumber(data.auth.issued)} />
+              <InfoRow label="Accepted" value={formatNumber(data.auth.accepted)} />
+              <InfoRow label="Rejected" value={formatNumber(data.auth.rejected)} valueColor={data.auth.rejected > 0 ? "orange" : undefined} />
+            </Stack>
+          </Card>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder padding="lg" radius="md">
+            <Group justify="space-between" mb="sm">
+              <Text fw={600}>Webhooks & Email</Text>
+              <Group gap={4}>
+                <ThemeIcon size={24} radius="sm" variant="light" color="orange">
+                  <IconWebhook size={14} stroke={1.5} />
+                </ThemeIcon>
+                <ThemeIcon size={24} radius="sm" variant="light" color="grape">
+                  <IconMail size={14} stroke={1.5} />
+                </ThemeIcon>
               </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">API Keys</Text>
-                <Text size="sm">{data.stats.active_api_keys}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">Cron Jobs</Text>
-                <Text size="sm">{data.cron.enabled} / {data.cron.total}</Text>
-              </Group>
+            </Group>
+            <Stack gap={4}>
+              <InfoRow label="Webhook Sends" value={data.webhook.sends} />
+              <InfoRow label="Webhook Failures" value={data.webhook.failures} valueColor={data.webhook.failures > 0 ? "red" : undefined} />
+              <InfoRow label="Emails Sent" value={data.email.sent} />
+              <InfoRow label="Email Errors" value={data.email.errors} valueColor={data.email.errors > 0 ? "red" : undefined} />
             </Stack>
           </Card>
         </Grid.Col>
