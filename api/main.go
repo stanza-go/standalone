@@ -41,6 +41,7 @@ import (
 	"github.com/stanza-go/standalone/module/admindb"
 	"github.com/stanza-go/standalone/module/adminlogs"
 	"github.com/stanza-go/standalone/module/adminmetrics"
+	"github.com/stanza-go/standalone/module/clientmetrics"
 	"github.com/stanza-go/standalone/module/adminqueue"
 	"github.com/stanza-go/standalone/module/adminsettings"
 	"github.com/stanza-go/standalone/module/adminsessions"
@@ -780,6 +781,17 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	api.HandleFunc("GET /metrics", http.PrometheusHandler(
 		collectPrometheus(db, m, q, s, whDispatcher, a, emailClient, pool),
 	))
+
+	// Client-side metrics ingestion — rate limited to prevent abuse.
+	// 60 requests per minute per IP; each request can batch up to 20
+	// metrics, so this allows ~1200 metric events/min per client.
+	clientMetricsRL := api.Group("")
+	clientMetricsRL.Use(http.RateLimit(http.RateLimitConfig{
+		Limit:   60,
+		Window:  time.Minute,
+		Message: "too many metric requests, please try again later",
+	}))
+	clientmetrics.Register(clientMetricsRL, store)
 
 	// Auth routes — rate limited to prevent brute force attacks.
 	// 20 requests per minute per IP covers legitimate use (including
