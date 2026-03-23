@@ -22,6 +22,7 @@ import (
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/queue"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/task"
 	"github.com/stanza-go/standalone/datadir"
 	"github.com/stanza-go/standalone/migration"
 	"github.com/stanza-go/standalone/module/adminaudit"
@@ -105,6 +106,7 @@ func serveCmd(_ *cmd.Context) error {
 		lifecycle.Provide(provideAuth),
 		lifecycle.Provide(provideUserAuth),
 		lifecycle.Provide(provideEmail),
+		lifecycle.Provide(provideTaskPool),
 		lifecycle.Provide(provideNotificationService),
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideWebhookDispatcher),
@@ -360,8 +362,23 @@ func provideEmail(cfg *config.Config, logger *log.Logger) *email.Client {
 	return email.New(apiKey, email.WithFrom(from))
 }
 
-func provideNotificationService(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) *notifications.Service {
-	return notifications.NewService(db, emailClient, logger)
+func provideTaskPool(lc *lifecycle.Lifecycle, logger *log.Logger) *task.Pool {
+	p := task.New(
+		task.WithWorkers(4),
+		task.WithBuffer(100),
+		task.WithLogger(logger),
+	)
+
+	lc.Append(lifecycle.Hook{
+		OnStart: p.Start,
+		OnStop:  p.Stop,
+	})
+
+	return p
+}
+
+func provideNotificationService(db *sqlite.DB, emailClient *email.Client, pool *task.Pool, logger *log.Logger) *notifications.Service {
+	return notifications.NewService(db, emailClient, pool, logger)
 }
 
 func provideWebhookDispatcher(db *sqlite.DB, q *queue.Queue, logger *log.Logger) *webhooks.Dispatcher {
@@ -733,7 +750,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, dir *datadir.Dir, emailClient *email.Client, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, dir *datadir.Dir, emailClient *email.Client, pool *task.Pool, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -743,7 +760,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 		BuildTime: buildTime,
 	})
 	api.HandleFunc("GET /metrics", http.PrometheusHandler(
-		collectPrometheus(db, m, q, s, whDispatcher, a, emailClient),
+		collectPrometheus(db, m, q, s, whDispatcher, a, emailClient, pool),
 	))
 
 	// Auth routes — rate limited to prevent brute force attacks.
@@ -757,7 +774,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	}))
 	adminauth.Register(authRL, a, db)
 	userauth.Register(authRL, ua.Auth, db, whDispatcher)
-	userreset.Register(authRL, db, emailClient)
+	userreset.Register(authRL, db, emailClient, pool)
 
 	// Protected admin routes — require valid JWT + admin scope.
 	admin := api.Group("/admin")
@@ -881,7 +898,7 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 // collectPrometheus returns a collector function that gathers metrics
 // from all framework packages for Prometheus exposition. Called on each
 // scrape of GET /api/metrics.
-func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.Scheduler, wh *webhooks.Dispatcher, a *auth.Auth, ec *email.Client) func() []http.PrometheusMetric {
+func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.Scheduler, wh *webhooks.Dispatcher, a *auth.Auth, ec *email.Client, p *task.Pool) func() []http.PrometheusMetric {
 	return func() []http.PrometheusMetric {
 		var out []http.PrometheusMetric
 
@@ -954,6 +971,17 @@ func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.S
 		out = append(out,
 			http.PrometheusMetric{Name: "stanza_email_sent_total", Help: "Total emails sent successfully", Type: "counter", Value: float64(es.Sent)},
 			http.PrometheusMetric{Name: "stanza_email_errors_total", Help: "Total email send failures", Type: "counter", Value: float64(es.Errors)},
+		)
+
+		// Task pool.
+		ts := p.Stats()
+		out = append(out,
+			http.PrometheusMetric{Name: "stanza_task_pool_workers", Help: "Number of worker goroutines in the task pool", Type: "gauge", Value: float64(ts.Workers)},
+			http.PrometheusMetric{Name: "stanza_task_pool_pending", Help: "Tasks waiting in the buffer", Type: "gauge", Value: float64(ts.Pending)},
+			http.PrometheusMetric{Name: "stanza_task_pool_submitted_total", Help: "Total tasks submitted to the pool", Type: "counter", Value: float64(ts.Submitted)},
+			http.PrometheusMetric{Name: "stanza_task_pool_completed_total", Help: "Total tasks completed", Type: "counter", Value: float64(ts.Completed)},
+			http.PrometheusMetric{Name: "stanza_task_pool_dropped_total", Help: "Total tasks dropped (pool full or stopped)", Type: "counter", Value: float64(ts.Dropped)},
+			http.PrometheusMetric{Name: "stanza_task_pool_panics_total", Help: "Total tasks that panicked", Type: "counter", Value: float64(ts.Panics)},
 		)
 
 		// Go runtime.

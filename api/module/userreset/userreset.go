@@ -21,6 +21,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/task"
 	"github.com/stanza-go/framework/pkg/validate"
 )
 
@@ -28,10 +29,10 @@ import (
 const tokenTTL = 30 * time.Minute
 
 // Register mounts password reset routes on the given router group.
-func Register(api *http.Group, db *sqlite.DB, emailClient *email.Client) {
+func Register(api *http.Group, db *sqlite.DB, emailClient *email.Client, pool *task.Pool) {
 	g := api.Group("/auth")
 
-	g.HandleFunc("POST /forgot-password", forgotPasswordHandler(db, emailClient))
+	g.HandleFunc("POST /forgot-password", forgotPasswordHandler(db, emailClient, pool))
 	g.HandleFunc("POST /reset-password", resetPasswordHandler(db))
 }
 
@@ -43,7 +44,7 @@ type forgotPasswordRequest struct {
 // forgotPasswordHandler generates a reset token, stores its hash, and
 // sends a reset email. Always returns 200 regardless of whether the
 // email exists — prevents email enumeration.
-func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.ResponseWriter, *http.Request) {
+func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client, pool *task.Pool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 
@@ -117,17 +118,24 @@ func forgotPasswordHandler(db *sqlite.DB, emailClient *email.Client) func(http.R
 			return
 		}
 
-		// Send the reset email.
+		// Send the reset email asynchronously via the task pool. The
+		// token is already persisted, so losing the send on crash is
+		// acceptable — the user can request again.
 		if emailClient.Configured() {
-			if err := sendResetEmail(r.Context(), emailClient, req.Email, token); err != nil {
-				l.Error("send reset email",
-					log.String("email", req.Email),
-					log.Err(err),
-				)
-				// Don't fail the request — the token is stored and can be
-				// retried. Log the error for observability.
-			} else {
-				l.Info("password reset email sent", log.String("email", req.Email))
+			addr := req.Email
+			tok := token
+			send := func() {
+				if err := sendResetEmail(context.Background(), emailClient, addr, tok); err != nil {
+					l.Error("send reset email",
+						log.String("email", addr),
+						log.Err(err),
+					)
+				} else {
+					l.Info("password reset email sent", log.String("email", addr))
+				}
+			}
+			if pool == nil || !pool.Submit(send) {
+				send()
 			}
 		} else {
 			l.Warn("email not configured — reset token generated but not sent",

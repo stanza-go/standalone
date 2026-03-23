@@ -15,6 +15,7 @@ import (
 	"github.com/stanza-go/framework/pkg/email"
 	"github.com/stanza-go/framework/pkg/log"
 	"github.com/stanza-go/framework/pkg/sqlite"
+	"github.com/stanza-go/framework/pkg/task"
 )
 
 // Entity types for the entity_type column.
@@ -60,15 +61,17 @@ func WithEmail(ctx context.Context) Option {
 type Service struct {
 	db     *sqlite.DB
 	email  *email.Client
+	pool   *task.Pool
 	logger *log.Logger
 	hub    *Hub
 }
 
-// NewService creates a notification Service. The email client and logger may
-// be nil — email delivery is silently skipped when the client is nil or not
-// configured.
-func NewService(db *sqlite.DB, emailClient *email.Client, logger *log.Logger) *Service {
-	return &Service{db: db, email: emailClient, logger: logger, hub: NewHub()}
+// NewService creates a notification Service. The email client, pool, and
+// logger may be nil — email delivery is silently skipped when the client
+// is nil or not configured. When pool is non-nil, emails are sent
+// asynchronously via the task pool; otherwise they are sent synchronously.
+func NewService(db *sqlite.DB, emailClient *email.Client, pool *task.Pool, logger *log.Logger) *Service {
+	return &Service{db: db, email: emailClient, pool: pool, logger: logger, hub: NewHub()}
 }
 
 // Hub returns the notification broadcast hub for WebSocket subscriptions.
@@ -133,13 +136,12 @@ func (s *Service) NotifyAllAdmins(notifType, title, message string, options ...O
 }
 
 // sendEmail looks up the recipient email and sends a notification email.
-// Failures are logged but never returned — email is best-effort.
-func (s *Service) sendEmail(ctx context.Context, entityType string, entityID int64, notifType, title, message string) {
+// When a task pool is available, the send is dispatched asynchronously so
+// the caller returns immediately. Failures are logged but never returned
+// — email is best-effort.
+func (s *Service) sendEmail(_ context.Context, entityType string, entityID int64, notifType, title, message string) {
 	if s.email == nil || !s.email.Configured() {
 		return
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 
 	addr, err := s.lookupEmail(entityType, entityID)
@@ -160,14 +162,16 @@ func (s *Service) sendEmail(ctx context.Context, entityType string, entityID int
 	html := renderHTML(notifType, title, message)
 	text := renderText(notifType, title, message)
 
-	_, err = s.email.Send(ctx, email.Message{
-		To:      []string{addr},
-		Subject: formatSubject(notifType, title),
-		HTML:    html,
-		Text:    text,
-	})
-	if err != nil {
-		if s.logger != nil {
+	send := func() {
+		// Use a detached context — the original HTTP request context may
+		// already be cancelled by the time the pool runs this task.
+		_, err := s.email.Send(context.Background(), email.Message{
+			To:      []string{addr},
+			Subject: formatSubject(notifType, title),
+			HTML:    html,
+			Text:    text,
+		})
+		if err != nil && s.logger != nil {
 			s.logger.Error("notification email: send failed",
 				log.String("to", addr),
 				log.String("type", notifType),
@@ -175,6 +179,12 @@ func (s *Service) sendEmail(ctx context.Context, entityType string, entityID int
 			)
 		}
 	}
+
+	if s.pool != nil && s.pool.Submit(send) {
+		return
+	}
+	// No pool or pool full — send synchronously as fallback.
+	send()
 }
 
 // lookupEmail fetches the email address for a given entity.
