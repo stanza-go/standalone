@@ -134,6 +134,11 @@ interface TrafficPoint {
   Requests: number;
 }
 
+interface SystemMetricPoint {
+  time: string;
+  value: number;
+}
+
 function StatCard({
   title,
   value,
@@ -229,6 +234,8 @@ export default function DashboardPage() {
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [traffic, setTraffic] = useState<TrafficPoint[]>([]);
+  const [memoryChart, setMemoryChart] = useState<SystemMetricPoint[]>([]);
+  const [goroutineChart, setGoroutineChart] = useState<SystemMetricPoint[]>([]);
   const [period, setPeriod] = useState("7d");
   const [error, setError] = useState("");
 
@@ -288,11 +295,43 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadSystemMetric = useCallback(async (
+    name: string,
+    setter: (pts: SystemMetricPoint[]) => void,
+    transform?: (v: number) => number,
+  ) => {
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 3_600_000);
+      const params = new URLSearchParams({
+        name,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        step: "1m",
+        fn: "last",
+      });
+      const res = await get<QueryResponse>(`/admin/metrics/query?${params}`);
+      const series = res.series?.[0];
+      if (!series?.points?.length) return;
+      const points: SystemMetricPoint[] = series.points
+        .sort((a, b) => a.t - b.t)
+        .map((p) => ({
+          time: new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          value: transform ? transform(p.v) : p.v,
+        }));
+      setter(points);
+    } catch {
+      // System metric charts are non-critical — silently fail.
+    }
+  }, []);
+
   useEffect(() => {
     loadStats();
     loadActivity();
     loadTraffic();
-  }, [loadStats, loadActivity, loadTraffic]);
+    loadSystemMetric("go_heap_alloc_bytes", setMemoryChart, (v) => Math.round(v / (1024 * 1024) * 10) / 10);
+    loadSystemMetric("go_goroutines", setGoroutineChart, Math.round);
+  }, [loadStats, loadActivity, loadTraffic, loadSystemMetric]);
 
   useEffect(() => {
     loadCharts(period);
@@ -356,6 +395,49 @@ export default function DashboardPage() {
             withYAxis={false}
           />
         </Card>
+      )}
+
+      {(memoryChart.length > 0 || goroutineChart.length > 0) && (
+        <Grid>
+          {memoryChart.length > 0 && (
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Card withBorder padding="lg" radius="md">
+                <Text size="sm" c="dimmed" mb="sm">Memory Usage — MB (last hour)</Text>
+                <AreaChart
+                  h={200}
+                  data={memoryChart}
+                  dataKey="time"
+                  series={[{ name: "value", label: "MB", color: "violet.6" }]}
+                  curveType="monotone"
+                  withDots={false}
+                  withGradient
+                  gridAxis="x"
+                  tickLine="none"
+                  withYAxis={false}
+                />
+              </Card>
+            </Grid.Col>
+          )}
+          {goroutineChart.length > 0 && (
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Card withBorder padding="lg" radius="md">
+                <Text size="sm" c="dimmed" mb="sm">Goroutines (last hour)</Text>
+                <AreaChart
+                  h={200}
+                  data={goroutineChart}
+                  dataKey="time"
+                  series={[{ name: "value", label: "Count", color: "orange.6" }]}
+                  curveType="monotone"
+                  withDots={false}
+                  withGradient
+                  gridAxis="x"
+                  tickLine="none"
+                  withYAxis={false}
+                />
+              </Card>
+            </Grid.Col>
+          )}
+        </Grid>
       )}
 
       {charts && (
