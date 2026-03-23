@@ -812,6 +812,22 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	withWebhooks.Use(auth.RequireScope("admin:webhooks"))
 	adminwebhooks.Register(withWebhooks, db, whDispatcher)
 
+	// Route introspection — list all registered API routes. Registered
+	// after all modules so the handler captures every route at request
+	// time. Requires base admin scope only.
+	admin.HandleFunc("GET /routes", func(w http.ResponseWriter, r *http.Request) {
+		routes := router.Routes()
+		type entry struct {
+			Method string `json:"method"`
+			Path   string `json:"path"`
+		}
+		out := make([]entry, 0, len(routes))
+		for _, rt := range routes {
+			out = append(out, entry{Method: rt.Method, Path: rt.Path})
+		}
+		http.WriteJSON(w, http.StatusOK, out)
+	})
+
 	// API key validator — shared between user routes and v1 routes.
 	kv := apikeys.NewValidator(db)
 
