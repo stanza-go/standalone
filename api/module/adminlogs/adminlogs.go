@@ -1,7 +1,7 @@
 // Package adminlogs provides admin endpoints for viewing structured log files.
 // It reads JSON-line log files from the data directory and supports filtering
-// by level, keyword search, and file selection. Includes a WebSocket endpoint
-// for real-time log streaming.
+// by level, keyword search, and file selection. Includes both WebSocket and SSE
+// endpoints for real-time log streaming.
 package adminlogs
 
 import (
@@ -25,10 +25,12 @@ import (
 //	GET /api/admin/logs        — list log entries with filtering
 //	GET /api/admin/logs/files  — list available log files
 //	GET /api/admin/logs/stream — WebSocket: stream new log entries in real-time
+//	GET /api/admin/logs/sse    — SSE: stream new log entries in real-time
 func Register(admin *http.Group, logsDir string) {
 	admin.HandleFunc("GET /logs", entriesHandler(logsDir))
 	admin.HandleFunc("GET /logs/files", filesHandler(logsDir))
 	admin.HandleFunc("GET /logs/stream", streamHandler(logsDir))
+	admin.HandleFunc("GET /logs/sse", sseHandler(logsDir))
 }
 
 func entriesHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
@@ -197,6 +199,103 @@ func streamHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
 type streamFilter struct {
 	Level  string `json:"level"`
 	Search string `json:"search"`
+}
+
+// sseHandler streams new log entries via Server-Sent Events.
+// Query params: ?level=info&search=keyword (optional server-side filters).
+// Unlike the WebSocket endpoint, filters cannot be updated mid-stream —
+// the client must reconnect with new query parameters.
+func sseHandler(logsDir string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		level := strings.ToLower(r.URL.Query().Get("level"))
+		search := strings.ToLower(r.URL.Query().Get("search"))
+
+		path := filepath.Join(logsDir, "stanza.log")
+		f, err := os.Open(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.WriteError(w, http.StatusNotFound, "log file not available")
+				return
+			}
+			http.WriteServerError(w, r, "failed to open log file", err)
+			return
+		}
+		defer f.Close()
+
+		_, _ = f.Seek(0, io.SeekEnd)
+		reader := bufio.NewReader(f)
+
+		sse := http.NewSSEWriter(w)
+		_ = sse.Retry(5000)
+
+		ticker := time.NewTicker(300 * time.Millisecond)
+		defer ticker.Stop()
+
+		heartbeat := time.NewTicker(30 * time.Second)
+		defer heartbeat.Stop()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-heartbeat.C:
+				if err := sse.Comment("keepalive"); err != nil {
+					return
+				}
+			case <-ticker.C:
+				if err := sendSSELines(sse, reader, level, search); err != nil {
+					return
+				}
+			}
+		}
+	}
+}
+
+// sendSSELines reads new lines from the reader and sends matching
+// entries as SSE events.
+func sendSSELines(sse *http.SSEWriter, reader *bufio.Reader, level, search string) error {
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		if level != "" {
+			if entryLevel, ok := entry["level"].(string); !ok || entryLevel != level {
+				if err != nil {
+					return nil
+				}
+				continue
+			}
+		}
+
+		if search != "" && !matchesSearch(entry, search) {
+			if err != nil {
+				return nil
+			}
+			continue
+		}
+
+		if writeErr := sse.Event("log", line); writeErr != nil {
+			return writeErr
+		}
+
+		if err != nil {
+			return nil
+		}
+	}
 }
 
 // sendNewLines reads any new lines from the reader and sends matching
