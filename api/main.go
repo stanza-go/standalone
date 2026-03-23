@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"strconv"
+
 	"github.com/stanza-go/framework/pkg/auth"
 	"github.com/stanza-go/framework/pkg/cmd"
 	"github.com/stanza-go/framework/pkg/config"
@@ -20,6 +22,7 @@ import (
 	"github.com/stanza-go/framework/pkg/http"
 	"github.com/stanza-go/framework/pkg/lifecycle"
 	"github.com/stanza-go/framework/pkg/log"
+	"github.com/stanza-go/framework/pkg/metrics"
 	"github.com/stanza-go/framework/pkg/queue"
 	"github.com/stanza-go/framework/pkg/sqlite"
 	"github.com/stanza-go/framework/pkg/task"
@@ -37,6 +40,7 @@ import (
 	"github.com/stanza-go/standalone/module/admincron"
 	"github.com/stanza-go/standalone/module/admindb"
 	"github.com/stanza-go/standalone/module/adminlogs"
+	"github.com/stanza-go/standalone/module/adminmetrics"
 	"github.com/stanza-go/standalone/module/adminqueue"
 	"github.com/stanza-go/standalone/module/adminsettings"
 	"github.com/stanza-go/standalone/module/adminsessions"
@@ -111,6 +115,7 @@ func serveCmd(_ *cmd.Context) error {
 		lifecycle.Provide(provideQueue),
 		lifecycle.Provide(provideWebhookDispatcher),
 		lifecycle.Provide(provideCron),
+		lifecycle.Provide(provideMetricsStore),
 		lifecycle.Provide(provideMetrics),
 		lifecycle.Provide(provideRouter),
 		lifecycle.Provide(provideServer),
@@ -673,15 +678,28 @@ func provideCron(lc *lifecycle.Lifecycle, db *sqlite.DB, q *queue.Queue, dir *da
 	return s, nil
 }
 
+func provideMetricsStore(lc *lifecycle.Lifecycle, dir *datadir.Dir, logger *log.Logger) *metrics.Store {
+	store := metrics.New(dir.Metrics,
+		metrics.WithSystemMetrics(),
+		metrics.WithLogger(logger),
+	)
+	lc.Append(lifecycle.Hook{
+		OnStart: store.Start,
+		OnStop:  store.Stop,
+	})
+	return store
+}
+
 func provideMetrics() *http.Metrics {
 	return http.NewMetrics()
 }
 
-func provideRouter(logger *log.Logger, cfg *config.Config, m *http.Metrics) *http.Router {
+func provideRouter(logger *log.Logger, cfg *config.Config, m *http.Metrics, store *metrics.Store) *http.Router {
 	router := http.NewRouter()
 
 	router.Use(http.RequestID(http.RequestIDConfig{}))
 	router.Use(m.Middleware())
+	router.Use(httpMetricsRecorder(store))
 	router.Use(http.RequestLogger(logger))
 	router.Use(http.Compress(http.CompressConfig{}))
 	router.Use(http.ETag(http.ETagConfig{}))
@@ -750,7 +768,7 @@ func provideServer(lc *lifecycle.Lifecycle, router *http.Router, cfg *config.Con
 	return srv
 }
 
-func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, dir *datadir.Dir, emailClient *email.Client, pool *task.Pool, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
+func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userAuth, q *queue.Queue, s *cron.Scheduler, m *http.Metrics, store *metrics.Store, dir *datadir.Dir, emailClient *email.Client, pool *task.Pool, notifSvc *notifications.Service, whDispatcher *webhooks.Dispatcher, logger *log.Logger) {
 	api := router.Group("/api")
 
 	// Public routes.
@@ -781,9 +799,10 @@ func registerModules(router *http.Router, db *sqlite.DB, a *auth.Auth, ua *userA
 	admin.Use(a.RequireAuth())
 	admin.Use(auth.RequireScope("admin"))
 
-	// Dashboard and profile: base admin scope only.
+	// Dashboard, profile, and metrics explorer: base admin scope only.
 	dashboard.Register(admin, db, q, s, m, whDispatcher, a, emailClient)
 	adminprofile.Register(admin, db)
+	adminmetrics.Register(admin, store)
 
 	// Scoped admin sub-groups — each module gets its specific scope.
 	withUsers := admin.Group("")
@@ -989,4 +1008,109 @@ func collectPrometheus(db *sqlite.DB, m *http.Metrics, q *queue.Queue, s *cron.S
 
 		return out
 	}
+}
+
+// httpMetricsRecorder returns middleware that records HTTP request metrics
+// into the column-based metrics store. It captures request count and
+// duration with method, path, and status labels.
+func httpMetricsRecorder(store *metrics.Store) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			rec := &statusRecorder{ResponseWriter: w, status: 200}
+			next.ServeHTTP(rec, r)
+			ms := float64(time.Since(start).Nanoseconds()) / 1e6
+
+			path := normalizePath(r.URL.Path)
+			status := strconv.Itoa(rec.status)
+
+			store.Record("http_requests", 1,
+				"method", r.Method,
+				"path", path,
+				"status", status,
+			)
+			store.Record("http_request_duration_ms", ms,
+				"method", r.Method,
+				"path", path,
+				"status", status,
+			)
+		})
+	}
+}
+
+// statusRecorder wraps http.ResponseWriter to capture the status code.
+type statusRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	if !r.wroteHeader {
+		r.status = code
+		r.wroteHeader = true
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.wroteHeader = true
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+// Flush implements http.Flusher for SSE streaming support.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(interface{ Flush() }); ok {
+		f.Flush()
+	}
+}
+
+// normalizePath replaces numeric and UUID-like path segments with {id}
+// to keep label cardinality manageable.
+func normalizePath(p string) string {
+	parts := strings.Split(p, "/")
+	for i, seg := range parts {
+		if seg == "" {
+			continue
+		}
+		if isID(seg) {
+			parts[i] = "{id}"
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// isID returns true if the segment looks like a numeric ID or UUID.
+func isID(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	// Numeric IDs.
+	allDigits := true
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return true
+	}
+	// UUID-like: 32+ hex chars with dashes.
+	if len(s) >= 32 {
+		hexCount := 0
+		for _, c := range s {
+			if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '-' {
+				if c != '-' {
+					hexCount++
+				}
+			} else {
+				return false
+			}
+		}
+		return hexCount >= 32
+	}
+	return false
 }

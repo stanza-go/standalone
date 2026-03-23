@@ -18,6 +18,7 @@ type Dir struct {
 	Logs    string
 	Uploads string
 	Backups string
+	Metrics string
 	Config  string
 }
 
@@ -40,10 +41,11 @@ func Resolve() (*Dir, error) {
 		Logs:    filepath.Join(root, "logs"),
 		Uploads: filepath.Join(root, "uploads"),
 		Backups: filepath.Join(root, "backups"),
+		Metrics: filepath.Join(root, "metrics"),
 		Config:  filepath.Join(root, "config.yaml"),
 	}
 
-	dirs := []string{root, d.Logs, d.Uploads, d.Backups}
+	dirs := []string{root, d.Logs, d.Uploads, d.Backups, d.Metrics}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("datadir: create %s: %w", dir, err)
