@@ -29,7 +29,7 @@ COPY ui/ ui/
 RUN cd ui && bun run build
 
 # Build admin (ARG busts Docker cache when source changes)
-ARG CACHE_BUST_ADMIN=1
+ARG CACHE_BUST_ADMIN=2
 COPY admin/ admin/
 RUN cd admin && bun run build
 
